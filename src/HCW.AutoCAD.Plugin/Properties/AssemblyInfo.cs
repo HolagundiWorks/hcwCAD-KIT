@@ -2,11 +2,11 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Autodesk.AutoCAD.Runtime;
 
-[assembly: AssemblyTitle("HCW AutoCAD Toolkit")]
-[assembly: AssemblyDescription("Holgundi Consulting Works - consolidated AutoCAD toolset (layers, room tags, measure/quantity take-off, text tools)")]
+[assembly: AssemblyTitle("hcwCAD-KIT")]
+[assembly: AssemblyDescription("hcwCAD-KIT — Holgundi Consulting Works AutoCAD tools for layers, room tags, quantity take-off and text")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Holgundi Consulting Works")]
-[assembly: AssemblyProduct("HCW.AutoCAD.Plugin")]
+[assembly: AssemblyProduct("hcwCAD-KIT")]
 [assembly: AssemblyCopyright("Copyright 2026")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

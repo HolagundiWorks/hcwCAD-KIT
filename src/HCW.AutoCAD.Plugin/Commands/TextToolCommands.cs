@@ -11,9 +11,8 @@ using Autodesk.AutoCAD.Runtime;
 namespace HCW.AutoCAD.Plugin.Commands
 {
     /// <summary>
-    /// Text tools: FIXTXT/FIXTXTH (overlap fixers), TextIncrement, WinLabel/
-    /// WinLabelHeight (Sections 3-5), and TXTALIGN/TXTDUP/TXTAUDIT/TXTEXPORT/
-    /// TXTSTYLE (Section 13). Ported from HCW-ALL.lsp.
+    /// hcwCAD-KIT text tools: FIXTXT, FIXTXTH, TextIncrement, WinLabel,
+    /// TXTALIGN, TXTDUP, TXTAUDIT, TXTEXPORT and TXTSTYLE.
     /// </summary>
     public class TextToolCommands
     {

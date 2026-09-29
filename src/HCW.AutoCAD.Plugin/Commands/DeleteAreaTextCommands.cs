@@ -8,9 +8,7 @@ using Autodesk.AutoCAD.Runtime;
 namespace HCW.AutoCAD.Plugin.Commands
 {
     /// <summary>
-    /// DELETEAREATEXT - bulk-deletes TEXT/MTEXT objects whose content looks
-    /// like "Area: <number>[ sq unit / m2 / m² / ^2]" (as produced by MEASURE,
-    /// the Room Dimension Tool, or POLYAREA). Ported from HCW-ALL.lsp Section 11.
+    /// DELETEAREATEXT — deletes TEXT/MTEXT whose content starts with "Area:".
     /// </summary>
     public class DeleteAreaTextCommands
     {

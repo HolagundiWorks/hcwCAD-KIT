@@ -11,8 +11,7 @@ using AcAp = Autodesk.AutoCAD.ApplicationServices.Application;
 namespace HCW.AutoCAD.Plugin.Commands
 {
     /// <summary>
-    /// BPLT - Building Permission Layer Tool (BBMP/AutoPlan submission layers).
-    /// Ported from HCW-ALL.lsp Section 6 (bplt:* helpers, c:BPLT* commands).
+    /// hcwCAD-KIT building-permission layers (BBMP/AutoPlan).
     /// </summary>
     public class BpltCommands
     {

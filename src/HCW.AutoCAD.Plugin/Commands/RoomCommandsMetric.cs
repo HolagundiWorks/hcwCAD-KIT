@@ -1,9 +1,10 @@
+using System.Linq;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.EditorInput;
 
 namespace HCW.AutoCAD.Plugin.Commands
 {
-    /// <summary>Room Dimension Tool - METRIC (M-) (ported from HCW-ALL.lsp Section 8, room:m:*).</summary>
+    /// <summary>hcwCAD-KIT room labels — metric (M) commands. 1 drawing unit = 1 metre.</summary>
     public class RoomCommandsMetric
     {
         public static readonly RoomEngineMetric Engine = new RoomEngineMetric();
@@ -107,7 +108,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("MROOM")]
         public void MROOM()
         {
-            string[] roomTypes = { "Bedroom", "Master Bedroom", "Guest Room", "Living Room", "Dining Room", "Kitchen", "Pantry", "Bathroom", "Attached Toilet", "Common Toilet", "Study Room", "Office", "Store Room", "Pooja Room", "Balcony", "Terrace", "Staircase", "Corridor", "Entrance", "Lobby", "Utility", "Laundry", "Garage", "Garden", "Courtyard", "Wardrobe", "Dressing Room", "Home Theater", "Gym" };
+            string[] roomTypes = LayerData.RoomTypes.Select(r => r.RoomType).ToArray();
             using (var dlg = new UI.RoomPickerForm(roomTypes))
             {
                 if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dlg.SelectedRoomType))

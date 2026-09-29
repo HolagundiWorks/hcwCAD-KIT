@@ -5,11 +5,8 @@ using Autodesk.AutoCAD.Runtime;
 namespace HCW.AutoCAD.Plugin.Commands
 {
     /// <summary>
-    /// VHLAYERS - legacy/alternate underscore-style layer standard (A_WALL_CUT,
-    /// S_COLUMN, etc.), functionally distinct from Section 7's hyphen-style
-    /// HCWLAYERS. Ported from HCW_Layer_Standard_v3_0.lsp. Kept under its
-    /// original name for reference/compatibility - use only one layer
-    /// standard per drawing.
+    /// VHLAYERS — underscore layer names (A_WALL_CUT, S_COLUMN, and so on).
+    /// Separate from HCWLAYERS. Use one layer standard per drawing.
     /// </summary>
     public class VhLayerCommands
     {

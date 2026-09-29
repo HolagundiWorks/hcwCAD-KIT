@@ -1,15 +1,15 @@
-# HCW AutoCAD Toolkit
+# hcwCAD-KIT
 
-Holgundi Consulting Works plugin for AutoCAD 2021–2024. It is a C# / .NET Framework 4.8 assembly (`HCW.AutoCAD.Plugin.dll`) that loads a ribbon and registers the same command names the earlier LISP toolkit used, so typed commands, scripts, and keyboard shortcuts still work.
+Holgundi Consulting Works plugin for AutoCAD 2021–2024. It is a C# / .NET Framework 4.8 assembly (`hcwCAD-KIT.dll`) that loads a ribbon. Command names (`HCWLAYERS`, `MROOM`, `MLIN`, and the rest) are unchanged, so typed commands, scripts, and keyboard shortcuts keep working.
 
 Version 1.0.0. Author: Holgundi Consulting Works.
 
-On load the plugin adds two ribbon tabs and switches to **HCW Tools**:
+On load the plugin adds two ribbon tabs and switches to **hcwCAD-KIT**:
 
 | Tab | Use it for |
 |---|---|
-| **HCW Tools** | Drawing and take-off: layers, building-permission setup, room labels, MEASURE, area and text |
-| **HCW Settings** | Checks, resets, reports, room-tool options, text styles |
+| **hcwCAD-KIT** | Drawing and take-off: layers, building-permission setup, room labels, MEASURE, area and text |
+| **hcwCAD-KIT Settings** | Checks, resets, reports, room-tool options, text styles |
 
 Every button sends its command as if it were typed (`_COMMAND`). You can type any command at the command line without using the ribbon.
 
@@ -23,14 +23,14 @@ Every button sends its command as if it were typed (`_COMMAND`). You can type an
 
 **Try it in the current session**
 
-1. Build, or take a built `HCW.AutoCAD.Plugin.dll`.
+1. Build, or take a built `hcwCAD-KIT.dll`.
 2. In AutoCAD type `NETLOAD` and pick that DLL.
-3. The **HCW Tools** and **HCW Settings** tabs appear. Loading the DLL a second time does not add a second copy of the tabs.
+3. The **hcwCAD-KIT** and **hcwCAD-KIT Settings** tabs appear. Loading the DLL a second time does not add a second copy of the tabs.
 
 **Load it every time AutoCAD starts**
 
 1. Create `HCW.AutoCAD.Plugin.bundle/Contents/` if it is not there.
-2. Copy `HCW.AutoCAD.Plugin.dll` into that `Contents` folder.
+2. Copy `hcwCAD-KIT.dll` into that `Contents` folder.
 3. Copy the whole `HCW.AutoCAD.Plugin.bundle` folder to:
 
    `%APPDATA%\Autodesk\ApplicationPlugins\`
@@ -47,7 +47,7 @@ msbuild src\HCW.AutoCAD.Plugin.sln /p:Configuration=Release /p:AutoCADInstallDir
 
 If you omit `AutoCADInstallDir`, the project uses the `AUTOCAD_INSTALL_DIR` environment variable, then `C:\Program Files\Autodesk\AutoCAD 2024\`. The managed API is compatible across 2021–2024, so any of those installs can supply the reference DLLs.
 
-Output: `src\HCW.AutoCAD.Plugin\bin\Release\HCW.AutoCAD.Plugin.dll`.
+Output: `src\HCW.AutoCAD.Plugin\bin\Release\hcwCAD-KIT.dll`. Build folders (`bin`, `obj`) are not part of the repository.
 
 Icons are IBM Carbon Design System PNGs (Apache-2.0), embedded in the DLL. The command-to-icon map is `src/HCW.AutoCAD.Plugin/Resources/icon_map.json`. No separate icon files need to be shipped.
 
@@ -68,7 +68,7 @@ Room-label text height, floor prefix, and the session log live in memory. They r
 
 ---
 
-## HCW Tools
+## hcwCAD-KIT
 
 ### Setup
 
@@ -98,7 +98,7 @@ The ribbon uses one panel. It does not ask you to pick Metric, Feet, or Inches. 
 
 ### Measure (manual take-off)
 
-Run `MSETUP` first (on **HCW Settings**) so lengths and areas use the unit system you intend. Each take-off command creates its layers if they are missing, isolates those layers while you select, labels the geometry, prints a summary, writes a CSV next to the drawing (or in the temp folder if the drawing has no path), and draws a summary table on `MEASURE-TABLE`.
+Run `MSETUP` first (on **hcwCAD-KIT Settings**) so lengths and areas use the unit system you intend. Each take-off command creates its layers if they are missing, isolates those layers while you select, labels the geometry, prints a summary, writes a CSV next to the drawing (or in the temp folder if the drawing has no path), and draws a summary table on `MEASURE-TABLE`.
 
 Draw the geometry on the layers below before you run the command. Deduction geometry must be close to the line it belongs to (you are asked for a match tolerance; default 0.01 drawing units).
 
@@ -126,7 +126,7 @@ A deduction that does not match a parent is labelled `D? NO LINE` and is not inc
 
 ---
 
-## HCW Settings
+## hcwCAD-KIT Settings
 
 ### Layer maintenance
 
@@ -148,7 +148,7 @@ These commands work on the HCW v4.0 names (`AN-`, `A-`, `I-`, `E-`, `P-`, `S-`, 
 
 ### Room tool settings
 
-These buttons drive the same auto-unit engine as the **HCW Tools** room panel. Typed `MTH`, `FTH`, `ITH`, and the other prefixed commands change only that prefix’s engine.
+These buttons drive the same auto-unit engine as the **hcwCAD-KIT** room panel. Typed `MTH`, `FTH`, `ITH`, and the other prefixed commands change only that prefix’s engine.
 
 | Command | What it does |
 |---|---|
@@ -295,6 +295,4 @@ src/
     Resources/Icons/              embedded 16×16 and 32×32 PNGs
 ```
 
-`AssemblyInfo.cs` lists every command class AutoCAD should register, and points startup at `HcwRibbonApplication`.
-
-A separate note, `LISP_PORT_AUDIT.md`, records a code review of the port (duplication, unit bugs that were later fixed, and a few remaining behaviour gaps). It is not a user guide.
+`AssemblyInfo.cs` lists every command class AutoCAD should register, and points startup at `HcwRibbonApplication`. The assembly file name is `hcwCAD-KIT.dll`. Command names are unchanged.

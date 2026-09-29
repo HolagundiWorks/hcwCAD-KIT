@@ -8,9 +8,9 @@ using AcAp = Autodesk.AutoCAD.ApplicationServices.Application;
 namespace HCW.AutoCAD.Plugin.UI
 {
     /// <summary>
-    /// Builds two ribbon tabs on load:
-    ///  - "HCW Tools"    - the drawing/creation commands (what you click while working on a sheet)
-    ///  - "HCW Settings" - configuration, inspection and reporting (what you click to set something up or check state)
+    /// Builds the hcwCAD-KIT ribbon tabs on load:
+    ///  - "hcwCAD-KIT"          - drawing and take-off commands
+    ///  - "hcwCAD-KIT Settings" - setup, checks and reports
     /// Every button runs its AutoCAD command via a "_COMMAND " string sent as
     /// if typed, and uses the matching Carbon Design System icon loaded by
     /// <see cref="IconLoader"/>.
@@ -35,7 +35,7 @@ namespace HCW.AutoCAD.Plugin.UI
             try { BuildRibbon(); }
             catch (System.Exception ex)
             {
-                AcAp.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\n[HCW ribbon build error] " + ex.Message);
+                AcAp.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\n[hcwCAD-KIT] ribbon build error: " + ex.Message);
             }
         }
 
@@ -47,7 +47,7 @@ namespace HCW.AutoCAD.Plugin.UI
             foreach (RibbonTab existing in rc.Tabs)
                 if (existing.Id == ToolsTabId) return; // already built (e.g. NETLOAD run twice)
 
-            var toolsTab = new RibbonTab { Title = "HCW Tools", Id = ToolsTabId };
+            var toolsTab = new RibbonTab { Title = "hcwCAD-KIT", Id = ToolsTabId };
             rc.Tabs.Add(toolsTab);
             toolsTab.Panels.Add(BuildSetupPanel());
             toolsTab.Panels.Add(BuildBpltPanel());
@@ -55,7 +55,7 @@ namespace HCW.AutoCAD.Plugin.UI
             toolsTab.Panels.Add(BuildMeasurePanel());
             toolsTab.Panels.Add(BuildAreaTextPanel());
 
-            var settingsTab = new RibbonTab { Title = "HCW Settings", Id = SettingsTabId };
+            var settingsTab = new RibbonTab { Title = "hcwCAD-KIT Settings", Id = SettingsTabId };
             rc.Tabs.Add(settingsTab);
             settingsTab.Panels.Add(BuildLayerMaintenancePanel());
             settingsTab.Panels.Add(BuildRoomSettingsPanel());
@@ -66,7 +66,7 @@ namespace HCW.AutoCAD.Plugin.UI
             rc.ActiveTab = toolsTab;
         }
 
-        // ==================== HCW Tools (commands) ====================
+        // ==================== hcwCAD-KIT (commands) ====================
 
         private RibbonPanel BuildSetupPanel()
         {
@@ -88,10 +88,8 @@ namespace HCW.AutoCAD.Plugin.UI
         }
 
         /// <summary>
-        /// One Room Labels panel instead of three duplicate M-/F-/I- panels -
-        /// every button here auto-detects the drawing's real unit (INSUNITS)
-        /// via the unit-agnostic HCWROOM* commands in RoomCommandsUnified.
-        /// The original typed M-/F-/I- commands still work unchanged.
+        /// One Room Labels panel. Buttons run the HCWROOM* commands, which
+        /// read the drawing's INSUNITS. Typed M-/F-/I- commands are unchanged.
         /// </summary>
         private RibbonPanel BuildRoomToolsPanel()
         {
@@ -129,7 +127,7 @@ namespace HCW.AutoCAD.Plugin.UI
             return Wrap(src);
         }
 
-        // ==================== HCW Settings (configuration/inspection/reports) ====================
+        // ==================== hcwCAD-KIT Settings ====================
 
         private RibbonPanel BuildLayerMaintenancePanel()
         {

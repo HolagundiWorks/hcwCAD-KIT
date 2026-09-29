@@ -5,9 +5,7 @@ using System.Windows.Forms;
 namespace HCW.AutoCAD.Plugin.UI
 {
     /// <summary>
-    /// Replaces the original DCL room-type list_box dialog (room:m:create-dcl /
-    /// c:mroom etc in the LISP source) with a native WinForms list, plus a
-    /// "Custom..." entry for a free-typed room name.
+    /// Room-type list for hcwCAD-KIT, including a Custom entry.
     /// </summary>
     public class RoomPickerForm : Form
     {
@@ -17,7 +15,7 @@ namespace HCW.AutoCAD.Plugin.UI
 
         public RoomPickerForm(string[] roomTypes)
         {
-            Text = "Select Room Type";
+            Text = "hcwCAD-KIT — Room Type";
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterScreen;
             MinimizeBox = false; MaximizeBox = false;

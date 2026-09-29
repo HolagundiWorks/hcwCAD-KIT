@@ -17,13 +17,9 @@ namespace HCW.AutoCAD.Plugin
     }
 
     /// <summary>
-    /// One room-tag "system" (Metric / Feet / Inches). Each unit system gets
-    /// its OWN instance with its own mutable state (text height, layers,
-    /// floor prefix, log) - this is the fix that was applied when the three
-    /// original LISP files (which all shared one set of global variable
-    /// names) were merged: loading more than one used to silently corrupt
-    /// state. Here that's structurally impossible - each engine is a
-    /// separate object.
+    /// One room-label system (Metric, Feet, or Inches). Each system has its
+    /// own text height, layers, floor prefix and session log, so loading
+    /// more than one in the same drawing does not mix their settings.
     /// </summary>
     public abstract class RoomEngine
     {
@@ -440,8 +436,8 @@ namespace HCW.AutoCAD.Plugin
     }
 
     /// <summary>
-    /// Room Dimension Tool engine for the unified HCW Tools ribbon panel -
-    /// no manual unit choice: it reads the CURRENT drawing's INSUNITS every
+    /// Room-label engine for the hcwCAD-KIT ribbon.
+    /// It reads the current drawing's INSUNITS every
     /// time and scales accordingly (mm/cm/m/ft/in), so there's nothing to
     /// get out of sync with the drawing itself. The typed M-/F-/I- commands
     /// keep using their own fixed engines unchanged.

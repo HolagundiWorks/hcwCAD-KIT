@@ -1,9 +1,10 @@
+using System.Linq;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.EditorInput;
 
 namespace HCW.AutoCAD.Plugin.Commands
 {
-    /// <summary>Room Dimension Tool - FEET (F-) (ported from HCW-ALL.lsp Section 8, room:f:*).</summary>
+    /// <summary>hcwCAD-KIT room labels — feet (F) commands.</summary>
     public class RoomCommandsFeet
     {
         public static readonly RoomEngineFeet Engine = new RoomEngineFeet();
@@ -107,7 +108,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("FROOM")]
         public void FROOM()
         {
-            string[] roomTypes = { "Bedroom", "Master Bedroom", "Guest Room", "Living Room", "Dining Room", "Kitchen", "Pantry", "Bathroom", "Attached Toilet", "Common Toilet", "Study Room", "Office", "Store Room", "Pooja Room", "Balcony", "Terrace", "Staircase", "Corridor", "Entrance", "Lobby", "Utility", "Laundry", "Garage", "Garden", "Courtyard", "Wardrobe", "Dressing Room", "Home Theater", "Gym" };
+            string[] roomTypes = LayerData.RoomTypes.Select(r => r.RoomType).ToArray();
             using (var dlg = new UI.RoomPickerForm(roomTypes))
             {
                 if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dlg.SelectedRoomType))

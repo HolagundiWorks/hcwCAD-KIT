@@ -10,9 +10,7 @@ using Autodesk.AutoCAD.Runtime;
 namespace HCW.AutoCAD.Plugin.Commands
 {
     /// <summary>
-    /// POLYAREA - numbers selected closed polylines, labels each with the
-    /// active layer, and draws a running-total area table. Ported from
-    /// HCW-ALL.lsp Section 10 (from PolyArea.lsp v1.5).
+    /// POLYAREA — numbers selected polylines and draws a running-total area table.
     /// </summary>
     public class PolyAreaCommands
     {

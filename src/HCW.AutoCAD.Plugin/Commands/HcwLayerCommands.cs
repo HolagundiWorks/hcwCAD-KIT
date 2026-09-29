@@ -10,8 +10,7 @@ using Autodesk.AutoCAD.Runtime;
 namespace HCW.AutoCAD.Plugin.Commands
 {
     /// <summary>
-    /// HCW Layer Standard v4.0 (36 layers, AN/A/I/E/P/S/PR groups).
-    /// Ported from HCW-ALL.lsp Section 7.
+    /// hcwCAD-KIT layer standard v4.0 (36 layers, AN/A/I/E/P/S/PR groups).
     /// </summary>
     public class HcwLayerCommands
     {
@@ -304,15 +303,9 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
-        // ==================== Unified Room Labels panel commands ====================
-        // Unit-agnostic Room Dimension Tool commands for the single consolidated
-        // ribbon panel - each dispatches through UI.RoomUnitSelector.Current,
-        // which auto-detects the drawing's real unit (see RoomEngineAuto). The
-        // original typed M-/F-/I- commands (RoomCommandsMetric/Feet/Inches) are
-        // untouched and still work exactly as before for typed/scripted use.
-        // (Kept in this file, not a separate class, because AutoCAD's command
-        // registration did not pick up new classes added to this project in a
-        // separate file during development - see LISP_PORT_AUDIT.md.)
+        // Room-label commands for the hcwCAD-KIT ribbon. Each one uses
+        // RoomUnitSelector.Current, which reads the drawing's INSUNITS.
+        // Typed M-/F-/I- commands stay on their own engines.
 
         private static readonly string[] RoomTypeNames = LayerData.RoomTypes.Select(r => r.RoomType).ToArray();
 

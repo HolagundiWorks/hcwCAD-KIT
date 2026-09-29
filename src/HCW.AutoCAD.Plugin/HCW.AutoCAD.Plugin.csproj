@@ -5,7 +5,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <Platforms>x64</Platforms>
     <RootNamespace>HCW.AutoCAD.Plugin</RootNamespace>
-    <AssemblyName>HCW.AutoCAD.Plugin</AssemblyName>
+    <AssemblyName>hcwCAD-KIT</AssemblyName>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>

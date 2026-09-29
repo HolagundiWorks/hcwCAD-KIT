@@ -11,10 +11,8 @@ using Autodesk.AutoCAD.Runtime;
 namespace HCW.AutoCAD.Plugin.Commands
 {
     /// <summary>
-    /// MEASURE - manual linear/rectangle/area take-off. Ported from HCW-ALL.lsp
-    /// Section 9 (the MEASURE tool that replaced AECQTY). Unit system (Metric/
-    /// Imperial) is chosen once via MSETUP and stored on <see cref="MeasureState"/>,
-    /// exactly like *M-UNITSYS* in the LISP source.
+    /// hcwCAD-KIT manual take-off. Metric or Imperial is chosen once per
+    /// session with MSETUP and stored on <see cref="MeasureState"/>.
     /// Commands: MSETUP MLIN MBRK MBML MREC MARE MSLB MSHOW MCLEAR
     /// </summary>
     public class MeasureCommands
@@ -197,10 +195,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             "\nSelect beam, lintel AND deduction lines: ", "BeamsLintels");
 
         /// <summary>
-        /// N-typed linear take-off with deductions - shared by MLIN (1 type), MBRK
-        /// (Full/Half Brick) and MBML (Beam/Lintel), exactly like m:run-typed-linear
-        /// in the LISP source (built there specifically to avoid duplicating this
-        /// ~100-line gross/deduction/net/subtotal/grand-total body per command).
+        /// Linear take-off with deductions, shared by MLIN, MBRK and MBML.
         /// </summary>
         private void RunTypedLinear((string layer, string code, string name)[] types, string dedLayer,
             string selPrompt, string csvName, bool singleTypeNoPrefix = false)

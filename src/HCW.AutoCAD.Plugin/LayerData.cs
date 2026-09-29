@@ -4,10 +4,7 @@ using System.Collections.Generic;
 namespace HCW.AutoCAD.Plugin
 {
     /// <summary>
-    /// Layer/room-type data tables, ported verbatim (name, colour index,
-    /// linetype, lineweight[, description/plottable]) from the audited
-    /// HCW-ALL.lsp *BPLT:LAYER-DATA* / *HCW:LAYERDATA* lists and from the
-    /// original HCW_Layer_Standard_v3_0.lsp (VHLAYERS) layer list.
+    /// hcwCAD-KIT layer tables and the 29 room-type names.
     /// </summary>
     public static class LayerData
     {
