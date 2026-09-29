@@ -1,5 +1,4 @@
 using System;
-using System.Windows.Media.Imaging;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.Windows;
@@ -49,17 +48,17 @@ namespace HCW.AutoCAD.Plugin.UI
 
             var toolsTab = new RibbonTab { Title = "hcwCAD-KIT", Id = ToolsTabId };
             rc.Tabs.Add(toolsTab);
-            toolsTab.Panels.Add(BuildLayerPanel());
-            toolsTab.Panels.Add(BuildBpltPanel());
+            toolsTab.Panels.Add(BuildNotesPanel());
             toolsTab.Panels.Add(BuildRoomToolsPanel());
             toolsTab.Panels.Add(BuildMeasurePanel());
             toolsTab.Panels.Add(BuildAreaTextPanel());
 
             var settingsTab = new RibbonTab { Title = "hcwCAD-KIT Settings", Id = SettingsTabId };
             rc.Tabs.Add(settingsTab);
+            settingsTab.Panels.Add(BuildLayerPanel());
             settingsTab.Panels.Add(BuildLayerChecksPanel());
+            settingsTab.Panels.Add(BuildBpltSetupPanel());
             settingsTab.Panels.Add(BuildRoomChecksPanel());
-            settingsTab.Panels.Add(BuildBpltReportsPanel());
             settingsTab.Panels.Add(BuildTextChecksPanel());
 
             rc.ActiveTab = toolsTab;
@@ -92,17 +91,15 @@ namespace HCW.AutoCAD.Plugin.UI
             return Wrap(src);
         }
 
-        private RibbonPanel BuildBpltPanel()
+        private RibbonPanel BuildNotesPanel()
         {
-            var src = NewSource("Building Permission (BPLT)");
-            AddLarge(src, "BPLTSTART", "BPLT\nStart", "flag", "Set metres and create the BP- and AP- submission layers");
-            AddLarge(src, "TITLEBLOCK", "Title\nBlock", "document--horizontal", "Insert the A3 building-permit title block");
-            AddLarge(src, "TITLEFIELDS", "Edit\nFields", "tag--edit", "Edit project, drawing, area statement, F.A.R. and ground cover");
+            var src = NewSource("Notes");
             AddNotePicker(src);
+            AddLarge(src, "FIELDS", "Fields", "tag--edit", "Create fields, edit a field, place them, or update a fields block on the sheet");
             AddSmallGroup(src,
-                ("TITLENOTES", "Notes Library", "document--view", "Choose, edit, place or update a saved note set"),
+                ("TITLENOTES", "Notes", "document--view", "Add a note set, add a note line, place or update notes"),
                 ("TITLENOTESAVE", "Save Notes", "save", "Save the selected notes block under a name such as ELECTRIC NOTES"),
-                ("BPLTCOPY", "Copy to AP-", "copy", "Duplicate selected BP- entities onto their matching AP- layer"));
+                ("FIELDSEDIT", "Edit Field", "tag--edit", "Edit the fields block already on the sheet"));
             return Wrap(src);
         }
 
@@ -172,11 +169,15 @@ namespace HCW.AutoCAD.Plugin.UI
                     ("Brickwork", "MBRK"),
                     ("Beams and lintels", "MBML")
                 });
-            AddLarge(src, "MREC", "Columns", "column", "Number and dimension rectangular columns");
+            AddLarge(src, "MCOL", "Columns", "column", "Group concrete columns of the same size. MREC still numbers plain rectangles.");
+            AddLarge(src, "MSCHED", "Schedule", "report", "Floors, doors, windows, columns, and deduction name map");
             AddLarge(src, "MAREA", "Area", "area", "Closed-shape area and perimeter. MARE still works.");
             AddLarge(src, "MSLAB", "Slab", "floorplan", "Slab area with opening deductions. MSLB still works.");
             AddSmallGroup(src,
-                ("MSETUP", "Units", "settings", "Metric (metres) or Imperial (inches) for this session"),
+                ("MPAINT", "Wall paint", "area--custom", "Wall length times ceiling height, less openings"),
+                ("MCEIL", "Ceiling", "floorplan", "Ceiling paint area, grouped by equal area"),
+                ("MFLOOR", "Floor", "area", "Floor area, grouped by equal area"),
+                ("MSETUP", "Units", "settings", "Metric (metres) or Imperial (feet and inches) for this session"),
                 ("MSHOW", "Restore Layers", "view", "Turn back on only the layers Measure hid"),
                 ("MCLEAR", "Clear Labels", "clean", "Erase Measure label and table objects"));
             return Wrap(src);
@@ -234,10 +235,12 @@ namespace HCW.AutoCAD.Plugin.UI
             return Wrap(src);
         }
 
-        private RibbonPanel BuildBpltReportsPanel()
+        private RibbonPanel BuildBpltSetupPanel()
         {
-            var src = NewSource("BPLT Reports");
+            var src = NewSource("BPLT");
+            AddLarge(src, "BPLTSTART", "BPLT\nStart", "flag", "Set metres and create the BP- and AP- submission layers");
             AddSmallGroup(src,
+                ("BPLTCOPY", "Copy to AP-", "copy", "Duplicate selected BP- entities onto their matching AP- layer"),
                 ("BPLTCHECK", "Check AP-", "rule", "Verify every required AP- layer has a closed polyline"),
                 ("BPLTAREA", "Area Summary", "area", "Report gross area per AP- layer"),
                 ("BPLTREPORT", "Export Report", "report", "Export the full BPLT layer report as CSV"));

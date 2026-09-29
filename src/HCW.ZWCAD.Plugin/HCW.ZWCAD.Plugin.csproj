@@ -37,6 +37,11 @@
       <Private>false</Private>
       <SpecificVersion>false</SpecificVersion>
     </Reference>
+    <Reference Include="ZdWindows" Condition="Exists('$(ZwcadInstallDir)ZdWindows.dll')">
+      <HintPath>$(ZwcadInstallDir)ZdWindows.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
     <Reference Include="PresentationCore" />

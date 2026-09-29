@@ -40,22 +40,34 @@ namespace HCW.AutoCAD.Plugin.UI
             };
             Controls.Add(_body);
 
-            var save = new Button { Text = "Save set", Left = 216, Top = 380, Width = 100 };
+            var newer = new Button { Text = "New set", Left = 104, Top = 380, Width = 90 };
+            newer.Click += (s, e) =>
+            {
+                _list.ClearSelected();
+                _name.Text = "";
+                _body.Text = "";
+                _name.Focus();
+            };
+            var addNote = new Button { Text = "Add note", Left = 200, Top = 380, Width = 90 };
+            addNote.Click += (s, e) => AddNoteLine();
+            var save = new Button { Text = "Save set", Left = 296, Top = 380, Width = 90 };
             save.Click += (s, e) => SaveCurrent();
-            var place = new Button { Text = "Place on sheet", Left = 324, Top = 380, Width = 130, DialogResult = DialogResult.OK };
+            var place = new Button { Text = "Place", Left = 392, Top = 380, Width = 80, DialogResult = DialogResult.OK };
             place.Click += (s, e) =>
             {
                 PlaceNew = true;
                 SelectedName = _name.Text.Trim();
                 SelectedBody = _body.Text ?? "";
             };
-            var apply = new Button { Text = "Update selected", Left = 462, Top = 380, Width = 160, DialogResult = DialogResult.Yes };
+            var apply = new Button { Text = "Update", Left = 478, Top = 380, Width = 80, DialogResult = DialogResult.Yes };
             apply.Click += (s, e) =>
             {
                 PlaceNew = false;
                 SelectedName = _name.Text.Trim();
                 SelectedBody = _body.Text ?? "";
             };
+            Controls.Add(newer);
+            Controls.Add(addNote);
             Controls.Add(save);
             Controls.Add(place);
             Controls.Add(apply);
@@ -63,13 +75,25 @@ namespace HCW.AutoCAD.Plugin.UI
             var hint = new Label
             {
                 Left = 8, Top = 416, Width = 620, Height = 32,
-                Text = "Place on sheet drops a new notes block where you pick. Move it with the MOVE command. Update selected rewrites a notes block already on the drawing."
+                Text = "New set starts a blank set. Add note appends the next numbered line. Place drops it on the sheet. Update rewrites a notes block already on the drawing."
             };
             Controls.Add(hint);
             var cancel = new Button { Text = "Cancel", Left = 8, Top = 380, Width = 90, DialogResult = DialogResult.Cancel };
             Controls.Add(cancel);
             CancelButton = cancel;
             ShowSelected();
+        }
+
+        private void AddNoteLine()
+        {
+            string body = (_body.Text ?? "").Replace("\r\n", "\n").Replace('\r', '\n');
+            int count = 0;
+            foreach (var line in body.Split('\n'))
+                if (line.Trim().Length > 0) count++;
+            if (body.Length > 0 && !body.EndsWith("\n")) body += "\n";
+            _body.Text = body + (count + 1) + ". ";
+            _body.SelectionStart = _body.Text.Length;
+            _body.Focus();
         }
 
         private void ShowSelected()

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -13,7 +13,7 @@ namespace HCW.AutoCAD.Plugin.Commands
     /// <summary>
     /// hcwCAD-KIT manual take-off. Metric or Imperial is chosen once per
     /// session with MSETUP and stored on <see cref="MeasureState"/>.
-    /// Commands: MSETUP MLIN MBRK MBML MREC MARE MSLB MSHOW MCLEAR
+    /// Commands: MSETUP MLIN MBRK MBML MCOL MREC MPAINT MCEIL MFLOOR MSCHED MARE MSLB MSHOW MCLEAR
     /// </summary>
     public class MeasureCommands
     {
@@ -55,9 +55,28 @@ namespace HCW.AutoCAD.Plugin.Commands
             Util.EnsureLayer(tr, db, LaySdd, 250);
             Util.EnsureLayer(tr, db, LayLbl, 7);
             Util.EnsureLayer(tr, db, LayTbl, 4);
+            Util.EnsureLayer(tr, db, LayCol, 2);
+            Util.EnsureLayer(tr, db, LayCeil, 141);
+            Util.EnsureLayer(tr, db, LayFlor, 3);
+            EnsureRegApp(tr, db);
         }
 
+        public const string LayCol = "MEASURE-COLUMN";
+        public const string LayCeil = "MEASURE-CEILING";
+        public const string LayFlor = "MEASURE-FLOOR";
+
         // ---- unit-aware rounding / formatting (m:rnd / m:m / m:area-from-rnd / m:r2) ----
+
+        public static int RndPublic(double v) => Rnd(v);
+
+        /// <summary>Schedule sizes are metres, or feet when Imperial is set.</summary>
+        public static int RndSchedule(double displayLength)
+        {
+            double drawing = MeasureState.Units == UnitSys.Imperial ? displayLength * 12.0 : displayLength;
+            return Rnd(drawing);
+        }
+
+        private static string ScheduleUnit => MeasureState.Units == UnitSys.Imperial ? "ft" : "m";
 
         private static int Rnd(double v) => MeasureState.Units == UnitSys.Imperial
             ? (int)Math.Floor(v * 8.0 + 0.5001)
@@ -206,8 +225,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             "\nSelect full brick, half brick AND deduction lines: ", "Bricks");
 
         [CommandMethod("MBML")]
-        public void MBml() => RunTypedLinear(new[] { (LayBm, "BM", "Beam"), (LayLt, "LT", "Lintel") }, LayDed,
-            "\nSelect beam, lintel AND deduction lines: ", "BeamsLintels");
+        public void MBml() => RunTypedLinear(new[] { (LayBm, "BM", "Concrete beam"), (LayLt, "LT", "Concrete lintel") }, LayDed,
+            "\nSelect concrete beam, concrete lintel AND deduction lines: ", "BeamsLintels");
 
         /// <summary>
         /// Linear take-off with deductions, shared by MLIN, MBRK and MBML.
@@ -220,6 +239,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 MakeLayers(tr, db);
+                var book = MeasureBook.Load(tr, db);
                 var isolateLayers = types.Select(t => t.layer).Append(dedLayer).ToArray();
                 using (var iso = IsolateAndPrompt(tr, db, isolateLayers, selPrompt))
                 {
@@ -260,52 +280,51 @@ namespace HCW.AutoCAD.Plugin.Commands
 
                     foreach (var ty in types)
                     {
-                        int n = 0, cnt = 0, sG = 0, sD = 0, sN = 0;
+                        var segs = new List<(int index, int gross)>();
                         for (int k = 0; k < grp.Count; k++)
+                            if (grp[k].type == ty.code) segs.Add((k, Rnd(CurveLen(grp[k].ent))));
+                        if (segs.Count == 0) continue;
+
+                        int sG = 0, sD = 0, sN = 0, dedSerial = 0;
+                        int letter = 0;
+                        foreach (var bucket in segs.GroupBy(s => s.gross).OrderByDescending(s => s.Key))
                         {
-                            if (grp[k].type != ty.code) continue;
-                            n++; cnt++;
-                            string lbl = singleTypeNoPrefix ? "L" + n : ty.code + n;
-                            int gross = Rnd(CurveLen(grp[k].ent));
-                            int dsum = 0, dn = 0;
-                            var dl = new List<(string lbl, int val, Curve ent)>();
-                            for (int j = 0; j < deds.Count; j++)
+                            string group = (singleTypeNoPrefix ? "L" : ty.code) + "-" + GroupLetter(letter++);
+                            int each = bucket.Key;
+                            int count = bucket.Count();
+                            int grossSum = each * count;
+                            int dsum = 0;
+                            foreach (var seg in bucket)
                             {
-                                if (pidx[j] == k)
+                                var mp = CurveMid(grp[seg.index].ent);
+                                PlaceLabel(tr, db, btr, new Point3d(mp.X, mp.Y + 0.8 * th, 0), group, book, th);
+                                for (int j = 0; j < deds.Count; j++)
                                 {
-                                    dn++;
+                                    if (pidx[j] != seg.index) continue;
+                                    dedSerial++;
                                     int dv = Rnd(CurveLen(deds[j]));
                                     dsum += dv;
-                                    dl.Add((lbl + "-D" + dn, dv, deds[j]));
+                                    string raw = (singleTypeNoPrefix ? "L" : ty.code) + " D-" + dedSerial.ToString("00");
+                                    var dmp = CurveMid(deds[j]);
+                                    PlaceLabel(tr, db, btr, new Point3d(dmp.X, dmp.Y - 0.8 * th, 0), raw, book, th);
+                                    string shown = DisplayName(book, raw);
+                                    rows.Add(singleTypeNoPrefix
+                                        ? new[] { shown, "", M(dv), "" }
+                                        : new[] { shown, ty.name, "", M(dv), "" });
                                 }
                             }
-                            int net = gross - dsum;
-                            sG += gross; sD += dsum; sN += net;
-                            if (net < 0) ed.WriteMessage($"\nWARNING: deductions on {lbl} exceed its length.");
-
-                            var mp = CurveMid(grp[k].ent);
-                            CenteredText(tr, btr, new Point3d(mp.X, mp.Y + 0.8 * th, 0), lbl, th, LayLbl);
+                            int net = grossSum - dsum;
+                            if (net < 0) ed.WriteMessage("\nWARNING: deductions on " + group + " exceed its length.");
+                            sG += grossSum; sD += dsum; sN += net;
                             rows.Add(singleTypeNoPrefix
-                                ? new[] { lbl, M(gross), "", M(net) }
-                                : new[] { lbl, ty.name, M(gross), "", M(net) });
-
-                            foreach (var x in dl)
-                            {
-                                var dmp = CurveMid(x.ent);
-                                CenteredText(tr, btr, new Point3d(dmp.X, dmp.Y - 0.8 * th, 0), x.lbl, th, LayLbl);
-                                rows.Add(singleTypeNoPrefix
-                                    ? new[] { x.lbl, "", M(x.val), "" }
-                                    : new[] { x.lbl, ty.name, "", M(x.val), "" });
-                            }
+                                ? new[] { group, M(each) + " x " + count, M(dsum), M(net) }
+                                : new[] { group, ty.name, M(each) + " x " + count, M(dsum), M(net) });
                         }
-                        if (cnt > 0)
-                        {
-                            rows.Add(singleTypeNoPrefix
-                                ? new[] { "TOTAL", M(sG), M(sD), M(sN) }
-                                : new[] { "TOTAL", ty.name, M(sG), M(sD), M(sN) });
-                            gG += sG; gD += sD; gN += sN;
-                            ed.WriteMessage($"\n{ty.name}:  {M(sG)} {LenLabel}  less {M(sD)} {LenLabel}  =  NET {M(sN)} {LenLabel}");
-                        }
+                        rows.Add(singleTypeNoPrefix
+                            ? new[] { "TOTAL", M(sG), M(sD), M(sN) }
+                            : new[] { "TOTAL", ty.name, M(sG), M(sD), M(sN) });
+                        gG += sG; gD += sD; gN += sN;
+                        ed.WriteMessage($"\n{ty.name}:  {M(sG)} {LenLabel}  less {M(sD)} {LenLabel}  =  NET {M(sN)} {LenLabel}");
                     }
 
                     int unm = 0;
@@ -326,33 +345,37 @@ namespace HCW.AutoCAD.Plugin.Commands
                     ed.WriteMessage($"\nTotal {M(gG)} {LenLabel}  deductions {M(gD)} {LenLabel}  NET {M(gN)} {LenLabel}");
 
                     var headers = singleTypeNoPrefix
-                        ? new[] { "Item", $"Length ({LenLabel})", $"Deduction ({LenLabel})", $"Net ({LenLabel})" }
-                        : new[] { "Item", "Type", $"Length ({LenLabel})", $"Deduction ({LenLabel})", $"Net ({LenLabel})" };
+                        ? new[] { "Item", $"Length x count ({LenLabel})", $"Deduction ({LenLabel})", $"Net ({LenLabel})" }
+                        : new[] { "Item", "Type", $"Length x count ({LenLabel})", $"Deduction ({LenLabel})", $"Net ({LenLabel})" };
                     Output(tr, db, csvName, headers, rows, th);
                 }
                 tr.Commit();
             }
         }
 
+        [CommandMethod("MCOL")]
+        public void MCol() => RunRectangles(LayCol, "C", "Columns", "\nSelect concrete column rectangles on MEASURE-COLUMN: ", true);
+
         [CommandMethod("MREC")]
-        public void MRec()
+        public void MRec() => RunRectangles(LayCnt, "R", "Rectangles", "\nSelect rectangles (closed polylines) on MEASURE-COUNT: ", false);
+
+        private void RunRectangles(string layer, string code, string csvName, string prompt, bool useSchedule)
         {
             var ed = Util.Ed; var db = Util.Db;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 MakeLayers(tr, db);
-                using (var iso = IsolateAndPrompt(tr, db, new[] { LayCnt }, "\nSelect rectangles (closed polylines) on MEASURE-COUNT: "))
+                var book = MeasureBook.Load(tr, db);
+                using (var iso = IsolateAndPrompt(tr, db, new[] { layer }, prompt))
                 {
-                    var psr = ed.GetSelection(new PromptSelectionOptions(), BuildFilter("LWPOLYLINE", new[] { LayCnt }));
+                    var psr = ed.GetSelection(new PromptSelectionOptions(), BuildFilter("LWPOLYLINE", new[] { layer }));
                     if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
 
                     double th = AskTextHeight(ed);
                     var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
-                    var rows = new List<string[]>();
-                    int n = 1, skipped = 0;
-                    double totA = 0; int totP = 0;
-
+                    var found = new List<(Point3d cen, int len, int brd, double area, int perim)>();
+                    int skipped = 0;
                     foreach (SelectedObject so in psr.Value)
                     {
                         var pl = (Polyline)tr.GetObject(so.ObjectId, OpenMode.ForRead);
@@ -360,25 +383,216 @@ namespace HCW.AutoCAD.Plugin.Commands
                         if (rect == null) { skipped++; continue; }
                         double a = rect[0].DistanceTo(rect[1]), b = rect[1].DistanceTo(rect[2]);
                         int len = Rnd(Math.Max(a, b)), brd = Rnd(Math.Min(a, b));
-                        double ar = AreaFromRnd(len, brd);
-                        int pr = 2 * (len + brd);
-                        totA += ar; totP += pr;
                         var cen = new Point3d((rect[0].X + rect[2].X) / 2.0, (rect[0].Y + rect[2].Y) / 2.0, 0);
-                        CenteredText(tr, btr, cen, "R" + n, th, LayLbl);
-                        rows.Add(new[] { "R" + n, M(len), M(brd), ar.ToString("F2"), M(pr) });
-                        n++;
+                        found.Add((cen, len, brd, AreaFromRnd(len, brd), 2 * (len + brd)));
                     }
                     if (skipped > 0) ed.WriteMessage($"\n{skipped} object(s) skipped (not closed 4-sided rectangles).");
-                    if (rows.Count > 0)
+                    if (found.Count == 0) return;
+
+                    var rows = new List<string[]>();
+                    double totA = 0; int totP = 0, letter = 0;
+                    foreach (var bucket in found.GroupBy(f => f.len + "x" + f.brd).OrderByDescending(g => g.First().len * g.First().brd))
                     {
-                        rows.Add(new[] { "TOTAL", "", "", totA.ToString("F2"), M(totP) });
-                        ed.WriteMessage($"\n{n - 1} rectangles named. Total area = {totA:F2} {AreaLabel}");
-                        Output(tr, db, "Rectangles", new[] { "Rect No", $"Length ({LenLabel})", $"Breadth ({LenLabel})", $"Area ({AreaLabel})", $"Perimeter ({LenLabel})" }, rows, th);
+                        var sample = bucket.First();
+                        var scheduled = useSchedule ? book.ColumnBySize(sample.len, sample.brd) : null;
+                        string name = scheduled == null
+                            ? code + "-" + GroupLetter(letter++)
+                            : string.IsNullOrWhiteSpace(scheduled.Name) ? scheduled.Mark : scheduled.Mark + " " + scheduled.Name;
+                        int count = bucket.Count();
+                        double areaSum = sample.area * count;
+                        int perimSum = sample.perim * count;
+                        totA += areaSum; totP += perimSum;
+                        foreach (var item in bucket)
+                            PlaceLabel(tr, db, btr, item.cen, name, book, th, force: name);
+                        rows.Add(new[] { name, M(sample.len), M(sample.brd), count.ToString(), areaSum.ToString("F2"), M(perimSum) });
                     }
+                    rows.Add(new[] { "TOTAL", "", "", found.Count.ToString(), totA.ToString("F2"), M(totP) });
+                    ed.WriteMessage($"\n{found.Count} grouped as {rows.Count - 1} size(s). Total area = {totA:F2} {AreaLabel}");
+                    Output(tr, db, csvName, new[] { "Mark", $"Length ({LenLabel})", $"Breadth ({LenLabel})", "Count", $"Area ({AreaLabel})", $"Perimeter ({LenLabel})" }, rows, th);
                 }
                 tr.Commit();
             }
         }
+
+        [CommandMethod("MPAINT")]
+        public void MPaint() => RunPaint(new[] { LayFb, LayHb, LayLin }, LayDed, "WallPaint", "wall paint");
+
+        [CommandMethod("MCEIL")]
+        public void MCeil() => RunAreas(LayCeil, "CP", "CeilingPaint", "\nSelect ceiling outlines on MEASURE-CEILING: ");
+
+        [CommandMethod("MFLOOR")]
+        public void MFloor() => RunAreas(LayFlor, "FL", "FloorArea", "\nSelect floor outlines on MEASURE-FLOOR: ");
+
+        [CommandMethod("MSCHED")]
+        public void MSched()
+        {
+            var ed = Util.Ed; var db = Util.Db;
+            MeasureBook book;
+            var labels = new List<string>();
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                book = MeasureBook.Load(tr, db);
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+                foreach (ObjectId id in space)
+                {
+                    var text = tr.GetObject(id, OpenMode.ForRead) as DBText;
+                    if (text == null || !string.Equals(text.Layer, LayLbl, StringComparison.OrdinalIgnoreCase)) continue;
+                    string raw = RawLabel(text);
+                    if (raw.IndexOf(" D-", StringComparison.OrdinalIgnoreCase) >= 0 && !labels.Contains(raw, StringComparer.OrdinalIgnoreCase))
+                        labels.Add(raw);
+                }
+                tr.Commit();
+            }
+
+            using (var dlg = new UI.MeasureScheduleForm(book, labels, ScheduleUnit))
+            {
+                if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+                book = dlg.Read();
+                using (Util.Doc.LockDocument())
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    MakeLayers(tr, db);
+                    book.Save(tr, db);
+                    int renamed = ApplyNames(tr, db, book);
+                    if (dlg.DrawTable)
+                    {
+                        double th = MeasureState.TextHeight;
+                        var rows = ScheduleRows(book);
+                        if (rows.Count > 0)
+                        {
+                            var ppr = ed.GetPoint("\nPick a point for the schedule table: ");
+                            if (ppr.Status == PromptStatus.OK)
+                                DrawTable(tr, db, ppr.Value, new[] { "Item", "Detail", "Size", "Count" }, rows, th);
+                        }
+                    }
+                    tr.Commit();
+                    ed.WriteMessage("\nSchedule saved. " + renamed + " measured name(s) updated.");
+                }
+            }
+        }
+
+        private void RunPaint(string[] wallLayers, string dedLayer, string csvName, string title)
+        {
+            var ed = Util.Ed; var db = Util.Db;
+            MeasureBook book;
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                book = MeasureBook.Load(tr, db);
+                tr.Commit();
+            }
+            double height = AskFloorHeight(ed, book);
+            if (height <= 0) return;
+
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                MakeLayers(tr, db);
+                book = MeasureBook.Load(tr, db);
+                var layers = wallLayers.Append(dedLayer).ToArray();
+                using (var iso = IsolateAndPrompt(tr, db, layers, "\nSelect wall lines and opening deductions for " + title + ": "))
+                {
+                    var psr = ed.GetSelection(new PromptSelectionOptions(), BuildFilter("LINE,LWPOLYLINE,POLYLINE,ARC,SPLINE", layers));
+                    if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
+                    double th = AskTextHeight(ed);
+                    var walls = new List<Curve>();
+                    var deds = new List<Curve>();
+                    foreach (SelectedObject so in psr.Value)
+                    {
+                        var c = (Curve)tr.GetObject(so.ObjectId, OpenMode.ForRead);
+                        if (string.Equals(c.Layer, dedLayer, StringComparison.OrdinalIgnoreCase)) deds.Add(c);
+                        else walls.Add(c);
+                    }
+                    if (walls.Count == 0) { ed.WriteMessage("\nNo wall lines selected."); return; }
+
+                    var parent = new int?[deds.Count];
+                    for (int i = 0; i < deds.Count; i++)
+                    {
+                        int? best = null; double bd = double.MaxValue;
+                        for (int k = 0; k < walls.Count; k++)
+                        {
+                            double md = MaxDist(deds[i], walls[k]);
+                            if (md <= MeasureState.DedupTolerance && md < bd) { bd = md; best = k; }
+                        }
+                        parent[i] = best;
+                    }
+
+                    var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                    var rows = new List<string[]>();
+                    double tot = 0;
+                    int letter = 0;
+                    var sized = walls.Select(w => new { Curve = w, Len = Rnd(CurveLen(w)) }).GroupBy(w => w.Len).OrderByDescending(g => g.Key);
+                    foreach (var bucket in sized)
+                    {
+                        string group = "P-" + GroupLetter(letter++);
+                        double gross = (bucket.Key / (MeasureState.Units == UnitSys.Imperial ? 8.0 * 12.0 : 100.0)) * height * bucket.Count();
+                        double deduct = 0;
+                        foreach (var wall in bucket)
+                        {
+                            int index = walls.IndexOf(wall.Curve);
+                            PlaceLabel(tr, db, btr, CurveMid(wall.Curve), group, book, th, force: group);
+                            for (int i = 0; i < deds.Count; i++)
+                            {
+                                if (parent[i] != index) continue;
+                                deduct += OpeningArea(tr, db, book, deds[i], height, th);
+                            }
+                        }
+                        double net = Math.Max(0, gross - deduct);
+                        tot += net;
+                        rows.Add(new[] { group, M(bucket.Key), bucket.Count().ToString(), height.ToString("0.###"), gross.ToString("F2"), deduct.ToString("F2"), net.ToString("F2") });
+                    }
+                    rows.Add(new[] { "TOTAL", "", walls.Count.ToString(), "", "", "", tot.ToString("F2") });
+                    ed.WriteMessage($"\n{title}: {tot:F2} {AreaLabel} at height {height:0.###} {LenLabel}.");
+                    Output(tr, db, csvName, new[] { "Group", $"Length ({LenLabel})", "Count", $"Height ({LenLabel})", $"Gross ({AreaLabel})", $"Openings ({AreaLabel})", $"Net ({AreaLabel})" }, rows, th);
+                }
+                tr.Commit();
+            }
+        }
+
+        private void RunAreas(string layer, string code, string csvName, string prompt)
+        {
+            var ed = Util.Ed; var db = Util.Db;
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                MakeLayers(tr, db);
+                var book = MeasureBook.Load(tr, db);
+                using (var iso = IsolateAndPrompt(tr, db, new[] { layer }, prompt))
+                {
+                    var psr = ed.GetSelection(new PromptSelectionOptions(), BuildFilter("LWPOLYLINE,POLYLINE,CIRCLE,ELLIPSE,SPLINE", new[] { layer }));
+                    if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
+                    double th = AskTextHeight(ed);
+                    var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                    var found = new List<(Point3d cen, double area)>();
+                    foreach (SelectedObject so in psr.Value)
+                    {
+                        var ent = (Entity)tr.GetObject(so.ObjectId, OpenMode.ForRead);
+                        double area = 0; Point3d cen = Point3d.Origin; bool ok = false;
+                        if (ent is Polyline pl && pl.Closed) { area = Math.Abs(pl.Area); cen = Centroid(pl); ok = area > 0; }
+                        else if (ent is Circle ci) { area = Math.PI * ci.Radius * ci.Radius; cen = ci.Center; ok = true; }
+                        else if (ent is Curve cv) { try { area = Math.Abs(cv.Area); cen = CurveMid(cv); ok = area > 0; } catch { ok = false; } }
+                        if (ok) found.Add((cen, R2(area)));
+                    }
+                    if (found.Count == 0) { ed.WriteMessage("\nNo closed areas selected."); return; }
+                    var rows = new List<string[]>();
+                    double tot = 0; int letter = 0;
+                    foreach (var bucket in found.GroupBy(f => f.area.ToString("F2")).OrderByDescending(g => g.Key))
+                    {
+                        string name = code + "-" + GroupLetter(letter++);
+                        double each = bucket.First().area;
+                        double sum = each * bucket.Count();
+                        tot += sum;
+                        foreach (var item in bucket)
+                            PlaceLabel(tr, db, btr, item.cen, name, book, th, force: name);
+                        rows.Add(new[] { name, each.ToString("F2"), bucket.Count().ToString(), sum.ToString("F2") });
+                    }
+                    rows.Add(new[] { "TOTAL", "", found.Count.ToString(), tot.ToString("F2") });
+                    ed.WriteMessage($"\n{found.Count} outline(s), {tot:F2} {AreaLabel}.");
+                    Output(tr, db, csvName, new[] { "Group", $"Area each ({AreaLabel})", "Count", $"Area total ({AreaLabel})" }, rows, th);
+                }
+                tr.Commit();
+            }
+        }
+
 
         [CommandMethod("MAREA")]
         [CommandMethod("MARE")]
@@ -614,6 +828,176 @@ namespace HCW.AutoCAD.Plugin.Commands
             double m1 = v1.Length, m2 = v2.Length;
             if (m1 < 1e-9 || m2 < 1e-9) return false;
             return Math.Abs(v1.DotProduct(v2)) <= 1e-4 * m1 * m2;
+        }
+
+        private const string AppName = "HCWKIT";
+
+        private static string GroupLetter(int index)
+        {
+            index++;
+            var letters = "";
+            while (index > 0)
+            {
+                index--;
+                letters = (char)('A' + index % 26) + letters;
+                index /= 26;
+            }
+            return letters;
+        }
+
+        private static void PlaceLabel(Transaction tr, Database db, BlockTableRecord btr, Point3d pt, string raw, MeasureBook book, double h, string force = null)
+        {
+            var t = new DBText
+            {
+                Position = pt, Height = h, TextString = force ?? DisplayName(book, raw), Layer = LayLbl,
+                HorizontalMode = TextHorizontalMode.TextCenter,
+                VerticalMode = TextVerticalMode.TextVerticalMid,
+                AlignmentPoint = pt
+            };
+            btr.AppendEntity(t);
+            tr.AddNewlyCreatedDBObject(t, true);
+            TagLabel(tr, db, t, raw);
+        }
+
+        private static string DisplayName(MeasureBook book, string raw)
+        {
+            string mark = book.MarkFor(raw);
+            if (string.IsNullOrWhiteSpace(mark)) return raw;
+            var opening = book.Opening(mark);
+            if (opening != null && !string.IsNullOrWhiteSpace(opening.Name))
+                return mark + " " + opening.Name;
+            var column = book.Columns.FirstOrDefault(c => string.Equals(c.Mark, mark, StringComparison.OrdinalIgnoreCase));
+            if (column != null && !string.IsNullOrWhiteSpace(column.Name))
+                return mark + " " + column.Name;
+            return mark;
+        }
+
+        private static void EnsureRegApp(Transaction tr, Database db)
+        {
+            var rat = (RegAppTable)tr.GetObject(db.RegAppTableId, OpenMode.ForRead);
+            if (rat.Has(AppName)) return;
+            rat.UpgradeOpen();
+            var rec = new RegAppTableRecord { Name = AppName };
+            rat.Add(rec);
+            tr.AddNewlyCreatedDBObject(rec, true);
+        }
+
+        private static void TagLabel(Transaction tr, Database db, DBText text, string raw)
+        {
+            EnsureRegApp(tr, db);
+            text.XData = new ResultBuffer(
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, AppName),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, "MEASURE"),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, raw ?? ""));
+        }
+
+        private static string RawLabel(DBText text)
+        {
+            var data = text.GetXDataForApplication(AppName);
+            if (data != null)
+            {
+                var vals = data.AsArray();
+                for (int i = 0; i < vals.Length - 1; i++)
+                {
+                    if (vals[i].TypeCode == (int)DxfCode.ExtendedDataAsciiString
+                        && string.Equals(vals[i].Value as string, "MEASURE", StringComparison.Ordinal))
+                        return vals[i + 1].Value as string ?? text.TextString ?? "";
+                }
+            }
+            return text.TextString ?? "";
+        }
+
+        private static int ApplyNames(Transaction tr, Database db, MeasureBook book)
+        {
+            var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+            int renamed = 0;
+            foreach (ObjectId id in space)
+            {
+                var text = tr.GetObject(id, OpenMode.ForRead) as DBText;
+                if (text == null || !string.Equals(text.Layer, LayLbl, StringComparison.OrdinalIgnoreCase)) continue;
+                string raw = RawLabel(text);
+                string shown = DisplayName(book, raw);
+                if (string.Equals(text.TextString, shown, StringComparison.Ordinal)) continue;
+                text.UpgradeOpen();
+                text.TextString = shown;
+                renamed++;
+            }
+            return renamed;
+        }
+
+        private static List<string[]> ScheduleRows(MeasureBook book)
+        {
+            var rows = new List<string[]>();
+            foreach (var floor in book.Floors)
+                rows.Add(new[] { floor.Name, "Ceiling height", floor.Height.ToString("0.###") + " " + ScheduleUnit, "1" });
+            foreach (var opening in book.Openings)
+                rows.Add(new[]
+                {
+                    opening.Mark,
+                    string.IsNullOrWhiteSpace(opening.Name) ? opening.Kind : opening.Name,
+                    opening.Width.ToString("0.###") + " x " + opening.Height.ToString("0.###"),
+                    Math.Max(1, opening.Count).ToString()
+                });
+            foreach (var column in book.Columns)
+                rows.Add(new[]
+                {
+                    column.Mark,
+                    string.IsNullOrWhiteSpace(column.Name) ? "Column" : column.Name,
+                    column.Width.ToString("0.###") + " x " + column.Depth.ToString("0.###"),
+                    Math.Max(1, column.Count).ToString()
+                });
+            foreach (var map in book.Maps)
+            {
+                if (string.IsNullOrWhiteSpace(map.Mark)) continue;
+                rows.Add(new[] { map.Label, "Maps to " + map.Mark, "", "" });
+            }
+            return rows;
+        }
+
+        private static double AskFloorHeight(Editor ed, MeasureBook book)
+        {
+            var floors = book.Floors.Where(f => f.Height > 0).Take(12).ToList();
+            if (floors.Count == 0)
+            {
+                var opt = new PromptDoubleOptions("\nWall height (" + ScheduleUnit + ") <3>: ")
+                {
+                    DefaultValue = 3, AllowNegative = false, AllowZero = false, UseDefaultValue = true
+                };
+                var got = ed.GetDouble(opt);
+                return got.Status == PromptStatus.OK ? got.Value : 0;
+            }
+            var pko = new PromptKeywordOptions("\nFloor height");
+            for (int i = 0; i < floors.Count; i++)
+                pko.Keywords.Add("F" + (i + 1));
+            pko.Keywords.Add("All");
+            pko.Keywords.Default = "F1";
+            ed.WriteMessage("\n" + string.Join(", ", floors.Select((f, i) => "F" + (i + 1) + " " + f.Name + " " + f.Height.ToString("0.###"))));
+            var key = ed.GetKeywords(pko);
+            if (key.Status != PromptStatus.OK) return 0;
+            if (string.Equals(key.StringResult, "All", StringComparison.OrdinalIgnoreCase))
+                return floors.Sum(f => f.Height);
+            int index = int.Parse(key.StringResult.Substring(1)) - 1;
+            return floors[index].Height;
+        }
+
+        private static double OpeningArea(Transaction tr, Database db, MeasureBook book, Curve deduction, double wallHeight, double textHeight)
+        {
+            var mid = CurveMid(deduction);
+            var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+            foreach (ObjectId id in space)
+            {
+                var text = tr.GetObject(id, OpenMode.ForRead) as DBText;
+                if (text == null || !string.Equals(text.Layer, LayLbl, StringComparison.OrdinalIgnoreCase)) continue;
+                if (text.Position.DistanceTo(mid) > Math.Max(4 * textHeight, 0.25)) continue;
+                string raw = RawLabel(text);
+                if (raw.IndexOf(" D-", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                var opening = book.Opening(book.MarkFor(raw));
+                if (opening != null && opening.Width > 0 && opening.Height > 0)
+                    return opening.Width * opening.Height;
+            }
+            int width = Rnd(CurveLen(deduction));
+            double length = MeasureState.Units == UnitSys.Imperial ? width / (8.0 * 12.0) : width / 100.0;
+            return length * wallHeight;
         }
 
         private static void Output(Transaction tr, Database db, string defName, string[] headers, List<string[]> rows, double h)

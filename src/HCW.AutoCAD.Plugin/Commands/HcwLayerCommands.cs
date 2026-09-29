@@ -18,7 +18,11 @@ namespace HCW.AutoCAD.Plugin.Commands
             LayerStateMasks.On | LayerStateMasks.Frozen | LayerStateMasks.Locked |
             LayerStateMasks.Plot | LayerStateMasks.NewViewport | LayerStateMasks.Color |
             LayerStateMasks.LineType | LayerStateMasks.LineWeight | LayerStateMasks.PlotStyle |
+#if !ZWCAD
             LayerStateMasks.CurrentViewport | LayerStateMasks.Transparency;
+#else
+            LayerStateMasks.CurrentViewport;
+#endif
 
         [CommandMethod("HCWLAYERS")]
         public void HcwLayers()

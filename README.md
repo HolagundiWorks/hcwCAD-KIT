@@ -2,14 +2,14 @@
 
 Holgundi Consulting Works drawing tools for AutoCAD, BricsCAD, and ZWCAD. One set of commands — layers, building-permission sheets, room labels, measure, area fields, and text — loaded from `hcwCAD-KIT.dll`. The ribbon has the same two tabs in each host.
 
-Version 1.0.0. Author: Holgundi Consulting Works.
+Version 1.0.0. Author: Holgundi Consulting Works. Licensed under the [MIT License](LICENSE).
 
 On load the plugin adds two ribbon tabs and switches to **hcwCAD-KIT**:
 
 | Tab | Use it for |
 |---|---|
-| **hcwCAD-KIT** | Drawing and take-off: layers, building-permission setup, room labels, MEASURE, area and text |
-| **hcwCAD-KIT Settings** | Checks, resets, reports, room-tool options, text styles |
+| **hcwCAD-KIT** | Notes and sheet fields, room labels, measure, area and text |
+| **hcwCAD-KIT Settings** | Layer creation, layer checks, BPLT setup, room checks, text checks |
 
 Every button sends its command as if it were typed (`_COMMAND`). You can type any command at the command line without using the ribbon.
 
@@ -27,7 +27,23 @@ Windows 64-bit. The host’s API DLLs are referenced at build time and are not c
 
 **Try it in the current session.** Type `NETLOAD` and pick the `hcwCAD-KIT.dll` built for that host. The **hcwCAD-KIT** and **hcwCAD-KIT Settings** tabs appear. Loading the DLL a second time does not add a second copy of the tabs. Do not NETLOAD the AutoCAD DLL into BricsCAD or ZWCAD; each host needs its own build.
 
-**Load it every time the host starts**
+**Installers.** Each host has its own setup program. Run the one that matches the program you use. It does not need administrator rights. It copies `hcwCAD-KIT.bundle` into that user’s ApplicationPlugins folder. Close the host, run the setup, then start the host again.
+
+| Setup | Installs for | Folder |
+|---|---|---|
+| `hcwCAD-KIT-AutoCAD-1.0.0-Setup.exe` | AutoCAD 2021–2024 | `%APPDATA%\Autodesk\ApplicationPlugins\` |
+| `hcwCAD-KIT-BricsCAD-1.0.0-Setup.exe` | BricsCAD V26 | `%APPDATA%\Bricsys\ApplicationPlugins\` |
+| `hcwCAD-KIT-ZWCAD-1.0.0-Setup.exe` | ZWCAD 2024–2026 | `%APPDATA%\ZWSOFT\ApplicationPlugins\` |
+
+Build all three from this folder (Inno Setup 6 is required):
+
+```
+powershell -File build\Package-Installers.ps1
+```
+
+The setup programs are written to `dist\`. Uninstall one host from Windows Settings; the other hosts are separate programs and stay installed.
+
+**Load it every time the host starts**, without the setup program:
 
 1. Copy `hcwCAD-KIT.dll` into the bundle’s `Contents` folder.
 2. Copy the bundle folder to the host’s ApplicationPlugins directory.
@@ -65,11 +81,11 @@ ZWCAD, when it is installed:
 dotnet build src\HCW.ZWCAD.Plugin\HCW.ZWCAD.Plugin.csproj -c Release -p:Platform=x64 -p:ZwcadInstallDir="C:\Program Files\ZWSOFT\ZWCAD 2026\"
 ```
 
-The default path is `C:\Program Files\ZWSOFT\ZWCAD 2026\`, or the `ZWCAD_INSTALL_DIR` environment variable. The project expects `ZwManaged.dll` and `ZwDatabaseMgd.dll` in that folder, and `ZwWindows.dll` when the ribbon API is shipped as its own file. ZWCAD is not part of the default solution build, so a machine without ZWCAD can still build AutoCAD and BricsCAD. Output: `src\HCW.ZWCAD.Plugin\bin\x64\Release\hcwCAD-KIT.dll`.
+The default path is `C:\Program Files\ZWSOFT\ZWCAD 2026\`, or the `ZWCAD_INSTALL_DIR` environment variable. The project expects `ZwManaged.dll`, `ZwDatabaseMgd.dll`, and `ZdWindows.dll` (the ribbon API) in that folder. Output: `src\HCW.ZWCAD.Plugin\bin\x64\Release\hcwCAD-KIT.dll`.
 
-Building `src\HCW.AutoCAD.Plugin.sln` builds the AutoCAD and BricsCAD projects.
+Building `src\HCW.AutoCAD.Plugin.sln` builds AutoCAD, BricsCAD, and ZWCAD. `build\Package-Installers.ps1` builds those three and compiles a setup program for each.
 
-Icons are IBM Carbon Design System PNGs (Apache-2.0), embedded in the DLL. The command-to-icon map is `src/HCW.AutoCAD.Plugin/Resources/icon_map.json`. No separate icon files need to be shipped. Build folders (`bin`, `obj`) are not part of the repository.
+Icons are IBM Carbon Design System PNGs (Apache-2.0), embedded in the DLL. They are tinted for the current ribbon theme so the glyphs stay visible on the light theme and the dark theme. The command-to-icon map is `src/HCW.AutoCAD.Plugin/Resources/icon_map.json`. No separate icon files need to be shipped. Build folders (`bin`, `obj`) and the compiled setup programs (`dist`) are not part of the repository.
 
 ## Drawing units
 
@@ -89,21 +105,11 @@ Room-label text height, floor prefix, and the session log live in memory. They r
 
 ## hcwCAD-KIT
 
-### Layers
+### Notes and fields
 
-The **Layers** panel has one dropdown and one **Create Layers** button. Choose the set, then click the button. Typed commands do the same job:
+Notes stay on the **hcwCAD-KIT** tab. The dropdown places a saved set. **Notes** opens the library: **New set** starts a blank set, **Add note** appends the next numbered line, **Save set** stores it, **Place** drops it on the sheet, and **Update** rewrites a notes block already on the drawing. Move a placed set with MOVE. `TITLENOTESAVE` stores a notes block already on the drawing under a name such as ELECTRIC NOTES.
 
-| Command | What it does |
-|---|---|
-| `HCWLAYERS` | Creates or verifies the 36-layer HCW Layer Standard v4.0 (colour, linetype, lineweight). Existing layers are left in place; missing ones are added. |
-| `VHLAYERS` | Creates the legacy underscore layer set (`A_WALL_CUT`, `S_COLUMN`, and so on) and makes `A_WALL_CUT` current. Use one layer standard per drawing. |
-| `BPLTLAYERS` | Creates the BP- drafting layers and the AP- marking layers, without changing drawing units. |
-
-### Building Permission (BPLT)
-
-Used for BBMP / AutoPlan submission drawings. `BPLTSTART` creates every BP- and AP- layer, then sets metres, decimal units, and default dimension text and arrow size. `TITLEBLOCK` (`BPLTTITLEBLOCK`) inserts the A3 building-permit sheet: project title, drawing title, drawing number, size, plot use, owner, architect, PID, site area, area statement, F.A.R., ground cover, and the stability certificate. `TITLEFIELDS` edits those boxes. `TITLENOTES` opens the saved note sets (Construction, Electric, Stability, General, and any you add). Place Notes drops the set chosen in the dropdown; move it with the MOVE command. `TITLENOTESAVE` stores the selected notes under a name.
-
-`BPLTCOPY` (small button) copies selected objects that sit on a `BP-…` layer onto `AP-` plus the rest of that name. Objects that are not on a BP- layer, or whose matching AP- layer does not exist, are skipped. Names are not always a pair: `BP-SITE-BOUNDARY` looks for `AP-SITE-BOUNDARY`, which is not in the standard list, so that copy is skipped.
+**Fields** opens a list you can add to, edit, and save. **Place on sheet** drops the list as a movable block. **Update selected** rewrites a fields block already on the sheet. **Edit Field** picks that block and opens the same list. The title block is no longer on the ribbon. `TITLEBLOCK` still inserts the old A3 sheet if you type it.
 
 ### Room labels
 
@@ -121,20 +127,29 @@ The old per-unit commands (`MBR`, `FBR`, `IBR`, and the rest) are removed. Use `
 
 ### Measure (manual take-off)
 
-The Measure panel has one dropdown (Linear, Brickwork, Beams and lintels) and one **Measure** button, plus Columns, Area, and Slab. Run `MSETUP` on that panel first so lengths and areas use the unit system you intend. Each take-off creates its layers if they are missing, isolates those layers while you select, then restores the layers it turned off. It labels the geometry, prints a summary, writes a CSV next to the drawing (or in the temp folder if the drawing has no path), and draws a summary table on `MEASURE-TABLE`.
+The Measure panel has one dropdown (Linear, Brickwork, Beams and lintels) and one **Measure** button, plus Columns, Schedule, Area, Slab, Wall paint, Ceiling, and Floor. Run `MSETUP` first so lengths and areas use the unit system you intend. Each take-off creates its layers if they are missing, isolates those layers while you select, then restores the layers it turned off. It labels the geometry, prints a summary, writes a CSV next to the drawing (or in the temp folder if the drawing has no path), and draws a summary table on `MEASURE-TABLE`.
+
+Walls, beams, and lintels of the same rounded length share one name (`FB-A`, `HB-A`, `BM-A`, `LT-A`, `L-A`). Openings on a wall are numbered per element, for example `FB D-01`. Columns, doors, and windows of the same size share one schedule mark. Ceiling and floor outlines of the same area share one name.
+
+`MSCHED` stores the schedule in the drawing: floors and ceiling heights, door and window sizes, concrete columns, and a map from a measured deduction to a schedule mark. Mapping `FB D-01` to `D1` (name `Door 01`) rewrites that label to `D1 Door 01`. **Group same size** collapses equal doors, windows, and columns onto one row before you apply. Schedule sizes are metres, or feet when Imperial is set.
 
 Draw the geometry on the layers below before you run the command. Deduction geometry must be close to the line it belongs to (you are asked for a match tolerance; default 0.01 drawing units).
 
 | Command | Draw on | Result |
 |---|---|---|
-| `MLIN` | `MEASURE-LINEAR` and deductions on `MEASURE-DEDUCT` | Gross, deduction, and net length. Labels `L1`, `L1-D1`, … |
-| `MBRK` | `MEASURE-FULLBRICK`, `MEASURE-HALFBRICK`, deductions on `MEASURE-DEDUCT` | Same, split by full brick and half brick (`FB`, `HB`) |
-| `MBML` | `MEASURE-BEAM`, `MEASURE-LINTEL`, deductions on `MEASURE-DEDUCT` | Same, split by beam and lintel (`BM`, `LT`) |
-| `MREC` | Closed 4-sided polylines on `MEASURE-COUNT` | Numbered rectangles `R1`… with length, breadth, area, perimeter |
+| `MLIN` | `MEASURE-LINEAR` and deductions on `MEASURE-DEDUCT` | Same lengths share `L-A`. Deductions are `L D-01`, … |
+| `MBRK` | `MEASURE-FULLBRICK`, `MEASURE-HALFBRICK`, deductions on `MEASURE-DEDUCT` | Full brick `FB-A` and half brick `HB-A`, deductions `FB D-01` |
+| `MBML` | `MEASURE-BEAM`, `MEASURE-LINTEL`, deductions on `MEASURE-DEDUCT` | Concrete beams `BM-A` and concrete lintels `LT-A` |
+| `MCOL` | Closed 4-sided polylines on `MEASURE-COLUMN` | Equal column sizes share one mark. A size listed in the schedule uses that mark |
+| `MREC` | Closed 4-sided polylines on `MEASURE-COUNT` | Equal rectangles share `R-A`, with length, breadth, count, area, perimeter |
+| `MPAINT` | Full brick, half brick, or linear walls, plus `MEASURE-DEDUCT` | Wall length × ceiling height. A mapped opening uses its schedule width × height |
+| `MCEIL` | Closed outlines on `MEASURE-CEILING` | Ceiling paint, grouped by equal area (`CP-A`) |
+| `MFLOOR` | Closed outlines on `MEASURE-FLOOR` | Floor area, grouped by equal area (`FL-A`) |
+| `MSCHED` | Labels already on `MEASURE-LABELS` | Edit the in-drawing schedule and rewrite mapped names |
 | `MAREA` (`MARE` still works) | Closed polylines, circles, ellipses, or splines on `MEASURE-AREA` | Numbered areas `A1`… with area and perimeter |
 | `MSLAB` (`MSLB` still works) | Slab outlines on `MEASURE-SLAB`, openings on `MEASURE-SLAB-DEDUCT` | Each opening is deducted from the slab whose outline contains the opening’s centroid |
 
-A deduction that does not match a parent is labelled `D? NO LINE` and is not included in the total. Labels go on `MEASURE-LABELS`. `MCLEAR` erases objects on `MEASURE-LABELS` and `MEASURE-TABLE` only. It does not erase the measured lines.
+A deduction that does not match a parent is labelled `D? NO LINE` and is not included in the total. Labels go on `MEASURE-LABELS`. `MCLEAR` erases objects on `MEASURE-LABELS` and `MEASURE-TABLE` only. It does not erase the measured lines or the stored schedule.
 
 ### Area and text
 
@@ -156,6 +171,16 @@ A deduction that does not match a parent is labelled `D? NO LINE` and is not inc
 ---
 
 ## hcwCAD-KIT Settings
+
+### Layers
+
+The **Layers** panel is on this tab. It has one dropdown and one **Create Layers** button.
+
+| Command | What it does |
+|---|---|
+| `HCWLAYERS` | Creates or verifies the 36-layer HCW Layer Standard v4.0 (colour, linetype, lineweight). Existing layers are left in place; missing ones are added. |
+| `VHLAYERS` | Creates the legacy underscore layer set (`A_WALL_CUT`, `S_COLUMN`, and so on) and makes `A_WALL_CUT` current. Use one layer standard per drawing. |
+| `BPLTLAYERS` | Creates the BP- drafting layers and the AP- marking layers, without changing drawing units. |
 
 ### Layer maintenance
 
@@ -199,14 +224,17 @@ These buttons drive the same auto-unit engine as the **hcwCAD-KIT** room panel. 
 
 | Command | What it does |
 |---|---|
-| `MSETUP` | Metric or Imperial for the rest of the session, and creates the MEASURE layers. |
+| `MSETUP` | Metric (1 unit = 1 m) or Imperial (1 unit = 1 inch) for the rest of the session, and creates the MEASURE layers. Schedule heights and sizes are metres, or feet. |
 | `MSHOW` | Turns back on only layers that a Measure command hid and did not restore. Layers you turned off yourself stay off. |
 | `MCLEAR` | Erases MEASURE label and table objects. |
 
-### BPLT reports
+### BPLT
+
+`BPLTSTART` and **Copy to AP-** are on this tab. `BPLTCOPY` copies selected objects that sit on a `BP-…` layer onto `AP-` plus the rest of that name. Objects that are not on a BP- layer, or whose matching AP- layer does not exist, are skipped.
 
 | Command | What it does |
 |---|---|
+| `BPLTSTART` | Creates every BP- and AP- layer, then sets metres, decimal units, and default dimension text and arrow size. |
 | `BPLTCHECK` | For each AP- layer, reports OK (has a closed polyline), EMPTY, NOT CLOSED, or MISSING LAYER. |
 | `BPLTAREA` | Sums closed polyline area on each AP- layer and prints it. The heading says square metres; the number is the raw drawing-unit area, so the drawing should already be in metres (`BPLTSTART` sets that). |
 | `BPLTREPORT` | Writes `BPLT_Report.csv` beside the drawing: layer name, colour, linetype, lineweight, and whether the layer exists. |
@@ -260,15 +288,24 @@ Labels go on `ROOM-LABELS`. Rectangles go on `ROOM-RECT`. The default text heigh
 ## Project layout
 
 ```
-build/Rewrite-CadUsings.ps1       BricsCAD and ZWCAD namespace substitution
+LICENSE                            MIT License
+build/Rewrite-CadUsings.ps1        BricsCAD and ZWCAD namespace substitution
+build/Package-Installers.ps1       builds each host and compiles its setup program
+installer/hcwCAD-KIT.iss           shared Inno Setup script, one setup per host
 src/
-  HCW.AutoCAD.Plugin.sln           AutoCAD + BricsCAD; ZWCAD is loaded but not built by default
+  HCW.AutoCAD.Plugin.sln           AutoCAD, BricsCAD, and ZWCAD
   HCW.AutoCAD.Plugin.bundle/
   HCW.BricsCAD.Plugin.bundle/
   HCW.ZWCAD.Plugin.bundle/
   HCW.AutoCAD.Plugin/              command source, shared by all three hosts
   HCW.BricsCAD.Plugin/             .NET 8 project, references BrxMgd.dll and TD_Mgd.dll
-  HCW.ZWCAD.Plugin/                .NET Framework 4.8 project, references ZwManaged.dll
+  HCW.ZWCAD.Plugin/                .NET Framework 4.8 project, references ZwManaged.dll and ZdWindows.dll
 ```
 
-`AssemblyInfo.cs` lists every command class the host should register, and points startup at `HcwRibbonApplication`. The assembly file name is `hcwCAD-KIT.dll` for every host. Command names are the same. Saved note sets live in `%AppData%\hcwCAD-KIT\title-notes.txt` and are shared across hosts.
+`AssemblyInfo.cs` lists every command class the host should register, and points startup at `HcwRibbonApplication`. The assembly file name is `hcwCAD-KIT.dll` for every host. Command names are the same. Saved note sets live in `%AppData%\hcwCAD-KIT\title-notes.txt`. Saved sheet fields live in `%AppData%\hcwCAD-KIT\sheet-fields.txt`. Both files are shared across hosts.
+
+## License
+
+hcwCAD-KIT is released under the MIT License. See [LICENSE](LICENSE).
+
+The ribbon icons are IBM Carbon Design System artwork, included under the Apache License 2.0. That license applies to the icon files only. The rest of this repository is MIT.

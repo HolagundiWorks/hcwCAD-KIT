@@ -19,6 +19,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         private const string LayerBorder = "BP-SHEET-BORDER";
         private const string LayerTitle = "BP-TITLE-BLOCK";
         private const string LayerNotes = "BP-NOTES";
+        private const string LayerFields = "BP-FIELDS";
 
         private static readonly string[] FieldOrder =
         {
@@ -160,6 +161,173 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (name.Status != PromptStatus.OK || string.IsNullOrWhiteSpace(name.StringResult)) return;
             TitleNoteLibrary.SaveOne(name.StringResult.Trim(), body);
             ed.WriteMessage("\nTITLENOTESAVE: saved \"" + name.StringResult.Trim() + "\". It will appear in Notes the next time the ribbon is built, and is available now from Notes.");
+        }
+
+        [CommandMethod("FIELDS")]
+        public void EditFieldList()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            using (var dlg = new UI.SheetFieldsForm(SheetFieldLibrary.Load()))
+            {
+                var result = dlg.ShowDialog();
+                if (result != System.Windows.Forms.DialogResult.OK && result != System.Windows.Forms.DialogResult.Yes) return;
+                var fields = dlg.Read();
+                if (fields.Count == 0)
+                {
+                    ed.WriteMessage("\nAdd at least one field.");
+                    return;
+                }
+                SheetFieldLibrary.Save(fields);
+                if (result == System.Windows.Forms.DialogResult.OK)
+                    PlaceFields(ed, db, fields);
+                else
+                    UpdatePickedFields(ed, db, fields);
+            }
+        }
+
+        [CommandMethod("FIELDSEDIT")]
+        public void EditPlacedFields()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            var opt = new PromptEntityOptions("\nSelect the fields block to edit: ");
+            opt.SetRejectMessage("\nSelect an hcwCAD-KIT fields block.");
+            opt.AddAllowedClass(typeof(BlockReference), true);
+            var per = ed.GetEntity(opt);
+            if (per.Status != PromptStatus.OK) return;
+
+            List<KeyValuePair<string, string>> current;
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var br = tr.GetObject(per.ObjectId, OpenMode.ForRead) as BlockReference;
+                if (br == null || !IsKind(br, "FIELDS"))
+                {
+                    ed.WriteMessage("\nThat is not an hcwCAD-KIT fields block.");
+                    return;
+                }
+                current = ParseFieldLines(ReadNoteBody(tr, br));
+                tr.Commit();
+            }
+            if (current.Count == 0) current = SheetFieldLibrary.Load();
+
+            using (var dlg = new UI.SheetFieldsForm(current))
+            {
+                var result = dlg.ShowDialog();
+                if (result != System.Windows.Forms.DialogResult.OK && result != System.Windows.Forms.DialogResult.Yes) return;
+                var fields = dlg.Read();
+                SheetFieldLibrary.Save(fields);
+                using (Util.Doc.LockDocument())
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var br = tr.GetObject(per.ObjectId, OpenMode.ForRead) as BlockReference;
+                    if (br == null || !IsKind(br, "FIELDS"))
+                    {
+                        ed.WriteMessage("\nThat is not an hcwCAD-KIT fields block.");
+                        return;
+                    }
+                    Point3d at = br.Position;
+                    br.UpgradeOpen();
+                    br.Erase();
+                    double mm = Util.MmToDrawingUnits(1.0);
+                    PrepareLayers(tr, db);
+                    EnsureRegApp(tr, db);
+                    InsertFields(tr, db, at, mm, fields);
+                    tr.Commit();
+                }
+            }
+            ed.WriteMessage("\nFields updated.");
+        }
+
+        private static void PlaceFields(Editor ed, Database db, List<KeyValuePair<string, string>> fields)
+        {
+            var ppr = ed.GetPoint("\nPick where these fields should sit (they can be moved afterwards): ");
+            if (ppr.Status != PromptStatus.OK) return;
+            Point3d ins = ppr.Value.TransformBy(ed.CurrentUserCoordinateSystem);
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                double mm = Util.MmToDrawingUnits(1.0);
+                PrepareLayers(tr, db);
+                EnsureRegApp(tr, db);
+                InsertFields(tr, db, ins, mm, fields);
+                tr.Commit();
+            }
+            ed.WriteMessage("\nFields placed. Use MOVE to shift them, or Edit Field to change them.");
+        }
+
+        private static void UpdatePickedFields(Editor ed, Database db, List<KeyValuePair<string, string>> fields)
+        {
+            var opt = new PromptEntityOptions("\nSelect the fields block to rewrite: ");
+            opt.SetRejectMessage("\nSelect an hcwCAD-KIT fields block.");
+            opt.AddAllowedClass(typeof(BlockReference), true);
+            var per = ed.GetEntity(opt);
+            if (per.Status != PromptStatus.OK) return;
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var br = tr.GetObject(per.ObjectId, OpenMode.ForRead) as BlockReference;
+                if (br == null || !IsKind(br, "FIELDS"))
+                {
+                    ed.WriteMessage("\nThat is not an hcwCAD-KIT fields block.");
+                    return;
+                }
+                Point3d at = br.Position;
+                br.UpgradeOpen();
+                br.Erase();
+                double mm = Util.MmToDrawingUnits(1.0);
+                PrepareLayers(tr, db);
+                EnsureRegApp(tr, db);
+                InsertFields(tr, db, at, mm, fields);
+                tr.Commit();
+            }
+            ed.WriteMessage("\nFields updated.");
+        }
+
+        private static void InsertFields(Transaction tr, Database db, Point3d ins, double mm, IList<KeyValuePair<string, string>> fields)
+        {
+            var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForWrite);
+            var def = new BlockTableRecord { Name = "*U", Origin = Point3d.Origin };
+            ObjectId defId = bt.Add(def);
+            tr.AddNewlyCreatedDBObject(def, true);
+
+            double w = 120;
+            double h = 8 + fields.Count * 6;
+            AddRect(tr, def, 0, 0, w * mm, h * mm, LayerFields);
+            var lines = new List<string>();
+            foreach (var field in fields)
+                lines.Add(field.Key.Trim() + ": " + (field.Value ?? "").Replace("\r", " ").Replace("\n", " "));
+            var mt = new MText
+            {
+                Location = new Point3d(2 * mm, (h - 3) * mm, 0),
+                TextHeight = 2.2 * mm,
+                Width = (w - 4) * mm,
+                Contents = string.Join("\\P", lines),
+                Layer = LayerFields
+            };
+            def.AppendEntity(mt);
+            tr.AddNewlyCreatedDBObject(mt, true);
+
+            var ms = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+            var br = new BlockReference(ins, defId) { Layer = LayerFields };
+            ms.AppendEntity(br);
+            tr.AddNewlyCreatedDBObject(br, true);
+            Tag(br, "FIELDS");
+        }
+
+        private static List<KeyValuePair<string, string>> ParseFieldLines(string body)
+        {
+            var list = new List<KeyValuePair<string, string>>();
+            if (string.IsNullOrWhiteSpace(body)) return list;
+            foreach (var raw in body.Replace("\r", "").Split('\n'))
+            {
+                string line = raw.Trim();
+                if (line.Length == 0) continue;
+                int cut = line.IndexOf(':');
+                if (cut < 0) list.Add(new KeyValuePair<string, string>(line, ""));
+                else list.Add(new KeyValuePair<string, string>(line.Substring(0, cut).Trim(), line.Substring(cut + 1).Trim()));
+            }
+            return list;
         }
 
         private static void PlaceNotes(Editor ed, Database db, string name, string body)
@@ -434,6 +602,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             Util.EnsureLayer(tr, db, LayerBorder, 8, "Continuous", LineWeight.LineWeight050);
             Util.EnsureLayer(tr, db, LayerTitle, 8, "Continuous", LineWeight.LineWeight025);
             Util.EnsureLayer(tr, db, LayerNotes, 2, "Continuous", LineWeight.LineWeight018);
+            Util.EnsureLayer(tr, db, LayerFields, 8, "Continuous", LineWeight.LineWeight018);
         }
 
         private static void EnsureRegApp(Transaction tr, Database db)
