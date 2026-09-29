@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ApplicationPackage SchemaVersion="1.0" Version="1.0.0"
+    ProductCode="{6F2C9E2A-6B3E-4A0E-9D55-9A2B6A2F5C31}"
+    Name="HCW AutoCAD Toolkit"
+    Description="Holgundi Consulting Works - layers, room tags, MEASURE quantity take-off and text tools, with a ribbon UI"
+    AppVersion="1.0.0"
+    Author="Holgundi Consulting Works">
+  <CompanyDetails Name="Holgundi Consulting Works" />
+  <Components Description="HCW AutoCAD Toolkit">
+    <!-- R24.0=AutoCAD 2021, R24.1=2022, R24.2=2023, R24.3=2024 -->
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R24.0" SeriesMax="R24.3" />
+    <ComponentEntry AppName="HCW.AutoCAD.Plugin"
+        ModuleName="./Contents/HCW.AutoCAD.Plugin.dll"
+        AppDescription="HCW AutoCAD Toolkit"
+        LoadOnAutoCADStartup="true" />
+  </Components>
+</ApplicationPackage>
