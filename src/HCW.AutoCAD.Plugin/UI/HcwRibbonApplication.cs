@@ -49,7 +49,7 @@ namespace HCW.AutoCAD.Plugin.UI
 
             var toolsTab = new RibbonTab { Title = "hcwCAD-KIT", Id = ToolsTabId };
             rc.Tabs.Add(toolsTab);
-            toolsTab.Panels.Add(BuildSetupPanel());
+            toolsTab.Panels.Add(BuildLayerPanel());
             toolsTab.Panels.Add(BuildBpltPanel());
             toolsTab.Panels.Add(BuildRoomToolsPanel());
             toolsTab.Panels.Add(BuildMeasurePanel());
@@ -57,60 +57,128 @@ namespace HCW.AutoCAD.Plugin.UI
 
             var settingsTab = new RibbonTab { Title = "hcwCAD-KIT Settings", Id = SettingsTabId };
             rc.Tabs.Add(settingsTab);
-            settingsTab.Panels.Add(BuildLayerMaintenancePanel());
-            settingsTab.Panels.Add(BuildRoomSettingsPanel());
-            settingsTab.Panels.Add(BuildMeasureSettingsPanel());
+            settingsTab.Panels.Add(BuildLayerChecksPanel());
+            settingsTab.Panels.Add(BuildRoomChecksPanel());
             settingsTab.Panels.Add(BuildBpltReportsPanel());
-            settingsTab.Panels.Add(BuildTextSettingsPanel());
+            settingsTab.Panels.Add(BuildTextChecksPanel());
 
             rc.ActiveTab = toolsTab;
         }
 
         // ==================== hcwCAD-KIT (commands) ====================
 
-        private RibbonPanel BuildSetupPanel()
+        /// <summary>
+        /// One layer-set dropdown and one Create button. The dropdown only
+        /// chooses which existing command the button will run.
+        /// </summary>
+        private RibbonPanel BuildLayerPanel()
         {
-            var src = NewSource("Setup");
-            AddLarge(src, "HCWLAYERS", "HCW\nLayers", "layers", "Create/verify the 36-layer HCW Layer Standard v4.0");
-            AddLarge(src, "VHLAYERS", "VH\nLayers", "layers--external", "Create the legacy VHLAYERS underscore-style layer set");
-            AddLarge(src, "BPLTSTART", "BPLT\nStart", "flag", "Set up the drawing for Building Permission submission");
+            var src = NewSource("Layers");
+            AddSetButton(src, "HCW_LAYER_SET", "Create\nLayers", "layers",
+                "Create or verify the layer set selected in the dropdown",
+                new (string label, string command)[]
+                {
+                    ("HCW Standard", "HCWLAYERS"),
+                    ("VH Layers", "VHLAYERS"),
+                    ("BPLT Layers", "BPLTLAYERS")
+                });
+            AddSmallGroup(src,
+                ("HCWRESET", "Reset Layers", "reset", "Reset HCW standard layers to their colour, linetype and lineweight"),
+                ("HCWLOCK", "Lock", "locked", "Lock the layers of the selected objects"),
+                ("HCWUNLOCK", "Unlock", "unlocked", "Unlock the layers of the selected objects"),
+                ("HCWMOVE", "Move to Layer", "move", "Move selected objects to a named layer"),
+                ("HCWBYBLOCK", "Set ByLayer", "box", "Set selected objects back to ByLayer colour and linetype"),
+                ("HCWLEGEND", "Draw Legend", "table-of-contents", "Draw the HCW layer legend"));
             return Wrap(src);
         }
 
         private RibbonPanel BuildBpltPanel()
         {
             var src = NewSource("Building Permission (BPLT)");
-            AddLarge(src, "BPLTLAYERS", "BP/AP\nLayers", "layers", "Create/verify all BP- and AP- submission layers");
-            AddLarge(src, "BPLTTITLEBLOCK", "Title\nBlock", "document--horizontal", "Insert an A1/A2/A3/A4 sheet border and title block");
+            AddLarge(src, "BPLTSTART", "BPLT\nStart", "flag", "Set metres and create the BP- and AP- submission layers");
+            AddLarge(src, "TITLEBLOCK", "Title\nBlock", "document--horizontal", "Insert the A3 building-permit title block");
+            AddLarge(src, "TITLEFIELDS", "Edit\nFields", "tag--edit", "Edit project, drawing, area statement, F.A.R. and ground cover");
+            AddNotePicker(src);
             AddSmallGroup(src,
+                ("TITLENOTES", "Notes Library", "document--view", "Choose, edit, place or update a saved note set"),
+                ("TITLENOTESAVE", "Save Notes", "save", "Save the selected notes block under a name such as ELECTRIC NOTES"),
                 ("BPLTCOPY", "Copy to AP-", "copy", "Duplicate selected BP- entities onto their matching AP- layer"));
             return Wrap(src);
         }
 
+        private static void AddNotePicker(RibbonPanelSource src)
+        {
+            TitleNoteLibrary.Ensure();
+            var names = TitleNoteLibrary.Names();
+            var combo = new RibbonCombo { Id = "HCW_NOTE_SET", Width = 160, ToolTip = "Saved note set to place" };
+            foreach (var name in names)
+                combo.Items.Add(new RibbonButton { Text = name, ShowText = true, CommandParameter = name });
+            if (combo.Items.Count > 0)
+            {
+                combo.Current = combo.Items[0];
+                TitleNoteLibrary.Current = names[0];
+            }
+            var place = new RibbonButton
+            {
+                Text = "Place\nNotes",
+                ShowText = true,
+                ShowImage = true,
+                Size = RibbonItemSize.Large,
+#if !BRX
+                Orientation = System.Windows.Controls.Orientation.Vertical,
+#endif
+                LargeImage = IconLoader.Large("document--view"),
+                Image = IconLoader.Small("document--view"),
+                ToolTip = "Drop the selected note set on the sheet. Move it afterwards with MOVE.",
+                CommandParameter = "_TITLENOTE ",
+                CommandHandler = RibbonCommandHandler.Instance
+            };
+            combo.CurrentChanged += (s, e) =>
+            {
+                if (combo.Current is RibbonButton item)
+                    TitleNoteLibrary.Current = item.Text;
+            };
+            src.Items.Add(combo);
+            src.Items.Add(place);
+        }
+
         /// <summary>
-        /// One Room Labels panel. Buttons run the HCWROOM* commands, which
-        /// read the drawing's INSUNITS. Typed M-/F-/I- commands are unchanged.
+        /// Room labels. Units come from the drawing. Text height, floor prefix and the rectangle toggle sit on this panel.
         /// </summary>
         private RibbonPanel BuildRoomToolsPanel()
         {
             var src = NewSource("Room Labels");
-            AddLarge(src, "HCWROOM", "Pick Room\nType…", "home", "Pick a room type from a list and label the drawn rectangle (auto-detects the drawing's unit)");
-            AddLarge(src, "HCWCUSTOMROOM", "Custom\nRoom", "tag--edit", "Type a custom room name and label the drawn rectangle (auto-detects the drawing's unit)");
+            AddLarge(src, "ROOM", "Room", "home", "Pick a room type, draw its rectangle from two corners, and place the label in the centre. Units follow the drawing.");
+            AddLarge(src, "ROOMC", "Custom\nRoom", "tag--edit", "Type a room name, then pick two corners. Units follow the drawing.");
             AddSmallGroup(src,
-                ("HCWROOMAREA", "Area Label", "area", "Add an area label at the centroid of a selected polyline"),
-                ("HCWROOMRELABEL", "Relabel", "tag--edit", "Change the room type of an existing label"));
+                ("RAREA", "Area Label", "area", "Add an area label at the centre of a selected polyline"),
+                ("RTAG", "Relabel", "tag--edit", "Change the room type of an existing label"),
+                ("HCWROOMTH", "Text Height", "text--scale", "Set the room label text height"),
+                ("HCWROOMFLOOR", "Floor Prefix", "floorplan", "Set or clear a floor prefix such as GF or FF"),
+                ("HCWROOMRECT", "Toggle Rect", "square--outline", "Draw or skip the room rectangle"),
+                ("HCWROOMHIDERECT", "Hide Rects", "view--off", "Freeze or thaw the rectangle layer"),
+                ("HCWROOMRESET", "Reset", "reset", "Reset room label settings to defaults"));
             return Wrap(src);
         }
 
         private RibbonPanel BuildMeasurePanel()
         {
-            var src = NewSource("Measure (Manual Take-off)");
-            AddLarge(src, "MLIN", "Linear +\nDeduct", "ruler", "Linear take-off with deduction-line matching");
-            AddLarge(src, "MBRK", "Brickwork", "grid", "Full/Half brick linear take-off with deductions");
-            AddLarge(src, "MBML", "Beams &\nLintels", "horizontal-line--solid", "Beam/Lintel linear take-off with deductions");
-            AddLarge(src, "MREC", "Columns\n(Rect)", "column", "Number and dimension rectangular columns");
-            AddLarge(src, "MARE", "Area", "area", "Generic closed-shape area and perimeter take-off");
-            AddLarge(src, "MSLB", "Slab +\nDeduct", "floorplan", "Slab area take-off with opening deductions");
+            var src = NewSource("Measure");
+            AddSetButton(src, "HCW_MEASURE_KIND", "Measure", "ruler",
+                "Linear take-off for the kind selected in the dropdown",
+                new (string label, string command)[]
+                {
+                    ("Linear", "MLIN"),
+                    ("Brickwork", "MBRK"),
+                    ("Beams and lintels", "MBML")
+                });
+            AddLarge(src, "MREC", "Columns", "column", "Number and dimension rectangular columns");
+            AddLarge(src, "MAREA", "Area", "area", "Closed-shape area and perimeter. MARE still works.");
+            AddLarge(src, "MSLAB", "Slab", "floorplan", "Slab area with opening deductions. MSLB still works.");
+            AddSmallGroup(src,
+                ("MSETUP", "Units", "settings", "Metric (metres) or Imperial (inches) for this session"),
+                ("MSHOW", "Restore Layers", "view", "Turn back on only the layers Measure hid"),
+                ("MCLEAR", "Clear Labels", "clean", "Erase Measure label and table objects"));
             return Wrap(src);
         }
 
@@ -119,60 +187,50 @@ namespace HCW.AutoCAD.Plugin.UI
             var src = NewSource("Area & Text Tools");
             AddLarge(src, "POLYAREA", "Poly\nArea", "area--custom", "Number selected polylines and draw a running-total area table");
             AddLarge(src, "DELETEAREATEXT", "Delete Area\nText", "trash-can", "Bulk-delete \"Area: ...\" text objects");
+            AddLarge(src, "HCWSTYLES", "Text\nStyles", "text--font", "Create HCW-SITE, HCW-WORKING and HCW-DETAIL text and dimension styles");
             AddSmallGroup(src,
-                ("TextIncrement", "Increment Copy", "add--alt", "Copy text to picked points, auto-incrementing the trailing number"),
-                ("WinLabel", "Window Label", "tag", "Label window blocks from their WNAME dynamic property"),
-                ("TXTALIGN", "Align Text", "text--align--left", "Align selected TEXT objects to a reference point/axis"),
-                ("TXTDUP", "Find Duplicates", "copy--file", "Find/remove TEXT objects with identical content and position"));
+                ("INCARRAY", "Inc Array", "add--alt", "Array the selection and increment every number in the copied text, attributes and dimensions"),
+                ("RENUMBERLAYOUTS", "Renumber Layouts", "table-of-contents", "Renumber paper layouts in tab order, with a prefix, suffix and digit padding"),
+                ("WinLabel", "Window Label", "tag", "Label window blocks from their WNAME property"),
+                ("WinLabelHeight", "Label Height", "text--scale", "Set the window-label text height"),
+                ("TXTALIGN", "Align Text", "text--align--left", "Align selected TEXT to a reference point"),
+                ("FIXTXT", "Fix Overlap (V)", "text--vertical-alignment", "Separate text that overlaps vertically"),
+                ("FIXTXTH", "Fix Overlap (H)", "text--align--justify", "Separate text that overlaps horizontally"),
+                ("TXTSTYLE", "Set Style", "text--font", "List text styles and set the current one"),
+                ("TXTDUP", "Find Duplicates", "copy--file", "Find or remove TEXT with the same content and position"),
+                ("DBCOUNT", "Count Blocks", "report", "Count blocks in this layout, including dynamic-block visibility states"),
+                ("DGRID", "Draw Grid", "grid", "Draw a row and column grid between two corners"),
+                ("AUTOLABEL", "Label Blocks", "tag--edit", "Number a chosen attribute on matching blocks in this layout"),
+                ("AREAFIELD", "Area Field", "area", "Place a live area field, or drop it into a table cell"),
+                ("AREALABEL", "Area Labels", "area--custom", "Number picked areas and list them in a live table or a file"));
             return Wrap(src);
         }
 
         // ==================== hcwCAD-KIT Settings ====================
 
-        private RibbonPanel BuildLayerMaintenancePanel()
+        private RibbonPanel BuildLayerChecksPanel()
         {
-            var src = NewSource("Layer Maintenance");
+            var src = NewSource("Layer Checks");
             AddSmallGroup(src,
-                ("HCWRESET", "Reset Layers", "reset", "Reset all HCW standard layers to their defined colour/linetype/lineweight"),
-                ("HCWPURGE", "Purge All", "clean", "Run PURGE ALL twice to remove unused named objects"),
                 ("HCWAUDIT", "Audit Layers", "checkmark--outline", "Check that all 36 standard layers are present"),
-                ("HCWINFO", "Layer Info", "document--view", "List all 36 standard layers with colour/linetype/lineweight"),
-                ("HCWLOCK", "Lock", "locked", "Lock the layer(s) of the selected objects"),
-                ("HCWUNLOCK", "Unlock", "unlocked", "Unlock the layer(s) of the selected objects"),
-                ("HCWAUDIT2", "Overrides", "rule--data-quality", "Report objects with explicit (non-ByLayer) colour/linetype"),
-                ("HCWBYBLOCK", "Set ByLayer", "box", "Reset selected objects' colour/linetype back to ByLayer"),
-                ("HCWMOVE", "Move to Layer", "move", "Move selected objects to a named layer"),
-                ("HCWSCHEDULE", "Layer Schedule", "calendar", "Report object counts by layer"),
+                ("HCWAUDIT2", "Overrides", "rule--data-quality", "Report objects whose colour or linetype is not ByLayer"),
+                ("HCWINFO", "Layer Info", "document--view", "List the standard layers with colour, linetype and lineweight"),
+                ("HCWSCHEDULE", "Layer Schedule", "calendar", "Count objects on each layer"),
                 ("HCWLAYERSTATE", "Layer State", "save", "Save or restore a named layer state"),
-                ("HCWLEGEND", "Draw Legend", "table-of-contents", "Draw a full layer-standard legend/swatch table"));
+                ("HCWPURGE", "Purge All", "clean", "Run PURGE All twice"));
             return Wrap(src);
         }
 
-        private RibbonPanel BuildRoomSettingsPanel()
+        private RibbonPanel BuildRoomChecksPanel()
         {
-            var src = NewSource("Room Tool Settings");
+            var src = NewSource("Room Checks");
             AddSmallGroup(src,
-                ("HCWROOMTH", "Text Height", "text--scale", "Set the room label text height"),
-                ("HCWROOMSET", "Settings", "settings", "Show current room-tool settings, including the detected unit"),
-                ("HCWROOMRESET", "Reset", "reset", "Reset room-tool settings to defaults"),
-                ("HCWROOMRECT", "Toggle Rect", "square--outline", "Toggle whether a bounding rectangle is drawn with each label"),
-                ("HCWROOMHIDERECT", "Hide Rects", "view--off", "Freeze/thaw the rectangle layer"),
-                ("HCWROOMFLOOR", "Floor Prefix", "floorplan", "Set/clear a floor prefix (e.g. GF, FF) added to every label"),
-                ("HCWROOMAUDIT", "Audit", "checkmark--outline", "Compare label and rectangle counts on the room-label layers"),
-                ("HCWROOMCHECK", "Check Rects", "rule", "Verify all rectangles are closed"),
+                ("HCWROOMSET", "Settings", "settings", "Show text height, layers, floor prefix and the detected unit"),
+                ("HCWROOMAUDIT", "Audit", "checkmark--outline", "Compare label and rectangle counts"),
+                ("HCWROOMCHECK", "Check Rects", "rule", "Verify room rectangles are closed"),
                 ("HCWROOMSCHEDULE", "Export CSV", "calendar", "Export this session's room labels to CSV"),
-                ("HCWROOMTOTAL", "Total Area", "report--data", "Total area of logged rooms, optionally filtered by type"),
-                ("HCWROOMHELP", "Help", "help", "Show the detected drawing unit and how this panel works"));
-            return Wrap(src);
-        }
-
-        private RibbonPanel BuildMeasureSettingsPanel()
-        {
-            var src = NewSource("Measure Settings");
-            AddLarge(src, "MSETUP", "Unit\nSetup", "settings", "Choose Metric or Imperial for MEASURE (once per session)");
-            AddSmallGroup(src,
-                ("MSHOW", "Show All", "view", "Turn all layers back on"),
-                ("MCLEAR", "Clear Labels", "clean", "Erase MEASURE label/table objects"));
+                ("HCWROOMTOTAL", "Total Area", "report--data", "Total area of rooms labelled this session"),
+                ("HCWROOMHELP", "Help", "help", "How ROOM reads the drawing units"));
             return Wrap(src);
         }
 
@@ -186,18 +244,46 @@ namespace HCW.AutoCAD.Plugin.UI
             return Wrap(src);
         }
 
-        private RibbonPanel BuildTextSettingsPanel()
+        private RibbonPanel BuildTextChecksPanel()
         {
-            var src = NewSource("Text Settings");
-            AddLarge(src, "HCWSTYLES", "Create Std\nStyles", "text--font", "Create/update the HCW-SITE, HCW-WORKING and HCW-DETAIL text + dimension style tiers, sized to this drawing's real unit");
+            var src = NewSource("Text Checks");
             AddSmallGroup(src,
-                ("WinLabelHeight", "Label Height", "text--scale", "Set the window-label text height"),
-                ("FIXTXT", "Fix Overlap (V)", "text--vertical-alignment", "Fix vertically overlapping text"),
-                ("FIXTXTH", "Fix Overlap (H)", "text--align--justify", "Fix horizontally overlapping text"),
-                ("TXTAUDIT", "Audit Overrides", "rule--data-quality", "Report TEXT/MTEXT with explicit colour overrides"),
-                ("TXTEXPORT", "Export CSV", "document--export", "Export every TEXT/MTEXT object's content to CSV"),
-                ("TXTSTYLE", "Set Style", "text--font", "List and switch the current text style"));
+                ("TXTAUDIT", "Audit Overrides", "rule--data-quality", "Report TEXT and MTEXT with an explicit colour"),
+                ("TXTEXPORT", "Export CSV", "document--export", "Export every TEXT and MTEXT object to CSV"));
             return Wrap(src);
+        }
+
+        /// <summary>Dropdown of named sets plus one button that runs the selected command.</summary>
+        private static void AddSetButton(RibbonPanelSource src, string comboId, string buttonText, string icon, string tooltip, (string label, string command)[] sets)
+        {
+            var combo = new RibbonCombo { Id = comboId, Width = 150, ToolTip = "Choose which command the button runs" };
+            foreach (var set in sets)
+                combo.Items.Add(new RibbonButton { Text = set.label, ShowText = true, CommandParameter = set.command });
+            combo.Current = combo.Items[0];
+
+            var button = new RibbonButton
+            {
+                Text = buttonText,
+                ShowText = true,
+                ShowImage = true,
+                Size = RibbonItemSize.Large,
+#if !BRX
+                Orientation = System.Windows.Controls.Orientation.Vertical,
+#endif
+                LargeImage = IconLoader.Large(icon),
+                Image = IconLoader.Small(icon),
+                ToolTip = tooltip,
+                CommandParameter = "_" + sets[0].command + " ",
+                CommandHandler = RibbonCommandHandler.Instance
+            };
+            combo.CurrentChanged += (s, e) =>
+            {
+                if (combo.Current is RibbonButton item && item.CommandParameter is string command)
+                    button.CommandParameter = "_" + command + " ";
+            };
+
+            src.Items.Add(combo);
+            src.Items.Add(button);
         }
 
         // ---- low-level helpers ----
@@ -214,7 +300,9 @@ namespace HCW.AutoCAD.Plugin.UI
                 ShowText = true,
                 ShowImage = true,
                 Size = RibbonItemSize.Large,
+#if !BRX
                 Orientation = System.Windows.Controls.Orientation.Vertical,
+#endif
                 LargeImage = IconLoader.Large(icon),
                 Image = IconLoader.Small(icon),
                 ToolTip = tooltip,
@@ -232,7 +320,9 @@ namespace HCW.AutoCAD.Plugin.UI
                 ShowText = true,
                 ShowImage = true,
                 Size = RibbonItemSize.Standard,
+#if !BRX
                 Orientation = System.Windows.Controls.Orientation.Horizontal,
+#endif
                 Image = IconLoader.Small(icon),
                 ToolTip = tooltip,
                 CommandParameter = $"_{command} ",

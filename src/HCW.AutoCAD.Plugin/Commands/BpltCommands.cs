@@ -4,7 +4,6 @@ using System.Linq;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
-using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using AcAp = Autodesk.AutoCAD.ApplicationServices.Application;
 
@@ -188,66 +187,5 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
-        [CommandMethod("BPLTTITLEBLOCK")]
-        public void BpltTitleBlock()
-        {
-            var db = Util.Db; var ed = Util.Ed;
-            var pko = new PromptKeywordOptions("\nSheet size [A1/A2/A3/A4]: ");
-            pko.Keywords.Add("A1"); pko.Keywords.Add("A2"); pko.Keywords.Add("A3"); pko.Keywords.Add("A4");
-            pko.Keywords.Default = "A2";
-            var pkr = ed.GetKeywords(pko);
-            if (pkr.Status != PromptStatus.OK) return;
-
-            (double w, double h) = pkr.StringResult switch
-            {
-                "A1" => (0.841, 0.594),
-                "A3" => (0.420, 0.297),
-                "A4" => (0.297, 0.210),
-                _ => (0.594, 0.420) // A2
-            };
-
-            var ppr = ed.GetPoint("\nInsertion point for title block (bottom-left): ");
-            if (ppr.Status != PromptStatus.OK) return;
-            Point3d bl = ppr.Value;
-
-            using (Util.Doc.LockDocument())
-            using (var tr = db.TransactionManager.StartTransaction())
-            {
-                Util.EnsureLayer(tr, db, "BP-SHEET-BORDER", 8, "Continuous", LineWeight.LineWeight050);
-                Util.EnsureLayer(tr, db, "BP-TITLE-BLOCK", 8, "Continuous", LineWeight.LineWeight025);
-                var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
-
-                var border = new Polyline();
-                border.AddVertexAt(0, new Point2d(bl.X, bl.Y), 0, 0, 0);
-                border.AddVertexAt(1, new Point2d(bl.X + w, bl.Y), 0, 0, 0);
-                border.AddVertexAt(2, new Point2d(bl.X + w, bl.Y + h), 0, 0, 0);
-                border.AddVertexAt(3, new Point2d(bl.X, bl.Y + h), 0, 0, 0);
-                border.Closed = true;
-                border.Layer = "BP-SHEET-BORDER";
-                btr.AppendEntity(border); tr.AddNewlyCreatedDBObject(border, true);
-
-                double tbH = h * 0.12;
-                var tbBorder = new Polyline();
-                tbBorder.AddVertexAt(0, new Point2d(bl.X, bl.Y), 0, 0, 0);
-                tbBorder.AddVertexAt(1, new Point2d(bl.X + w, bl.Y), 0, 0, 0);
-                tbBorder.AddVertexAt(2, new Point2d(bl.X + w, bl.Y + tbH), 0, 0, 0);
-                tbBorder.AddVertexAt(3, new Point2d(bl.X, bl.Y + tbH), 0, 0, 0);
-                tbBorder.Closed = true;
-                tbBorder.Layer = "BP-TITLE-BLOCK";
-                btr.AppendEntity(tbBorder); tr.AddNewlyCreatedDBObject(tbBorder, true);
-
-                var txt = new DBText
-                {
-                    Position = new Point3d(bl.X + 0.02, bl.Y + tbH / 2.0, 0),
-                    Height = tbH * 0.4,
-                    TextString = "PROJECT TITLE  |  SHEET: " + pkr.StringResult + "  |  BUILDING PERMISSION SUBMISSION",
-                    Layer = "BP-TITLE-BLOCK"
-                };
-                btr.AppendEntity(txt); tr.AddNewlyCreatedDBObject(txt, true);
-
-                tr.Commit();
-                ed.WriteMessage($"\nBPLTTITLEBLOCK: {pkr.StringResult} sheet border + title block placed.");
-            }
-        }
     }
 }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ApplicationPackage SchemaVersion="1.0" Version="1.0.0"
+    ProductCode="{B7C8D9E0-1234-4F56-9ABC-DEF012345678}"
+    Name="hcwCAD-KIT"
+    Description="hcwCAD-KIT — layers, room tags, quantity take-off and text tools, with a ribbon UI"
+    AppVersion="1.0.0"
+    Author="Holgundi Consulting Works">
+  <CompanyDetails Name="Holgundi Consulting Works" />
+  <Components Description="hcwCAD-KIT">
+    <RuntimeRequirements OS="Win64" Platform="BricsCAD" SeriesMin="V26" SeriesMax="V26" />
+    <ComponentEntry AppName="hcwCAD-KIT"
+        ModuleName="./Contents/hcwCAD-KIT.dll"
+        AppDescription="hcwCAD-KIT"
+        LoadOnAutoCADStartup="true" />
+  </Components>
+</ApplicationPackage>

@@ -5,6 +5,10 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "hcwCAD-KIT", "HCW.AutoCAD.Plugin\HCW.AutoCAD.Plugin.csproj", "{8B6B1E30-7E3B-4B7B-9F2A-1D9A7C6E2B10}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "hcwCAD-KIT BricsCAD", "HCW.BricsCAD.Plugin\HCW.BricsCAD.Plugin.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "hcwCAD-KIT ZWCAD", "HCW.ZWCAD.Plugin\HCW.ZWCAD.Plugin.csproj", "{B7C8D9E0-1234-4F56-9ABC-DEF012345678}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -15,6 +19,12 @@ Global
 		{8B6B1E30-7E3B-4B7B-9F2A-1D9A7C6E2B10}.Debug|x64.Build.0 = Debug|x64
 		{8B6B1E30-7E3B-4B7B-9F2A-1D9A7C6E2B10}.Release|x64.ActiveCfg = Release|x64
 		{8B6B1E30-7E3B-4B7B-9F2A-1D9A7C6E2B10}.Release|x64.Build.0 = Release|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|x64.ActiveCfg = Debug|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|x64.Build.0 = Debug|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|x64.ActiveCfg = Release|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|x64.Build.0 = Release|x64
+		{B7C8D9E0-1234-4F56-9ABC-DEF012345678}.Debug|x64.ActiveCfg = Debug|x64
+		{B7C8D9E0-1234-4F56-9ABC-DEF012345678}.Release|x64.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

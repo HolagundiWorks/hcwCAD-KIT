@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>x64</Platforms>
+    <RootNamespace>HCW.AutoCAD.Plugin</RootNamespace>
+    <AssemblyName>hcwCAD-KIT</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DefineConstants>$(DefineConstants);BRX</DefineConstants>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <BricscadInstallDir Condition="'$(BricscadInstallDir)'==''">$(BRICSCAD_INSTALL_DIR)</BricscadInstallDir>
+    <BricscadInstallDir Condition="'$(BricscadInstallDir)'==''">C:\Program Files\Bricsys\BricsCAD V26 en_US\</BricscadInstallDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="BrxMgd">
+      <HintPath>$(BricscadInstallDir)BrxMgd.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
+    <Reference Include="TD_Mgd">
+      <HintPath>$(BricscadInstallDir)TD_Mgd.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
+    <Reference Include="TD_MgdBrep" Condition="Exists('$(BricscadInstallDir)TD_MgdBrep.dll')">
+      <HintPath>$(BricscadInstallDir)TD_MgdBrep.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\HCW.AutoCAD.Plugin\Resources\Icons\**\*.png">
+      <Link>Resources\Icons\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <Target Name="RewriteCadSources" BeforeTargets="CoreCompile">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\build\Rewrite-CadUsings.ps1&quot; -SourceRoot &quot;$(MSBuildProjectDirectory)\..\HCW.AutoCAD.Plugin&quot; -Destination &quot;$(IntermediateOutputPath)cadsrc&quot; -Platform brx" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)cadsrc\**\*.cs" />
+    </ItemGroup>
+  </Target>
+
+</Project>

@@ -24,6 +24,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             public static UnitSys Units = UnitSys.Metric;
             public static double TextHeight = 0.25;
             public static double DedupTolerance = 0.01;
+            /// <summary>Layers this session's Measure commands turned off. MSHOW restores only these.</summary>
+            public static readonly HashSet<string> HiddenByMeasure = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
         public const string LayLin = "MEASURE-LINEAR";
@@ -125,14 +127,27 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("MSHOW")]
         public void MShow()
         {
+            var ed = Util.Ed;
+            if (MeasureState.HiddenByMeasure.Count == 0)
+            {
+                ed.WriteMessage("\nNo layers left hidden by Measure.");
+                return;
+            }
             using (Util.Doc.LockDocument())
             using (var tr = Util.Db.TransactionManager.StartTransaction())
             {
                 var lt = (LayerTable)tr.GetObject(Util.Db.LayerTableId, OpenMode.ForRead);
-                foreach (ObjectId id in lt) ((LayerTableRecord)tr.GetObject(id, OpenMode.ForWrite)).IsOff = false;
+                int n = 0;
+                foreach (var name in MeasureState.HiddenByMeasure.ToList())
+                {
+                    if (!lt.Has(name)) continue;
+                    var ltr = (LayerTableRecord)tr.GetObject(lt[name], OpenMode.ForWrite);
+                    if (ltr.IsOff) { ltr.IsOff = false; n++; }
+                }
+                MeasureState.HiddenByMeasure.Clear();
                 tr.Commit();
+                ed.WriteMessage($"\nRestored {n} layer(s) hidden by Measure. Other layers were left as they were.");
             }
-            Util.Ed.WriteMessage("\nAll layers on.");
         }
 
         [CommandMethod("MCLEAR")]
@@ -210,7 +225,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 {
                     var psr = ed.GetSelection(new PromptSelectionOptions(),
                         BuildFilter("LINE,LWPOLYLINE,POLYLINE,ARC,SPLINE", isolateLayers));
-                    if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); tr.Commit(); return; }
+                    if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
 
                     double th = AskTextHeight(ed);
                     double tol = AskTolerance(ed);
@@ -224,7 +239,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                         var match = types.FirstOrDefault(t => string.Equals(t.layer, c.Layer, StringComparison.OrdinalIgnoreCase));
                         if (match.layer != null) grp.Add((c, match.code));
                     }
-                    if (grp.Count == 0) { ed.WriteMessage("\nNo matching typed lines selected."); tr.Commit(); return; }
+                    if (grp.Count == 0) { ed.WriteMessage("\nNo matching typed lines selected."); return; }
 
                     // match each deduction to the typed line it overlaps (nearest within tolerance)
                     var pidx = new int?[deds.Count];
@@ -314,8 +329,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                         ? new[] { "Item", $"Length ({LenLabel})", $"Deduction ({LenLabel})", $"Net ({LenLabel})" }
                         : new[] { "Item", "Type", $"Length ({LenLabel})", $"Deduction ({LenLabel})", $"Net ({LenLabel})" };
                     Output(tr, db, csvName, headers, rows, th);
-                    tr.Commit();
                 }
+                tr.Commit();
             }
         }
 
@@ -330,7 +345,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 using (var iso = IsolateAndPrompt(tr, db, new[] { LayCnt }, "\nSelect rectangles (closed polylines) on MEASURE-COUNT: "))
                 {
                     var psr = ed.GetSelection(new PromptSelectionOptions(), BuildFilter("LWPOLYLINE", new[] { LayCnt }));
-                    if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); tr.Commit(); return; }
+                    if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
 
                     double th = AskTextHeight(ed);
                     var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
@@ -360,11 +375,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                         ed.WriteMessage($"\n{n - 1} rectangles named. Total area = {totA:F2} {AreaLabel}");
                         Output(tr, db, "Rectangles", new[] { "Rect No", $"Length ({LenLabel})", $"Breadth ({LenLabel})", $"Area ({AreaLabel})", $"Perimeter ({LenLabel})" }, rows, th);
                     }
-                    tr.Commit();
                 }
+                tr.Commit();
             }
         }
 
+        [CommandMethod("MAREA")]
         [CommandMethod("MARE")]
         public void MAre()
         {
@@ -376,7 +392,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 using (var iso = IsolateAndPrompt(tr, db, new[] { LayAre }, "\nSelect closed polygons/circles on MEASURE-AREA: "))
                 {
                     var psr = ed.GetSelection(new PromptSelectionOptions(), BuildFilter("LWPOLYLINE,POLYLINE,CIRCLE,ELLIPSE,SPLINE", new[] { LayAre }));
-                    if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); tr.Commit(); return; }
+                    if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
 
                     double th = AskTextHeight(ed);
                     var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
@@ -408,11 +424,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                         ed.WriteMessage($"\nTotal area = {totA:F2} {AreaLabel}   Total perimeter = {M(totP)} {LenLabel}");
                         Output(tr, db, "Areas", new[] { "Area No", $"Area ({AreaLabel})", $"Perimeter ({LenLabel})" }, rows, th);
                     }
-                    tr.Commit();
                 }
+                tr.Commit();
             }
         }
 
+        [CommandMethod("MSLAB")]
         [CommandMethod("MSLB")]
         public void MSlb()
         {
@@ -424,7 +441,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 using (var iso = IsolateAndPrompt(tr, db, new[] { LaySlb, LaySdd }, "\nSelect slab boundary polygons AND deduction (opening) polygons: "))
                 {
                     var psr = ed.GetSelection(new PromptSelectionOptions(), BuildFilter("LWPOLYLINE,POLYLINE", new[] { LaySlb, LaySdd }));
-                    if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); tr.Commit(); return; }
+                    if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
 
                     double th = AskTextHeight(ed);
                     var slabs = new List<Polyline>();
@@ -434,7 +451,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                         var pl = (Polyline)tr.GetObject(so.ObjectId, OpenMode.ForRead);
                         if (string.Equals(pl.Layer, LaySdd, StringComparison.OrdinalIgnoreCase)) deds.Add(pl); else slabs.Add(pl);
                     }
-                    if (slabs.Count == 0) { ed.WriteMessage("\nNo slab boundary polygons selected - deductions need a slab boundary."); tr.Commit(); return; }
+                    if (slabs.Count == 0) { ed.WriteMessage("\nNo slab boundary polygons selected - deductions need a slab boundary."); return; }
 
                     // match each deduction to the slab boundary whose outline contains its centroid
                     var pidx = new int?[deds.Count];
@@ -490,8 +507,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                     rows.Add(new[] { "TOTAL", totG.ToString("F2"), totD.ToString("F2"), totN.ToString("F2") });
                     ed.WriteMessage($"\nSlab gross {totG:F2} {AreaLabel}   Deductions {totD:F2} {AreaLabel}   NET {totN:F2} {AreaLabel}");
                     Output(tr, db, "Slabs", new[] { "Item", $"Gross ({AreaLabel})", $"Deduction ({AreaLabel})", $"Net ({AreaLabel})" }, rows, th);
-                    tr.Commit();
                 }
+                tr.Commit();
             }
         }
 
@@ -529,14 +546,29 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             Util.Ed.WriteMessage(prompt);
             var state = Util.IsolateLayers(tr, db, layers);
+            foreach (var name in state.Hidden)
+                MeasureState.HiddenByMeasure.Add(name);
             return new LayerRestorer(tr, db, state);
         }
 
         private class LayerRestorer : IDisposable
         {
-            private readonly Transaction _tr; private readonly Database _db; private readonly LayerIsolation _state;
-            public LayerRestorer(Transaction tr, Database db, LayerIsolation state) { _tr = tr; _db = db; _state = state; }
-            public void Dispose() => Util.RestoreLayers(_tr, _db, _state);
+            private readonly Transaction _tr;
+            private readonly Database _db;
+            private readonly LayerIsolation _state;
+            public LayerRestorer(Transaction tr, Database db, LayerIsolation state)
+            {
+                _tr = tr; _db = db; _state = state;
+            }
+            public void Dispose()
+            {
+                // Must run while the transaction is still open. Committing first
+                // and restoring on dispose throws, which aborted every Measure command.
+                Util.RestoreLayers(_tr, _db, _state);
+                if (_state?.Hidden == null) return;
+                foreach (var name in _state.Hidden)
+                    MeasureState.HiddenByMeasure.Remove(name);
+            }
         }
 
         private static List<Point3d> Verts(Polyline pl)

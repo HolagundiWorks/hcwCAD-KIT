@@ -107,67 +107,6 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
-        // ---- TextIncrement ----
-
-        [CommandMethod("TextIncrement")]
-        public void TextIncrement()
-        {
-            var ed = Util.Ed; var db = Util.Db;
-            var per = ed.GetEntity("\nSelect TEXT to copy and increment: ");
-            if (per.Status != PromptStatus.OK) { ed.WriteMessage("\nSelect a valid TEXT object."); return; }
-
-            using (Util.Doc.LockDocument())
-            using (var tr = db.TransactionManager.StartTransaction())
-            {
-                if (!(tr.GetObject(per.ObjectId, OpenMode.ForRead) is DBText src)) { ed.WriteMessage("\nSelect a valid TEXT object."); return; }
-                string txt = src.TextString;
-                var span = LastNumSpan(txt);
-                if (span == null) { ed.WriteMessage("\nNo number found in selected text."); return; }
-
-                int start = span.Value.start, len = span.Value.len;
-                string numStr = txt.Substring(start, len);
-                int num = int.Parse(numStr);
-                string prefix = txt.Substring(0, start);
-                string suffix = txt.Substring(start + len);
-
-                var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
-                PromptPointResult pr;
-                while ((pr = ed.GetPoint("\nClick to place incremented copy (Enter to finish): ")).Status == PromptStatus.OK)
-                {
-                    num++;
-                    string newNumStr = num.ToString();
-                    while (newNumStr.Length < len) newNumStr = "0" + newNumStr;
-                    string newTxt = prefix + newNumStr + suffix;
-
-                    var nt = new DBText
-                    {
-                        Position = pr.Value,
-                        AlignmentPoint = pr.Value,
-                        HorizontalMode = TextHorizontalMode.TextCenter,
-                        VerticalMode = TextVerticalMode.TextVerticalMid,
-                        Height = src.Height,
-                        Rotation = src.Rotation,
-                        TextString = newTxt,
-                        TextStyleId = src.TextStyleId,
-                        Layer = src.Layer
-                    };
-                    btr.AppendEntity(nt); tr.AddNewlyCreatedDBObject(nt, true);
-                }
-                tr.Commit();
-            }
-        }
-
-        private static (int start, int len)? LastNumSpan(string s)
-        {
-            int i = s.Length - 1;
-            while (i >= 0 && !char.IsDigit(s[i])) i--;
-            if (i < 0) return null;
-            int end = i;
-            while (i >= 0 && char.IsDigit(s[i])) i--;
-            int start = i + 1;
-            return (start, end - start + 1);
-        }
-
         // ---- WinLabel / WinLabelHeight ----
 
         [CommandMethod("WinLabel")]

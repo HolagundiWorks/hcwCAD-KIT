@@ -162,13 +162,33 @@ namespace HCW.AutoCAD.Plugin
         public static LayerIsolation IsolateLayers(Transaction tr, Database db, IEnumerable<string> keep)
         {
             var keepSet = new HashSet<string>(keep, StringComparer.OrdinalIgnoreCase);
-            var state = new LayerIsolation { PreviouslyOff = new List<string>() };
+            var state = new LayerIsolation
+            {
+                PreviouslyOff = new List<string>(),
+                Hidden = new List<string>()
+            };
             var lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+            var records = new List<LayerTableRecord>();
+            ObjectId fallback = ObjectId.Null;
+            string currentName = null;
             foreach (ObjectId id in lt)
             {
                 var ltr = (LayerTableRecord)tr.GetObject(id, OpenMode.ForWrite);
+                records.Add(ltr);
+                if (id == db.Clayer) currentName = ltr.Name;
+                if (fallback.IsNull && keepSet.Contains(ltr.Name)) fallback = id;
+            }
+            // The current layer cannot be turned off. Move to a kept layer first.
+            if (currentName != null && !keepSet.Contains(currentName) && !fallback.IsNull)
+                db.Clayer = fallback;
+
+            foreach (var ltr in records)
+            {
+                bool shown = keepSet.Contains(ltr.Name);
                 if (ltr.IsOff) state.PreviouslyOff.Add(ltr.Name);
-                ltr.IsOff = !keepSet.Contains(ltr.Name);
+                else if (!shown) state.Hidden.Add(ltr.Name);
+                if (ltr.ObjectId != db.Clayer)
+                    ltr.IsOff = !shown;
             }
             return state;
         }
@@ -189,5 +209,7 @@ namespace HCW.AutoCAD.Plugin
     public class LayerIsolation
     {
         public List<string> PreviouslyOff;
+        /// <summary>Layers that were on and that this isolation turned off.</summary>
+        public List<string> Hidden;
     }
 }

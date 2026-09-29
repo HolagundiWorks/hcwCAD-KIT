@@ -309,9 +309,36 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private static readonly string[] RoomTypeNames = LayerData.RoomTypes.Select(r => r.RoomType).ToArray();
 
+        /// <summary>
+        /// Unset INSUNITS used to be treated as metres, so a millimetre plan
+        /// was labelled thousands of times too large. Ask once and store the choice.
+        /// </summary>
+        private static bool EnsureDrawingUnits()
+        {
+            var db = Util.Db;
+            var ed = Util.Ed;
+            if (db.Insunits != UnitsValue.Undefined) return true;
+
+            var pko = new PromptKeywordOptions("\nDrawing units are unset. Treat distances as [Millimetres/Metres] <Millimetres>: ");
+            pko.Keywords.Add("Millimetres");
+            pko.Keywords.Add("Metres");
+            pko.Keywords.Default = "Millimetres";
+            pko.AllowNone = true;
+            var r = ed.GetKeywords(pko);
+            if (r.Status == PromptStatus.Cancel) return false;
+
+            bool metres = r.Status == PromptStatus.OK && r.StringResult == "Metres";
+            using (Util.Doc.LockDocument())
+                db.Insunits = metres ? UnitsValue.Meters : UnitsValue.Millimeters;
+            ed.WriteMessage(metres ? "\nUnits set to metres." : "\nUnits set to millimetres.");
+            return true;
+        }
+
+        [CommandMethod("ROOM")]
         [CommandMethod("HCWROOM")]
         public void HcwRoom()
         {
+            if (!EnsureDrawingUnits()) return;
             using (var dlg = new UI.RoomPickerForm(RoomTypeNames))
             {
                 if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dlg.SelectedRoomType))
@@ -320,17 +347,24 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
+        [CommandMethod("ROOMC")]
         [CommandMethod("HCWCUSTOMROOM")]
         public void HcwCustomRoom()
         {
+            if (!EnsureDrawingUnits()) return;
             var r = Util.Ed.GetString("\n| Enter room type: ");
             if (r.Status == PromptStatus.OK && !string.IsNullOrWhiteSpace(r.StringResult))
                 UI.RoomUnitSelector.Current.CreateLabel(Util.Ed, Util.Db, r.StringResult);
             else Util.Ed.WriteMessage("\nCancelled.");
         }
 
+        [CommandMethod("RAREA")]
         [CommandMethod("HCWROOMAREA")]
-        public void HcwRoomArea() => UI.RoomUnitSelector.Current.AreaLabelForSelected(Util.Ed, Util.Db);
+        public void HcwRoomArea()
+        {
+            if (!EnsureDrawingUnits()) return;
+            UI.RoomUnitSelector.Current.AreaLabelForSelected(Util.Ed, Util.Db);
+        }
 
         [CommandMethod("HCWROOMRECT")]
         public void HcwRoomRect() => UI.RoomUnitSelector.Current.ToggleRect(Util.Ed);
@@ -353,6 +387,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("HCWROOMFLOOR")]
         public void HcwRoomFloor() => UI.RoomUnitSelector.Current.SetFloorPrefix(Util.Ed);
 
+        [CommandMethod("RTAG")]
         [CommandMethod("HCWROOMRELABEL")]
         public void HcwRoomRelabel() => UI.RoomUnitSelector.Current.Relabel(Util.Ed, Util.Db);
 
@@ -376,9 +411,9 @@ namespace HCW.AutoCAD.Plugin.Commands
             ed.WriteMessage("\n================================================================");
             ed.WriteMessage($"\n   ROOM DIMENSION TOOL — detected drawing unit: {engine.UnitDisplayName}");
             ed.WriteMessage("\n================================================================");
-            ed.WriteMessage("\n  This panel reads the drawing's own unit (INSUNITS) automatically -");
-            ed.WriteMessage("\n  there's no manual unit switch. Change it by setting the drawing's");
-            ed.WriteMessage("\n  units (UNITS command) if this isn't what you expect.");
+            ed.WriteMessage("\n  ROOM reads the drawing unit (INSUNITS). If units are unset it asks");
+            ed.WriteMessage("\n  millimetres or metres once and stores that on the drawing.");
+            ed.WriteMessage("\n  Label text uses the default height until you run HCWROOMTH.");
             ed.WriteMessage("\n================================================================");
         }
 

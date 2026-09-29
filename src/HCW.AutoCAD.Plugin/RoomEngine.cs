@@ -81,46 +81,52 @@ namespace HCW.AutoCAD.Plugin
             Util.EnsureLayer(tr, db, RectLayer, 8);    // dark grey
         }
 
-        /// <summary>Core of MBR/MKI/.../MDO/dialog pick: prompt two corners, draw rect + 3-line label stack, log it.</summary>
+        /// <summary>Prompt two corners, draw the rectangle on those corners, and stack the label at its centre.</summary>
         public void CreateLabel(Editor ed, Database db, string roomType)
         {
+            var p1r = ed.GetPoint("\n| Select FIRST corner of room: ");
+            if (p1r.Status != PromptStatus.OK) { ed.WriteMessage("\nCancelled."); return; }
+            var p2r = ed.GetCorner(new PromptCornerOptions("\n| Select OPPOSITE corner of room: ", p1r.Value));
+            if (p2r.Status != PromptStatus.OK) { ed.WriteMessage("\nCancelled."); return; }
+
+            // GetPoint / GetCorner return the current UCS. Entities are stored in WCS.
+            // Writing the UCS numbers straight into the drawing drops the rectangle and
+            // the label away from the corners whenever the UCS origin is not 0,0,0
+            // or the plan is rotated.
+            Matrix3d ucs = ed.CurrentUserCoordinateSystem;
+            Point3d u1 = p1r.Value, u2 = p2r.Value;
+            Point3d[] corners =
+            {
+                new Point3d(u1.X, u1.Y, u1.Z).TransformBy(ucs),
+                new Point3d(u2.X, u1.Y, u1.Z).TransformBy(ucs),
+                new Point3d(u2.X, u2.Y, u1.Z).TransformBy(ucs),
+                new Point3d(u1.X, u2.Y, u1.Z).TransformBy(ucs)
+            };
+            Point3d center = new Point3d(
+                (corners[0].X + corners[2].X) / 2.0,
+                (corners[0].Y + corners[2].Y) / 2.0,
+                (corners[0].Z + corners[2].Z) / 2.0);
+
+            double w = Math.Abs(u2.X - u1.X), h = Math.Abs(u2.Y - u1.Y);
+            double th = TextHeight;
+            Vector3d down = Vector3d.YAxis.Negate().TransformBy(ucs);
+
+            string fullType = string.IsNullOrEmpty(FloorPrefix) ? roomType : FloorPrefix + " " + roomType;
+            string dimText = FormatDim(w, h);
+            string areaText = FormatArea(w, h);
+
+            using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 EnsureLayers(tr, db);
-
-                var p1r = ed.GetPoint("\n| Select FIRST corner of room: ");
-                if (p1r.Status != PromptStatus.OK) { ed.WriteMessage("\nCancelled."); tr.Commit(); return; }
-                var p2opt = new PromptCornerOptions("\n| Select OPPOSITE corner of room: ", p1r.Value);
-                var p2r = ed.GetCorner(p2opt);
-                if (p2r.Status != PromptStatus.OK) { ed.WriteMessage("\nCancelled."); tr.Commit(); return; }
-
-                Point3d p1 = p1r.Value, p2 = p2r.Value;
-                double cx = (p1.X + p2.X) / 2.0, cy = (p1.Y + p2.Y) / 2.0;
-                double w = Math.Abs(p2.X - p1.X), h = Math.Abs(p2.Y - p1.Y);
-
-                double th = TextHeightUnits ?? AskHeight(ed);
-
                 var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
 
                 if (DrawRect)
-                {
-                    var pl = new Polyline();
-                    pl.AddVertexAt(0, new Point2d(p1.X, p1.Y), 0, 0, 0);
-                    pl.AddVertexAt(1, new Point2d(p2.X, p1.Y), 0, 0, 0);
-                    pl.AddVertexAt(2, new Point2d(p2.X, p2.Y), 0, 0, 0);
-                    pl.AddVertexAt(3, new Point2d(p1.X, p2.Y), 0, 0, 0);
-                    pl.Closed = true;
-                    pl.Layer = RectLayer;
-                    btr.AppendEntity(pl); tr.AddNewlyCreatedDBObject(pl, true);
-                }
+                    AddRectangle(tr, btr, corners, ucs.CoordinateSystem3d.Zaxis);
 
-                string fullType = string.IsNullOrEmpty(FloorPrefix) ? roomType : FloorPrefix + " " + roomType;
-                string dimText = FormatDim(w, h);
-                string areaText = FormatArea(w, h);
-
-                AddCenteredText(tr, btr, fullType.ToUpperInvariant(), cx, cy, th);
-                AddCenteredText(tr, btr, dimText, cx, cy - th * 1.5, th * 0.8);
-                AddCenteredText(tr, btr, areaText, cx, cy - th * 2.8, th * 0.7);
+                AddCenteredText(tr, btr, fullType.ToUpperInvariant(), center, th, ucs);
+                AddCenteredText(tr, btr, dimText, center + down * (th * 1.5), th * 0.8, ucs);
+                AddCenteredText(tr, btr, areaText, center + down * (th * 2.8), th * 0.7, ucs);
 
                 Log.Add(new RoomLogEntry
                 {
@@ -130,33 +136,54 @@ namespace HCW.AutoCAD.Plugin
                     Height = h,
                     AreaValue = AreaValue(w, h),
                     AreaUnit = AreaUnitLabel,
-                    X = cx,
-                    Y = cy
+                    X = center.X,
+                    Y = center.Y
                 });
 
                 tr.Commit();
-                ed.WriteMessage("\n+----------------------------------------" +
-                                "\n| " + fullType.ToUpperInvariant() +
-                                "\n| " + dimText +
-                                "\n| " + areaText +
-                                "\n+----------------------------------------");
             }
+
+            ed.WriteMessage("\n+----------------------------------------" +
+                            "\n| " + fullType.ToUpperInvariant() +
+                            "\n| " + dimText +
+                            "\n| " + areaText +
+                            "\n+----------------------------------------");
         }
 
-        private void AddCenteredText(Transaction tr, BlockTableRecord btr, string text, double x, double y, double h)
+        /// <summary>Rectangle through the four WCS corners, on the UCS plane the user picked.</summary>
+        private void AddRectangle(Transaction tr, BlockTableRecord btr, Point3d[] wcsCorners, Vector3d normal)
         {
+            var pl = new Polyline { Normal = normal, Closed = true, Layer = RectLayer };
+            Matrix3d toPlane = Matrix3d.WorldToPlane(normal);
+            for (int i = 0; i < wcsCorners.Length; i++)
+            {
+                Point3d ocs = wcsCorners[i].TransformBy(toPlane);
+                if (i == 0) pl.Elevation = ocs.Z;
+                pl.AddVertexAt(i, new Point2d(ocs.X, ocs.Y), 0, 0, 0);
+            }
+            btr.AppendEntity(pl);
+            tr.AddNewlyCreatedDBObject(pl, true);
+        }
+
+        private void AddCenteredText(Transaction tr, BlockTableRecord btr, string text, Point3d center, double height, Matrix3d ucs)
+        {
+            var normal = ucs.CoordinateSystem3d.Zaxis;
             var t = new DBText
             {
-                Position = new Point3d(x, y, 0),
-                Height = h,
+                Height = height,
                 TextString = text,
                 Layer = LabelLayer,
+                Normal = normal,
+                Rotation = Vector3d.XAxis.GetAngleTo(ucs.CoordinateSystem3d.Xaxis, normal),
                 HorizontalMode = TextHorizontalMode.TextCenter,
-                VerticalMode = TextVerticalMode.TextVerticalMid,
-                AlignmentPoint = new Point3d(x, y, 0)
+                VerticalMode = TextVerticalMode.TextVerticalMid
             };
             btr.AppendEntity(t);
             tr.AddNewlyCreatedDBObject(t, true);
+            // AlignmentPoint is ignored until the text is database-resident.
+            // Setting it only before AppendEntity leaves the label at the origin.
+            t.AlignmentPoint = center;
+            t.AdjustAlignment(btr.Database);
         }
 
         public void AreaLabelForSelected(Editor ed, Database db)
@@ -172,22 +199,13 @@ namespace HCW.AutoCAD.Plugin
                     return;
                 }
                 double area = Math.Abs(pl.Area);
-                Point3d centroid = CentroidOf(pl);
-                double th = TextHeightUnits ?? AskHeight(ed);
+                Point3d ocsMid = CentroidOf(pl);
+                Point3d centroid = new Point3d(ocsMid.X, ocsMid.Y, pl.Elevation).TransformBy(Matrix3d.PlaneToWorld(pl.Normal));
+                double th = TextHeight;
                 string areaText = "Area: " + AreaValueFromRaw(area).ToString("F2") + " " + AreaUnitLabel;
 
                 var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
-                var t = new DBText
-                {
-                    Position = centroid,
-                    Height = th,
-                    TextString = areaText,
-                    Layer = LabelLayer,
-                    HorizontalMode = TextHorizontalMode.TextCenter,
-                    VerticalMode = TextVerticalMode.TextVerticalMid,
-                    AlignmentPoint = centroid
-                };
-                btr.AppendEntity(t); tr.AddNewlyCreatedDBObject(t, true);
+                AddCenteredText(tr, btr, areaText, centroid, th, Matrix3d.PlaneToWorld(pl.Normal));
                 tr.Commit();
                 ed.WriteMessage("\n| " + areaText + " created at centroid");
             }
