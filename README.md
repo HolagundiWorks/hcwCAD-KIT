@@ -127,7 +127,7 @@ The old per-unit commands (`MBR`, `FBR`, `IBR`, and the rest) are removed. Use `
 
 ### Measure (manual take-off)
 
-The Measure panel has one dropdown (Linear, Brickwork, Beams and lintels) and one **Measure** button, plus Columns, Schedule, Area, Slab, Wall paint, Ceiling, and Floor. Run `MSETUP` first so lengths and areas use the unit system you intend. Each take-off creates its layers if they are missing, isolates those layers while you select, then restores the layers it turned off. It labels the geometry, prints a summary, writes a CSV next to the drawing (or in the temp folder if the drawing has no path), and draws a summary table on `MEASURE-TABLE`.
+The Measure panel has one dropdown (Linear, Brickwork, Beams and lintels) and one **Measure** button, plus Columns, Schedule, Area, Slab, Wall paint, Ceiling, and Floor. Run `MSETUP` first so lengths and areas use the unit system you intend. Each take-off creates its layers if they are missing, isolates those layers while you select, then restores the layers it turned off. It labels the geometry, prints a summary, and draws a summary table on `MEASURE-TABLE`. The CSV is not written automatically: press **Export CSV** (`MEXPORT`) to save the last take-off next to the drawing (or in the temp folder if the drawing has no path).
 
 Walls, beams, and lintels of the same rounded length share one name (`FB-A`, `HB-A`, `BM-A`, `LT-A`, `L-A`). Openings on a wall are numbered per element, for example `FB D-01`. Columns, doors, and windows of the same size share one schedule mark. Ceiling and floor outlines of the same area share one name.
 
@@ -156,8 +156,8 @@ A deduction that does not match a parent is labelled `D? NO LINE` and is not inc
 | Command | What it does |
 |---|---|
 | `POLYAREA` | Reads `INSUNITS`, asks for square metres or square feet, an optional number prefix, and a text height. Select polylines. Open ones are closed. Each gets a number on the current layer. You then pick a point for a running-total table on layer `AREA_TABLE`. |
-| `DELETEAREATEXT` | Deletes TEXT and MTEXT whose content starts with `Area:` followed by more text. Choose All (the whole drawing) or Selection. This matches room-tool and similar area notes. A note you typed that starts with `Area:` is deleted too. |
 | `INCARRAY` (`TextIncrement` still works) | Asks for an increment, a selection (anything except viewports), a base point, a spacing vector, and an end point. Copies the selection along that vector. Every number in text, MText, block attributes, attribute definitions, multileaders and dimension overrides is increased by the increment on each copy. Leading zeros stay only when the original number had them (`01` becomes `02`). |
+| `INCCOPY` | Copy and paste with an incrementing number. Asks for an increment, a selection, and a base point, then paste points one after another (Enter to finish). Each copy adds the increment once more than the last, using the same number rules as `INCARRAY`. |
 | `RENUMBERLAYOUTS` (`RL` still works) | Renumbers paper-space layouts in tab order. You set a prefix, an optional suffix, the starting number and how many digits to pad (`2` makes `01`). Tick the layouts to include. Names that would clash with a layout you left out are skipped. |
 | `WinLabel` | Select window blocks. For each dynamic block that has a `WNAME` property, writes the first two characters of that value on layer `WIN_LABELS`, stacked down from the point you pick. Set the height first with `WinLabelHeight` (default 0.15). |
 | `TXTALIGN` | Select TEXT, choose Left, Right, CentreX, Top, Middle, or Bottom, then a reference point. Left / Right / CentreX share the reference X. Top / Middle / Bottom share the reference Y. |
@@ -226,6 +226,7 @@ These buttons drive the same auto-unit engine as the **hcwCAD-KIT** room panel. 
 |---|---|
 | `MSETUP` | Metric (1 unit = 1 m) or Imperial (1 unit = 1 inch) for the rest of the session, and creates the MEASURE layers. Schedule heights and sizes are metres, or feet. |
 | `MSHOW` | Turns back on only layers that a Measure command hid and did not restore. Layers you turned off yourself stay off. |
+| `MEXPORT` | Saves the most recent take-off as a CSV beside the drawing. Run a take-off first. |
 | `MCLEAR` | Erases MEASURE label and table objects. |
 
 ### BPLT

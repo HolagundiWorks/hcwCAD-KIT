@@ -25,7 +25,6 @@ using Autodesk.AutoCAD.Runtime;
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.HcwLayerCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.MeasureCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.PolyAreaCommands))]
-[assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.DeleteAreaTextCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.VhLayerCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.TextToolCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.IncArrayCommands))]

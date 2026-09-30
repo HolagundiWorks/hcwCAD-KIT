@@ -1007,12 +1007,32 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (ppr.Status == PromptStatus.OK)
                 DrawTable(tr, db, ppr.Value, headers, rows, h);
 
-            var dwgPath = db.Filename;
+            // The CSV is written on demand by MEXPORT, not with every take-off.
+            _lastName = defName;
+            _lastHeaders = headers;
+            _lastRows = rows;
+            ed.WriteMessage("\nRun MEXPORT to save this take-off as CSV.");
+        }
+
+        private static string _lastName;
+        private static string[] _lastHeaders;
+        private static List<string[]> _lastRows;
+
+        [CommandMethod("MEXPORT")]
+        public void ExportCsv()
+        {
+            var ed = Util.Ed;
+            if (_lastRows == null)
+            {
+                ed.WriteMessage("\nMEXPORT: run a take-off first.");
+                return;
+            }
+            var dwgPath = Util.Db.Filename;
             string dir = string.IsNullOrEmpty(dwgPath) ? Path.GetTempPath() : Path.GetDirectoryName(dwgPath) + Path.DirectorySeparatorChar;
-            string csvPath = dir + defName + ".csv";
+            string csvPath = dir + _lastName + ".csv";
             try
             {
-                Util.WriteCsv(csvPath, headers, rows.Select(r => (IEnumerable<string>)r));
+                Util.WriteCsv(csvPath, _lastHeaders, _lastRows.Select(r => (IEnumerable<string>)r));
                 ed.WriteMessage("\nSaved: " + csvPath);
             }
             catch { ed.WriteMessage("\nCould not write CSV file (is it open elsewhere?)."); }

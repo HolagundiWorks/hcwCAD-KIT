@@ -78,6 +78,59 @@ namespace HCW.AutoCAD.Plugin.Commands
             Vector3d direction = qty < 0 ? -step : step;
             int copies = Math.Abs(qty);
 
+            var placements = new List<KeyValuePair<Vector3d, decimal>>();
+            for (int k = 1; k <= copies; k++)
+                placements.Add(new KeyValuePair<Vector3d, decimal>(direction * k, _increment * k));
+            int made = PlaceCopies(ed, db, psr, placements);
+            ed.WriteMessage("\nINCARRAY: placed " + made + " object" + (made == 1 ? "" : "s") + ".");
+        }
+
+        /// <summary>
+        /// Copy and paste with an incrementing number: each pick copies the selection to a new
+        /// point and adds the increment once more to every number in the copied annotation.
+        /// </summary>
+        [CommandMethod("INCCOPY")]
+        public void IncCopy()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            if (!AskIncrement(ed)) return;
+
+            var filter = new SelectionFilter(new[]
+            {
+                new TypedValue(-4, "<NOT"),
+                new TypedValue(0, "VIEWPORT"),
+                new TypedValue(-4, "NOT>")
+            });
+            var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect objects to copy: " }, filter);
+            if (psr.Status != PromptStatus.OK) return;
+
+            var bpr = ed.GetPoint("\nSpecify base point: ");
+            if (bpr.Status != PromptStatus.OK) return;
+
+            Matrix3d ucs = ed.CurrentUserCoordinateSystem;
+            Point3d basePt = bpr.Value.TransformBy(ucs);
+            var placements = new List<KeyValuePair<Vector3d, decimal>>();
+            while (true)
+            {
+                var ppr = ed.GetPoint(new PromptPointOptions("\nSpecify paste point <done>: ")
+                {
+                    UseBasePoint = true,
+                    BasePoint = bpr.Value,
+                    AllowNone = true
+                });
+                if (ppr.Status != PromptStatus.OK) break;
+                var disp = ppr.Value.TransformBy(ucs) - basePt;
+                placements.Add(new KeyValuePair<Vector3d, decimal>(disp, _increment * (placements.Count + 1)));
+                // Place each copy as it is picked so the next prompt shows the result.
+                int one = PlaceCopies(ed, db, psr, new List<KeyValuePair<Vector3d, decimal>> { placements[placements.Count - 1] });
+                if (one == 0) return;
+            }
+            ed.WriteMessage("\nINCCOPY: placed " + placements.Count + " cop" + (placements.Count == 1 ? "y" : "ies") + ".");
+        }
+
+        private static int PlaceCopies(Editor ed, Database db, PromptSelectionResult psr, List<KeyValuePair<Vector3d, decimal>> placements)
+        {
             int made = 0;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
@@ -105,16 +158,15 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
                 if (sources.Count == 0)
                 {
-                    ed.WriteMessage("\nNothing to array.");
-                    return;
+                    ed.WriteMessage("\nNothing to copy.");
+                    return 0;
                 }
 
                 var lookup = new Dictionary<ObjectId, Source>();
                 foreach (var src in sources) lookup[src.Id] = src;
 
-                for (int k = 1; k <= copies; k++)
+                foreach (var placement in placements)
                 {
-                    decimal delta = _increment * k;
                     foreach (var owner in byOwner)
                     {
                         using (var map = new IdMapping())
@@ -124,8 +176,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                             {
                                 if (!pair.IsPrimary || !lookup.TryGetValue(pair.Key, out var src)) continue;
                                 var clone = (Entity)tr.GetObject(pair.Value, OpenMode.ForWrite);
-                                clone.TransformBy(Matrix3d.Displacement(direction * k));
-                                Apply(tr, clone, src, delta);
+                                clone.TransformBy(Matrix3d.Displacement(placement.Key));
+                                Apply(tr, clone, src, placement.Value);
                                 made++;
                             }
                         }
@@ -133,7 +185,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
                 tr.Commit();
             }
-            ed.WriteMessage("\nINCARRAY: placed " + made + " object" + (made == 1 ? "" : "s") + ".");
+            return made;
         }
 
         private static bool AskIncrement(Editor ed)

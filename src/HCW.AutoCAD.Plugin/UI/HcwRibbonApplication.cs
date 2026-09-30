@@ -179,6 +179,7 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("MFLOOR", "Floor", "area", "Floor area, grouped by equal area"),
                 ("MSETUP", "Units", "settings", "Metric (metres) or Imperial (feet and inches) for this session"),
                 ("MSHOW", "Restore Layers", "view", "Turn back on only the layers Measure hid"),
+                ("MEXPORT", "Export CSV", "document--export", "Save the last take-off as a CSV file beside the drawing"),
                 ("MCLEAR", "Clear Labels", "clean", "Erase Measure label and table objects"));
             return Wrap(src);
         }
@@ -187,10 +188,10 @@ namespace HCW.AutoCAD.Plugin.UI
         {
             var src = NewSource("Area & Text Tools");
             AddLarge(src, "POLYAREA", "Poly\nArea", "area--custom", "Number selected polylines and draw a running-total area table");
-            AddLarge(src, "DELETEAREATEXT", "Delete Area\nText", "trash-can", "Bulk-delete \"Area: ...\" text objects");
             AddLarge(src, "HCWSTYLES", "Text\nStyles", "text--font", "Create HCW-SITE, HCW-WORKING and HCW-DETAIL text and dimension styles");
             AddSmallGroup(src,
                 ("INCARRAY", "Inc Array", "add--alt", "Array the selection and increment every number in the copied text, attributes and dimensions"),
+                ("INCCOPY", "Inc Copy", "copy", "Copy the selection to picked points, adding the increment to every number in each copy"),
                 ("RENUMBERLAYOUTS", "Renumber Layouts", "table-of-contents", "Renumber paper layouts in tab order, with a prefix, suffix and digit padding"),
                 ("WinLabel", "Window Label", "tag", "Label window blocks from their WNAME property"),
                 ("WinLabelHeight", "Label Height", "text--scale", "Set the window-label text height"),
