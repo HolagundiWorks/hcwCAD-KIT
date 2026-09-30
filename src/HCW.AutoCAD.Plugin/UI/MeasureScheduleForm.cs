@@ -207,9 +207,11 @@ namespace HCW.AutoCAD.Plugin.UI
         private static TabPage Page(string title, DataGridView grid, string hint)
         {
             var page = new TabPage(title) { Padding = new Padding(6) };
-            page.Controls.Add(new Label { Dock = DockStyle.Top, Height = 52, Text = hint });
+            // WinForms docks the last-added control first, so the Fill grid goes in first and the
+            // Top hint after it. The other way round, the hint sits on top of the grid's heading row.
             grid.Dock = DockStyle.Fill;
             page.Controls.Add(grid);
+            page.Controls.Add(new Label { Dock = DockStyle.Top, Height = 52, Text = hint });
             return page;
         }
 
