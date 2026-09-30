@@ -285,8 +285,13 @@ namespace HCW.AutoCAD.Plugin.Commands
                             if (grp[k].type == ty.code) segs.Add((k, Rnd(CurveLen(grp[k].ent))));
                         if (segs.Count == 0) continue;
 
-                        int sG = 0, sD = 0, sN = 0, dedSerial = 0;
+                        int sG = 0, sD = 0, sN = 0;
                         int letter = 0;
+                        // Number the walls left to right, then bottom to top: FB01, FB02, ...
+                        var wallNo = new Dictionary<int, int>();
+                        int serial = 0;
+                        foreach (var seg in segs.OrderBy(x => CurveMid(grp[x.index].ent).X).ThenBy(x => CurveMid(grp[x.index].ent).Y))
+                            wallNo[seg.index] = ++serial;
                         foreach (var bucket in segs.GroupBy(s => s.gross).OrderByDescending(s => s.Key))
                         {
                             string group = (singleTypeNoPrefix ? "L" : ty.code) + "-" + GroupLetter(letter++);
@@ -298,13 +303,17 @@ namespace HCW.AutoCAD.Plugin.Commands
                             {
                                 var mp = CurveMid(grp[seg.index].ent);
                                 PlaceLabel(tr, db, btr, new Point3d(mp.X, mp.Y + 0.8 * th, 0), group, book, th);
-                                for (int j = 0; j < deds.Count; j++)
+                                int openingNo = 0;
+                                string wallId = (singleTypeNoPrefix ? "L" : ty.code) + wallNo[seg.index].ToString("00");
+                                foreach (int j in Enumerable.Range(0, deds.Count)
+                                    .Where(n => pidx[n] == seg.index)
+                                    .OrderBy(n => CurveMid(deds[n]).X).ThenBy(n => CurveMid(deds[n]).Y))
                                 {
-                                    if (pidx[j] != seg.index) continue;
-                                    dedSerial++;
+                                    openingNo++;
                                     int dv = Rnd(CurveLen(deds[j]));
                                     dsum += dv;
-                                    string raw = (singleTypeNoPrefix ? "L" : ty.code) + " D-" + dedSerial.ToString("00");
+                                    // Wall FB01, its first opening: FB01-D1.
+                                    string raw = wallId + "-D" + openingNo;
                                     var dmp = CurveMid(deds[j]);
                                     PlaceLabel(tr, db, btr, new Point3d(dmp.X, dmp.Y - 0.8 * th, 0), raw, book, th, measured: dv);
                                     string shown = DisplayName(book, raw);
@@ -439,7 +448,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var text = tr.GetObject(id, OpenMode.ForRead) as DBText;
                     if (text == null || !string.Equals(text.Layer, LayLbl, StringComparison.OrdinalIgnoreCase)) continue;
                     string raw = RawLabel(text);
-                    if (raw.IndexOf(" D-", StringComparison.OrdinalIgnoreCase) >= 0 && !lengths.ContainsKey(raw))
+                    if (IsDeductionLabel(raw) && !lengths.ContainsKey(raw))
                     {
                         int len = LabelLength(text);
                         lengths[raw] = len;
@@ -927,6 +936,13 @@ namespace HCW.AutoCAD.Plugin.Commands
             return -1;
         }
 
+        /// <summary>True for deduction labels: FB01-D1 (wall, opening) and the older FB D-01.</summary>
+        private static bool IsDeductionLabel(string raw)
+        {
+            return raw != null && System.Text.RegularExpressions.Regex.IsMatch(raw, @"(\s|-)D-?\d+$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
         private static string RawLabel(DBText text)
         {
             var data = text.GetXDataForApplication(AppName);
@@ -1026,7 +1042,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (text == null || !string.Equals(text.Layer, LayLbl, StringComparison.OrdinalIgnoreCase)) continue;
                 if (text.Position.DistanceTo(mid) > Math.Max(4 * textHeight, 0.25)) continue;
                 string raw = RawLabel(text);
-                if (raw.IndexOf(" D-", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (!IsDeductionLabel(raw)) continue;
                 var opening = book.Opening(book.MarkFor(raw));
                 if (opening != null && opening.Width > 0 && opening.Height > 0)
                     return opening.Width * opening.Height;

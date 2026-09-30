@@ -129,7 +129,7 @@ The old per-unit commands (`MBR`, `FBR`, `IBR`, and the rest) are removed. Use `
 
 The Measure panel has one dropdown (Linear, Brickwork, Beams and lintels) and one **Measure** button, plus Columns, Schedule, Area, Slab, Wall paint, Ceiling, and Floor. Run `MSETUP` first so lengths and areas use the unit system you intend. Each take-off creates its layers if they are missing, isolates those layers while you select, then restores the layers it turned off. It labels the geometry, prints a summary, and draws a summary table on `MEASURE-TABLE`. The CSV is not written automatically: press **Export CSV** (`MEXPORT`) to save the last take-off next to the drawing (or in the temp folder if the drawing has no path).
 
-Walls, beams, and lintels of the same rounded length share one name (`FB-A`, `HB-A`, `BM-A`, `LT-A`, `L-A`). Openings on a wall are numbered per element, for example `FB D-01`. Columns, doors, and windows of the same size share one schedule mark. Ceiling and floor outlines of the same area share one name.
+Walls, beams, and lintels of the same rounded length share one name (`FB-A`, `HB-A`, `BM-A`, `LT-A`, `L-A`). Each wall is numbered left to right, then bottom to top (`FB01`, `FB02`, …), and its openings are numbered along the wall in the same order: `FB01-D1`, `FB01-D2`, `FB02-D1`. Columns, doors, and windows of the same size share one schedule mark. Ceiling and floor outlines of the same area share one name.
 
 `MSCHED` stores the schedule in the drawing: floors and ceiling heights, doors and windows, concrete columns, and a map from each measured deduction to a schedule name.
 
@@ -148,10 +148,10 @@ Each row on the **Doors and windows** tab is one schedule entry:
 
 Deduction map logic:
 
-1. `MLIN`, `MBRK` and `MBML` label every deduction line as `<type> D-<nn>` (for example `FB D-01`) and store its measured length on the label.
+1. `MLIN`, `MBRK` and `MBML` label every deduction line as `<wall>-D<n>`: the wall it sits on (`FB01`) and its opening number on that wall (`FB01-D1`) and store its measured length on the label.
 2. On the **Deduction map** tab, each deduction is one row with its measured length. If exactly one schedule entry has the same length, its name is pre-filled (a `1.20` m deduction suggests the only entry with length `1.2`). If several entries share that length, the cell stays empty and you choose. Type or change any name yourself.
-3. Deduction names are matched loosely, so case, spaces, hyphens and leading zeros do not matter: `FB D-01`, `fb d-1` and `FB-D1` are the same deduction.
-4. On **Apply**, each mapped label is rewritten to `<name> <type>` (`FB D-01` becomes `W1 UPVC`). The count of each entry becomes the number of deductions mapped to it.
+3. Deduction names are matched loosely, so case, spaces, hyphens and leading zeros do not matter: `FB01-D1`, `fb01-d1` and `FB 01 D-1` are the same deduction. Drawings labelled with the older `FB D-01` style still map.
+4. On **Apply**, each mapped label is rewritten to `<name> <type>` (`FB01-D1` becomes `W1 UPVC`). The count of each entry becomes the number of deductions mapped to it.
 5. `MPAINT` then deducts the entry's length × height for every mapped opening. An unmapped deduction falls back to its measured length × the wall height.
 6. Apply prints a warning when a name is used twice, when a map points to a name that is not in the schedule, or when the measured deduction length differs from the entry’s length.
 
@@ -161,8 +161,8 @@ Draw the geometry on the layers below before you run the command. Deduction geom
 
 | Command | Draw on | Result |
 |---|---|---|
-| `MLIN` | `MEASURE-LINEAR` and deductions on `MEASURE-DEDUCT` | Same lengths share `L-A`. Deductions are `L D-01`, … |
-| `MBRK` | `MEASURE-FULLBRICK`, `MEASURE-HALFBRICK`, deductions on `MEASURE-DEDUCT` | Full brick `FB-A` and half brick `HB-A`, deductions `FB D-01` |
+| `MLIN` | `MEASURE-LINEAR` and deductions on `MEASURE-DEDUCT` | Same lengths share `L-A`. Walls `L01`, `L02`, …; deductions `L01-D1`, … |
+| `MBRK` | `MEASURE-FULLBRICK`, `MEASURE-HALFBRICK`, deductions on `MEASURE-DEDUCT` | Full brick `FB-A` and half brick `HB-A`, walls `FB01`, deductions `FB01-D1` |
 | `MBML` | `MEASURE-BEAM`, `MEASURE-LINTEL`, deductions on `MEASURE-DEDUCT` | Concrete beams `BM-A` and concrete lintels `LT-A` |
 | `MCOL` | Closed 4-sided polylines on `MEASURE-COLUMN` | Equal column sizes share one mark. A size listed in the schedule uses that mark |
 | `MREC` | Closed 4-sided polylines on `MEASURE-COUNT` | Equal rectangles share `R-A`, with length, breadth, count, area, perimeter |

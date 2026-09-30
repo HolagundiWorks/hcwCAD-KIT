@@ -40,7 +40,7 @@ namespace HCW.AutoCAD.Plugin.UI
             tabs.TabPages.Add(Page("Floors", _floors, "Each row is one floor. Wall paint uses these ceiling heights."));
             tabs.TabPages.Add(Page("Doors and windows", _openings, "Name (W1), type (UPVC), length and height. Length is the size along the wall that is deducted."));
             tabs.TabPages.Add(Page("Columns", _columns, "Concrete columns of the same size share one mark."));
-            tabs.TabPages.Add(Page("Deduction map", _maps, "Each measured deduction (FB D-01) maps to one schedule name (W1). A name is pre-filled when exactly one entry has the same length."));
+            tabs.TabPages.Add(Page("Deduction map", _maps, "Each measured deduction (FB01-D1) maps to one schedule name (W1). A name is pre-filled when exactly one entry has the same length."));
             Controls.Add(tabs);
 
             var bar = new Panel { Dock = DockStyle.Bottom, Height = 46 };

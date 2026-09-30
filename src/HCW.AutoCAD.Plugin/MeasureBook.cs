@@ -30,7 +30,7 @@ namespace HCW.AutoCAD.Plugin
 
         /// <summary>
         /// Compares deduction names loosely: case, spaces, hyphens and leading zeros are ignored,
-        /// so "FB D-01", "fb d-1" and "FB-D1" are the same deduction.
+        /// so "FB01-D1", "fb01-d1" and "FB 01 D-1" are the same deduction.
         /// </summary>
         public static string NormKey(string label)
         {
