@@ -161,8 +161,8 @@ namespace HCW.AutoCAD.Plugin.UI
 
         private RibbonPanel BuildMeasurePanel()
         {
-            var src = NewSource("Measure");
-            AddSetButton(src, "HCW_MEASURE_KIND", "Measure", "ruler",
+            var src = NewSource("Take-off");
+            AddSetButton(src, "HCW_MEASURE_KIND", "Take-off", "ruler",
                 "Linear take-off for the kind selected in the dropdown",
                 new (string label, string command)[]
                 {
@@ -180,10 +180,10 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("MCEIL", "Ceiling", "floorplan", "Ceiling paint area, grouped by equal area"),
                 ("MFLOOR", "Floor", "area", "Floor area, grouped by equal area"),
                 ("MSETUP", "Units", "settings", "Metric (metres) or Imperial (feet and inches) for this session"),
-                ("MSHOW", "Restore Layers", "view", "Turn back on only the layers Measure hid"),
+                ("MSHOW", "Restore Layers", "view", "Turn back on only the layers Take-off hid"),
                 ("MEXPORT", "Export", "document--export", "Save the last take-off as CSV, or every take-off as one Excel workbook"),
                 ("MEXPORTX", "Export Excel", "document--export", "Save every take-off as one Excel workbook, with a Bill sheet for rated take-offs"),
-                ("MCLEAR", "Clear Labels", "clean", "Erase Measure label and table objects"));
+                ("MCLEAR", "Clear Labels", "clean", "Erase take-off label and table objects"));
             return Wrap(src);
         }
 

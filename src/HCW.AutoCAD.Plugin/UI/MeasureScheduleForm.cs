@@ -31,7 +31,7 @@ namespace HCW.AutoCAD.Plugin.UI
 
         public MeasureScheduleForm(MeasureBook book, IList<KeyValuePair<string, int>> deductionLabels, string heightUnit, IList<BlockFound> blocks = null)
         {
-            Text = "hcwCAD-KIT — Measure schedule";
+            Text = "hcwCAD-KIT — Take-off schedule";
             FormBorderStyle = FormBorderStyle.Sizable;
             StartPosition = FormStartPosition.CenterScreen;
             MinimizeBox = false;

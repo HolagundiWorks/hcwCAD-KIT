@@ -27,11 +27,11 @@ Everything marked Implemented compiles against the AutoCAD .NET reference packag
 
 | Area | Finding | Change |
 |---|---|---|
-| Measure | `OpeningArea` walks the whole space for every deduction to find the nearest label (O(deductions × entities)). | Build one list of deduction labels (position, raw name, length) per run and look up in it. Better: store the opening size on the deduction label when it is mapped, and read that. |
-| Measure | Deduction-to-wall matching is O(deductions × walls) with three `GetClosestPointTo` calls each. | Sort walls into a grid or bounding-box index; test only walls whose extents overlap the deduction. |
-| Measure | Layer isolate/restore, table drawing and CSV export are repeated in each `Run*` method. | One `TakeOff` helper that takes layers, grouping function and row builder. `RunTypedLinear` is about 130 lines and is the template. |
-| Measure | Take-off results live in memory (`MEXPORT`, session log). | Save the last result in the drawing (same Xrecord dictionary as the schedule) so export and re-insert survive a restart. |
-| Measure | Wall numbering (`FB01`) is by X then Y. | Offer numbering along a picked path or by room, so numbers follow the plan. |
+| Take-off | `OpeningArea` walks the whole space for every deduction to find the nearest label (O(deductions × entities)). | Build one list of deduction labels (position, raw name, length) per run and look up in it. Better: store the opening size on the deduction label when it is mapped, and read that. |
+| Take-off | Deduction-to-wall matching is O(deductions × walls) with three `GetClosestPointTo` calls each. | Sort walls into a grid or bounding-box index; test only walls whose extents overlap the deduction. |
+| Take-off | Layer isolate/restore, table drawing and CSV export are repeated in each `Run*` method. | One `TakeOff` helper that takes layers, grouping function and row builder. `RunTypedLinear` is about 130 lines and is the template. |
+| Take-off | Take-off results live in memory (`MEXPORT`, session log). | Save the last result in the drawing (same Xrecord dictionary as the schedule) so export and re-insert survive a restart. |
+| Take-off | Wall numbering (`FB01`) is by X then Y. | Offer numbering along a picked path or by room, so numbers follow the plan. |
 | Copy/array | `PlaceCopies` reopens and deep-clones per placement. | Clone once, then transform a copy per placement. |
 | Cross-host | BricsCAD and ZWCAD builds rewrite the AutoCAD sources at build time. | Add a CI job that builds all three so a host-only break shows up on the pull request. |
 | Tests | No automated tests. | Move pure logic (`MeasureBook`, number increment, name matching, tolerance suggestion) into a class library with no CAD reference and unit-test it. |

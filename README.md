@@ -1,6 +1,6 @@
 # hcwCAD-KIT
 
-Holgundi Consulting Works drawing tools for AutoCAD, BricsCAD, and ZWCAD. One set of commands — layers, building-permission sheets, room labels, measure, area fields, and text — loaded from `hcwCAD-KIT.dll`. The ribbon has the same two tabs in each host.
+Holgundi Consulting Works drawing tools for AutoCAD, BricsCAD, and ZWCAD. One set of commands — layers, building-permission sheets, room labels, take-off, area fields, and text — loaded from `hcwCAD-KIT.dll`. The ribbon has the same two tabs in each host.
 
 Version 1.0.0. Author: Holgundi Consulting Works. Licensed under the [MIT License](LICENSE).
 
@@ -8,7 +8,7 @@ On load the plugin adds two ribbon tabs and switches to **hcwCAD-KIT**:
 
 | Tab | Use it for |
 |---|---|
-| **hcwCAD-KIT** | Notes and sheet fields, room labels, measure, area and text |
+| **hcwCAD-KIT** | Notes and sheet fields, room labels, take-off, area and text |
 | **hcwCAD-KIT Settings** | Layer creation, layer checks, BPLT setup, room checks, text checks |
 
 Every button sends its command as if it were typed (`_COMMAND`). You can type any command at the command line without using the ribbon.
@@ -94,7 +94,7 @@ Several tools read the drawing’s insertion units (`INSUNITS`, the UNITS comman
 | Tool | How units work |
 |---|---|
 | `ROOM`, `ROOMC`, `RAREA` | Read `INSUNITS`. Millimetres, centimetres, metres, feet, and inches are scaled. If units are unset, the command asks millimetres or metres and stores that on the drawing. Areas are square metres, or square feet when the drawing is in feet or inches. |
-| `MSETUP` (MEASURE) | Chosen once per AutoCAD session, stored in memory only. Metric: 1 unit = 1 metre, lengths round to 1 cm. Imperial: 1 unit = 1 inch, lengths round to 1/8 in. This choice is independent of `INSUNITS`. |
+| `MSETUP` (take-off) | Chosen once per AutoCAD session, stored in memory only. Metric: 1 unit = 1 metre, lengths round to 1 cm. Imperial: 1 unit = 1 inch, lengths round to 1/8 in. This choice is independent of `INSUNITS`. |
 | `POLYAREA` | Converts from `INSUNITS` into square metres or square feet. |
 | `HCWSTYLES` | Sizes text from a 2.5 mm plotted height at a typical sheet scale, converted into the drawing’s units. |
 | `BPLTSTART` | Sets the drawing to metres, decimal length units, 3 decimal places. |
@@ -125,9 +125,11 @@ Text height, floor prefix, and the rectangle toggle are on the Room Labels panel
 
 The old per-unit commands (`MBR`, `FBR`, `IBR`, and the rest) are removed. Use `ROOM`.
 
-### Measure (manual take-off)
+### Take-off (manual measurement)
 
-The Measure panel has one dropdown (Linear, Brickwork, Beams and lintels) and one **Measure** button, plus Columns, Schedule, Area, Slab, Wall paint, Ceiling, and Floor. Run `MSETUP` first so lengths and areas use the unit system you intend. Each take-off creates its layers if they are missing, isolates those layers while you select, then restores the layers it turned off. It labels the geometry, prints a summary, and draws a summary table on `MEASURE-TABLE`. The CSV is not written automatically: press **Export CSV** (`MEXPORT`) to save the last take-off next to the drawing (or in the temp folder if the drawing has no path).
+The tools were called Measure in earlier versions. Only the display names changed: the commands (`MLIN`, `MBRK`, `MPAINT`, `MSCHED`, …), the `MEASURE-*` layers and the data stored in drawings keep their names, so existing drawings and habits are unaffected.
+
+The Take-off panel has one dropdown (Linear, Brickwork, Beams and lintels) and one **Take-off** button, plus Columns, Schedule, Area, Slab, Wall paint, Ceiling, and Floor. Run `MSETUP` first so lengths and areas use the unit system you intend. Each take-off creates its layers if they are missing, isolates those layers while you select, then restores the layers it turned off. It labels the geometry, prints a summary, and draws a summary table on `MEASURE-TABLE`. The CSV is not written automatically: press **Export CSV** (`MEXPORT`) to save the last take-off next to the drawing (or in the temp folder if the drawing has no path).
 
 Walls, beams, and lintels of the same rounded length share one name (`FB-A`, `HB-A`, `BM-A`, `LT-A`, `L-A`). Each wall is numbered left to right, then bottom to top (`FB01`, `FB02`, …), and its openings are numbered along the wall in the same order: `FB01-D1`, `FB01-D2`, `FB02-D1`. Columns, doors, and windows of the same size share one schedule mark. Ceiling and floor outlines of the same area share one name.
 
@@ -139,7 +141,7 @@ Each row on the **Floors** tab records one floor: **FFL to FFL height** (finishe
 
 #### Schedule table
 
-The schedule is drawn on `MEASURE-TABLE` as separate tables, each with a title: Floor heights, Door and window schedule (doors then windows, each with a total count), Column schedule (with total) and Deduction map. Tick **Draw schedule on the sheet** in `MSCHED`, or use the **Insert Schedule** button (`MSCHEDTABLE`) at any time to pick a top-left point and draw the saved schedule. It uses the Measure text height.
+The schedule is drawn on `MEASURE-TABLE` as separate tables, each with a title: Floor heights, Door and window schedule (doors then windows, each with a total count), Column schedule (with total) and Deduction map. Tick **Draw schedule on the sheet** in `MSCHED`, or use the **Insert Schedule** button (`MSCHEDTABLE`) at any time to pick a top-left point and draw the saved schedule. It uses the take-off text height.
 
 #### Door and window blocks (deduction lines in blocks)
 
@@ -297,14 +299,14 @@ These buttons drive the same auto-unit engine as the **hcwCAD-KIT** room panel. 
 
 `HCWROOMLAYER` is registered and can be typed. It is not on the ribbon. It changes the label layer name for later labels.
 
-### Measure settings
+### Take-off settings
 
 | Command | What it does |
 |---|---|
 | `MSETUP` | Metric (1 unit = 1 m) or Imperial (1 unit = 1 inch) for the rest of the session, and creates the MEASURE layers. Schedule heights and sizes are metres, or feet. |
-| `MSHOW` | Turns back on only layers that a Measure command hid and did not restore. Layers you turned off yourself stay off. |
+| `MSHOW` | Turns back on only layers that a take-off command hid and did not restore. Layers you turned off yourself stay off. |
 | `MEXPORT` | Saves the most recent take-off as a CSV beside the drawing. The take-off is stored in the drawing, so this still works after restarting the host. |
-| `MCLEAR` | Erases MEASURE label and table objects. |
+| `MCLEAR` | Erases take-off label and table objects (layers `MEASURE-LABELS` and `MEASURE-TABLE`). |
 
 ### BPLT
 
