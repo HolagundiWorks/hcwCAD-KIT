@@ -24,6 +24,17 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 - **Live labels:** ID text follows a moved block only when a command runs; a reactor would move it at once.
 - **Pass-through wires:** a wire that runs straight through a symbol does not connect to it today (only vertices do).
 
+## Stairs
+
+`AECSTAIR` and `AECSTAIREDIT` are built (see the README). Still to do:
+
+- **Winders and quarter-space landings** for L and U types, and a half-space landing that is not the full width of both flights.
+- **Headroom and railing:** headroom line over the section, handrail height, balustrade and stringer detail.
+- **Reinforcement:** main and distribution bars in the waist slab and landing, with a bar schedule.
+- **Levels and floors:** more than one storey in one command, with a stair per floor.
+- **Section through an L or U as cut:** today an L is a developed section and a U returns over the first flight.
+- **Quantity:** concrete volume, shuttering area and finishes per stair, into the take-off export.
+
 ## Take-off
 
 - **Copy/array.** `INCARRAY` and `INCCOPY` deep-clone the selection once per copy. Cloning entities directly would be lighter but can lose block attributes. Measure on a large drawing before changing it.

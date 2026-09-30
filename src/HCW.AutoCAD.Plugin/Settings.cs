@@ -60,6 +60,17 @@ namespace HCW.AutoCAD.Plugin
             Entry("ElectricalLabels", "1", "Electrical: 1 writes each block's ID beside it as text (blocks with an ID attribute show it there instead); 0 turns the text off."),
             Entry("ElectricalLabelLayer", "EL-LABELS", "Electrical: layer for the ID text."),
             Entry("ElectricalTableTextMm", "2.5", "Electrical: plotted text height of the schedules, in millimetres."),
+            Entry("StairInputUnit", "Auto", "AECSTAIR: unit of the numbers you type: Auto (mm in a metric drawing, in in a feet or inches drawing), mm, cm, m, in or ft."),
+            Entry("StairPreferredRiseMm", "165", "AECSTAIR: the rise the automatic riser count aims for, in millimetres."),
+            Entry("StairMaxRiseMm", "190", "AECSTAIR check: largest rise, in millimetres."),
+            Entry("StairMinRiseMm", "100", "AECSTAIR check: smallest rise, in millimetres."),
+            Entry("StairMinGoingMm", "250", "AECSTAIR check: smallest going (tread), in millimetres."),
+            Entry("Stair2RGMinMm", "550", "AECSTAIR check: smallest value of 2 x rise + going, in millimetres."),
+            Entry("Stair2RGMaxMm", "700", "AECSTAIR check: largest value of 2 x rise + going, in millimetres."),
+            Entry("StairTextMm", "2.5", "AECSTAIR: plotted text height, in millimetres."),
+            Entry("StairDimOffsetMm", "10", "AECSTAIR: plotted distance from the drawing to its dimension lines, in millimetres."),
+            Entry("StairHatch", "1", "AECSTAIR: 1 hatches the RCC in the section, 0 leaves it plain."),
+            Entry("StairDimStyle", "HCW-WORKING", "AECSTAIR: dimension style; the current style is used when it does not exist."),
             Entry("AutoDimStyle", "HCW-WORKING", "AUTODIM: dimension style used; the current style is used when it does not exist.")
         };
 

@@ -33,3 +33,4 @@ using Autodesk.AutoCAD.Runtime;
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.AutoDimCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.SheetSetCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.ElectricalCommands))]
+[assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.StairCommands))]

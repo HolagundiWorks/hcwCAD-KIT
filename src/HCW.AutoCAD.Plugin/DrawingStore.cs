@@ -20,6 +20,17 @@ namespace HCW.AutoCAD.Plugin
             return lines;
         }
 
+        /// <summary>The record names in a dictionary, or none when the dictionary does not exist.</summary>
+        public static List<string> Keys(Transaction tr, Database db, string dictionary)
+        {
+            var keys = new List<string>();
+            var nod = (DBDictionary)tr.GetObject(db.NamedObjectsDictionaryId, OpenMode.ForRead);
+            if (!nod.Contains(dictionary)) return keys;
+            var dict = (DBDictionary)tr.GetObject(nod.GetAt(dictionary), OpenMode.ForRead);
+            foreach (DBDictionaryEntry entry in dict) keys.Add(entry.Key);
+            return keys;
+        }
+
         public static void Write(Transaction tr, Database db, string dictionary, string record, IEnumerable<string> lines)
         {
             var nod = (DBDictionary)tr.GetObject(db.NamedObjectsDictionaryId, OpenMode.ForRead);

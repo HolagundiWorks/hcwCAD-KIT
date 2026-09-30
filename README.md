@@ -8,7 +8,7 @@ On load the plugin adds two ribbon tabs and switches to **hcwCAD-KIT**:
 
 | Tab | Use it for |
 |---|---|
-| **hcwCAD-KIT** | Notes and sheet fields, room labels, take-off, electrical layout, area and text |
+| **hcwCAD-KIT** | Notes and sheet fields, room labels, take-off, electrical layout, stairs, area and text |
 | **hcwCAD-KIT Settings** | Layer creation, layer checks, BPLT setup, room checks, text checks |
 
 Every button sends its command as if it were typed (`_COMMAND`). You can type any command at the command line without using the ribbon.
@@ -276,6 +276,58 @@ Points within 5 mm merge, dimensions shorter than `AutoDimMinMm` plotted are ski
 **Short dimensions.** A dimension too short for its text has the text moved to a second or third row, with a leader, in the direction away from the plan (or into the room), so texts do not overprint. The width of a character is `AutoDimTextWidthFactor` of the text height.
 
 Dimensions are plain, not associative: move the walls and re-run the command after `AUTODIMCLEAR`.
+
+### RCC staircase (`AECSTAIR`)
+
+A parametric staircase generator, not a drawing macro: one set of inputs makes the plan and the section together, every dimension, count and level is worked out from them, and the inputs are kept in the drawing so one number can be changed later and both views redrawn.
+
+`AECSTAIR` asks, with the last values as defaults:
+
+| Input | Notes |
+|---|---|
+| Staircase type | **Single** flight, **Dog** (dog-legged), **U** (parallel flights with a well between), **L** (quarter turn) |
+| Stair width, FFL to FFL height | |
+| Total risers | Automatic (the count whose rise is nearest `StairPreferredRiseMm`, 165) or typed |
+| Risers in the first flight | The second flight gets the rest. Risers and treads are separate: a flight of *n* risers has *n − 1* treads, because the top step is the landing or floor |
+| Tread / going, landing length | The landing width is derived (two widths for dog-leg, two widths plus the well for U, one width for L) |
+| Waist slab thickness, landing / floor slab thickness | Drawn as actual concrete in the section |
+| Starting level, nosing | Starting level makes the section show real levels |
+| U only: well width, **Open** or **Closed** well | An open well is drawn with the void cross |
+| Second flight turns **Left** or **Right** | |
+| Plot scale | Text, dimension distances and hatch follow it |
+
+**Units.** You type lengths in the drawing's own units: millimetres in a metric drawing, inches in a feet or inches drawing (`StairInputUnit` in the settings can say `mm`, `cm`, `m`, `in` or `ft`). Everything is calculated in real millimetres and drawn in whatever units the drawing uses. Dimension text is written in the same way: whole millimetres, or feet and inches to 1/8 in. Levels read `+1.650` in a metric drawing and `+5'-5"` in an imperial one.
+
+**The calculation and the checks** are printed before anything is drawn:
+
+```
+STAIRCASE CALCULATION (DogLeg)
+  FFL to FFL            3300 mm
+  Total risers          20
+  Rise                  165 mm
+  Tread (going)         270 mm
+  2R + G                600 mm
+  Flight 1              10 risers, 9 treads, length 2430 mm
+  Flight 2              10 risers, 9 treads, length 2430 mm
+  Intermediate level    +1.650
+CHECKS
+  Rise                  165 mm         OK
+  2R + G                600 mm         OK
+  Riser consistency     20 equal risers   OK
+  Flight distribution   10 / 10        OK
+  FFL closure           3300 = 3300    OK
+  Landing length        1200 mm (width 1200 mm)   OK
+```
+
+The intermediate level is `start level + risers in the first flight × rise`. The tool reports OK or CHECK against limits held in the settings (`StairMaxRiseMm`, `StairMinGoingMm`, `Stair2RGMinMm`, `Stair2RGMaxMm` …); it never decides a stair is acceptable, so put your office's code criteria there. A stair that cannot be drawn (fewer than 2 risers in a flight) is refused. Choose **Generate** or **Change**.
+
+**What is drawn.** You pick the first riser (right-hand corner looking up the stair), the direction of the first flight, and the foot of the first riser for the section.
+- **Plan:** flight outlines, riser lines, nosing lines, landing, the well of a U, direction arrows marked UP, flight and landing labels with levels, and dimensions: width, "9 x 270 = 2430" for each flight, landing length and width.
+- **Section:** the RCC as real geometry: the steps, the soffit (the waist thickness measured perpendicular to the flight, so parallel to the nosing line), the landing slab, the upper floor slab and the lower floor slab, hatched. FFL, intermediate and upper level marks, and dimensions for one riser, one tread, the flight, the landing and floor to floor. The waist and landing thicknesses are labelled and the pitch is shown. A dog-leg or U section returns over the first flight; an L is developed in a straight line.
+
+Everything is on `AECSTAIR-*` layers (`AN-DIMS` for dimensions) and tagged with the stair's ID (`ST-01`).
+
+**`AECSTAIREDIT`** — select any part of a stair, change any input (for example FFL 3300 to 3600), and both views are erased and redrawn in the same place, with the same ID.
 
 ### Electrical layout
 

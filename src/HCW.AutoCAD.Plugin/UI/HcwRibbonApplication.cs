@@ -51,6 +51,7 @@ namespace HCW.AutoCAD.Plugin.UI
             toolsTab.Panels.Add(BuildRoomToolsPanel());
             toolsTab.Panels.Add(BuildMeasurePanel());
             toolsTab.Panels.Add(BuildElectricalPanel());
+            toolsTab.Panels.Add(BuildStairPanel());
             toolsTab.Panels.Add(BuildAreaTextPanel());
 
             var settingsTab = new RibbonTab { Title = "hcwCAD-KIT Settings", Id = SettingsTabId };
@@ -179,6 +180,14 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("MEXPORT", "Export", "document--export", "Save the last take-off as CSV, or every take-off as one Excel workbook"),
                 ("MEXPORTX", "Export Excel", "document--export", "Save every take-off as one Excel workbook, with a Bill sheet for rated take-offs"),
                 ("MCLEAR", "Clear Labels", "clean", "Erase take-off label and table objects"));
+            return Wrap(src);
+        }
+
+        private RibbonPanel BuildStairPanel()
+        {
+            var src = NewSource("Stairs");
+            AddLarge(src, "AECSTAIR", "RCC\nStair", "floorplan", "Parametric RCC staircase: plan and section from one set of inputs (single, dog-legged, U or L)");
+            AddLarge(src, "AECSTAIREDIT", "Edit\nStair", "tag--edit", "Change the inputs of a staircase made by AECSTAIR and redraw its plan and section");
             return Wrap(src);
         }
 

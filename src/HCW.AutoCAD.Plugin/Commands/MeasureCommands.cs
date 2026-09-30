@@ -201,7 +201,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 + ", ceiling " + LayCeil + ", floor " + LayFlor + ".");
         }
 
-        private static bool Prepare()
+        internal static bool Prepare()
         {
             var db = Util.Db;
             var ed = Util.Ed;

@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using HCW.AutoCAD.Plugin.Logic;
 using Xunit;
@@ -882,6 +883,328 @@ namespace HCW.Logic.Tests
         public void BlockNameMatching(string name, string pattern, bool expected)
         {
             Assert.Equal(expected, ElectricalNumbering.NameMatches(name, new[] { pattern }));
+        }
+    }
+}
+
+namespace HCW.Logic.Tests
+{
+    public class StairCalcTests
+    {
+        private static StairSpec Dog() => new StairSpec { Kind = StairKind.DogLeg, Width = 1200, FloorHeight = 3300, TotalRisers = 20, FirstFlightRisers = 10, Going = 270, LandingLength = 1200 };
+
+        [Fact]
+        public void TheWorkedExample()
+        {
+            var c = StairCalc.Calculate(Dog());
+            Assert.Equal(165.0, c.Rise, 6);
+            Assert.Equal(600.0, c.TwoRPlusG, 6);
+            Assert.Equal(new[] { 10, 10 }, c.FlightRisers);
+            Assert.Equal(new[] { 9, 9 }, c.FlightTreads);
+            Assert.Equal(2430.0, c.FlightLengths[0], 6);
+            Assert.Equal(1650.0, c.LandingLevel, 6);
+            Assert.Equal(3300.0, c.TopLevel, 6);
+            Assert.True(c.CanDraw);
+            Assert.All(c.Checks, x => Assert.True(x.Ok, x.Name));
+        }
+
+        [Fact]
+        public void LandingLevelFollowsTheFirstFlight()
+        {
+            var s = Dog();
+            s.FirstFlightRisers = 9;
+            var c = StairCalc.Calculate(s);
+            Assert.Equal(9 * 165.0, c.LandingLevel, 6);
+            Assert.False(c.Checks.Single(x => x.Name == "Flight distribution").Ok); // 9 / 11 differs by two
+        }
+
+        [Fact]
+        public void UnequalFlightsAreFlagged()
+        {
+            var s = Dog();
+            s.FirstFlightRisers = 8; // 8 / 12
+            var c = StairCalc.Calculate(s);
+            Assert.False(c.Checks.Single(x => x.Name == "Flight distribution").Ok);
+            Assert.True(c.CanDraw);
+        }
+
+        [Fact]
+        public void SteepRiseFailsTheOfficeLimit()
+        {
+            var s = Dog();
+            s.FloorHeight = 4600; // 230 mm rise
+            var c = StairCalc.Calculate(s);
+            Assert.False(c.Checks.Single(x => x.Name == "Rise").Ok);
+            Assert.False(c.Checks.Single(x => x.Name == "2R + G").Ok);
+        }
+
+        [Fact]
+        public void LimitsAreConfigurable()
+        {
+            var s = Dog();
+            s.FloorHeight = 4200; // 210 mm rise, 2R+G 690
+            var c = StairCalc.Calculate(s, new StairLimits { MaxRise = 220, Max2RG = 720 });
+            Assert.True(c.Checks.Single(x => x.Name == "Rise").Ok);
+            Assert.True(c.Checks.Single(x => x.Name == "2R + G").Ok);
+        }
+
+        [Fact]
+        public void OneRiserFlightCannotBeDrawn()
+        {
+            var s = Dog();
+            s.FirstFlightRisers = 1;
+            Assert.False(StairCalc.Calculate(s).CanDraw);
+        }
+
+        [Fact]
+        public void SingleFlightHasNoLandingLevel()
+        {
+            var s = new StairSpec { Kind = StairKind.Single, TotalRisers = 20 };
+            var c = StairCalc.Calculate(s);
+            Assert.Equal(new[] { 20 }, c.FlightRisers);
+            Assert.Equal(19 * 270.0, c.FlightLengths[0], 6);
+            Assert.Equal(c.TopLevel, c.LandingLevel, 6);
+        }
+
+        [Fact]
+        public void LandingWidthPerType()
+        {
+            var s = Dog();
+            Assert.Equal(2400.0, StairCalc.Calculate(s).LandingWidth, 6);
+            s.Kind = StairKind.U; s.WellWidth = 200;
+            Assert.Equal(2600.0, StairCalc.Calculate(s).LandingWidth, 6);
+            s.Kind = StairKind.L;
+            Assert.Equal(1200.0, StairCalc.Calculate(s).LandingWidth, 6);
+        }
+
+        [Fact]
+        public void AutoRisersFromThePreferredRise()
+        {
+            Assert.Equal(20, StairSpec.AutoRisers(3300, 165, true));
+            Assert.Equal(18, StairSpec.AutoRisers(3000, 165, true)); // 18.18
+            Assert.Equal(10, StairSpec.AutoFirstFlight(19) - 0);
+            Assert.Equal(10, StairSpec.AutoFirstFlight(20));
+        }
+
+        [Fact]
+        public void SpecRoundTripsThroughLines()
+        {
+            var s = Dog();
+            s.Kind = StairKind.U; s.WellWidth = 175.5; s.OpenWell = false; s.TurnLeft = false; s.PlanAngleDegrees = 45; s.PlanX = 12345.678; s.StartLevel = -150;
+            var back = StairSpec.FromLines(s.ToLines());
+            Assert.Equal(StairKind.U, back.Kind);
+            Assert.Equal(175.5, back.WellWidth, 6);
+            Assert.False(back.OpenWell);
+            Assert.False(back.TurnLeft);
+            Assert.Equal(45.0, back.PlanAngleDegrees, 6);
+            Assert.Equal(12345.678, back.PlanX, 6);
+            Assert.Equal(-150.0, back.StartLevel, 6);
+            Assert.Equal(20, back.TotalRisers);
+        }
+    }
+
+    public class StairFormatTests
+    {
+        [Theory]
+        [InlineData(0.0, "±0.000")]
+        [InlineData(1650.0, "+1.650")]
+        [InlineData(-150.0, "-0.150")]
+        [InlineData(3300.0, "+3.300")]
+        public void MetricLevels(double mm, string expected) => Assert.Equal(expected, StairFormat.Level(mm, false));
+
+        [Fact]
+        public void MetricLengthsAreWholeMillimetres() => Assert.Equal("2430", StairFormat.Length(2430.4, false));
+
+        [Theory]
+        [InlineData(1200.0, "3'-11 1/4\"")]
+        [InlineData(304.8, "1'-0\"")]
+        [InlineData(152.4, "6\"")]
+        [InlineData(0.0, "0\"")]
+        public void ImperialLengths(double mm, string expected) => Assert.Equal(expected, StairFormat.Length(mm, true));
+
+        [Theory]
+        [InlineData("mm", 1.0)]
+        [InlineData("m", 1000.0)]
+        [InlineData("in", 25.4)]
+        [InlineData("ft", 304.8)]
+        [InlineData("furlong", 0.0)]
+        public void InputUnits(string unit, double expected) => Assert.Equal(expected, StairFormat.MmPer(unit), 6);
+    }
+}
+
+namespace HCW.Logic.Tests
+{
+    public class StairGeometryTests
+    {
+        private static (StairSpec, StairCalc) Make(StairKind kind, int first = 10, int total = 20)
+        {
+            var s = new StairSpec { Kind = kind, Width = 1200, FloorHeight = 3300, TotalRisers = total, FirstFlightRisers = first, Going = 270, LandingLength = 1200, WaistThickness = 150, LandingThickness = 150 };
+            return (s, StairCalc.Calculate(s));
+        }
+
+        private static readonly StairOptions Opt = new StairOptions();
+
+        private static bool Crosses(PlanPoint a, PlanPoint b, PlanPoint c, PlanPoint d)
+        {
+            Func<PlanPoint, PlanPoint, PlanPoint, double> cross = (p, q, r) => (q.X - p.X) * (r.Y - p.Y) - (q.Y - p.Y) * (r.X - p.X);
+            double d1 = cross(a, b, c), d2 = cross(a, b, d), d3 = cross(c, d, a), d4 = cross(c, d, b);
+            return ((d1 > 1e-6 && d2 < -1e-6) || (d1 < -1e-6 && d2 > 1e-6)) && ((d3 > 1e-6 && d4 < -1e-6) || (d3 < -1e-6 && d4 > 1e-6));
+        }
+
+        /// <summary>No two edges of a closed outline cross each other (edges that only share an end point are fine).</summary>
+        private static bool IsSimple(GPoly p)
+        {
+            int n = p.Pts.Count;
+            for (int i = 0; i < n; i++)
+                for (int j = i + 1; j < n; j++)
+                {
+                    if (j == i + 1 || (i == 0 && j == n - 1)) continue;
+                    if (Crosses(p.Pts[i], p.Pts[(i + 1) % n], p.Pts[j], p.Pts[(j + 1) % n])) return false;
+                }
+            return true;
+        }
+
+        [Theory]
+        [InlineData(StairKind.Single)]
+        [InlineData(StairKind.DogLeg)]
+        [InlineData(StairKind.U)]
+        [InlineData(StairKind.L)]
+        public void SectionOutlinesAreSimpleAndReachTheFloorLevels(StairKind kind)
+        {
+            var (s, c) = Make(kind, kind == StairKind.Single ? 20 : 10);
+            var d = StairGeometry.Section(s, c, Opt);
+            foreach (var poly in d.Polys.Where(p => p.Layer == "SECTION")) Assert.True(IsSimple(poly), kind + " outline crosses itself");
+            double top = d.Polys.Where(p => p.Layer == "SECTION").SelectMany(p => p.Pts).Max(p => p.Y);
+            Assert.Equal(3300.0, top, 6);
+        }
+
+        [Fact]
+        public void DogLegSectionLevelsAndCounts()
+        {
+            var (s, c) = Make(StairKind.DogLeg);
+            var d = StairGeometry.Section(s, c, Opt);
+            var flights = d.Polys.Where(p => p.Layer == "SECTION").ToList();
+            Assert.Equal(3, flights.Count); // lower slab, flight 1 with landing, flight 2 with upper slab
+            // the landing top is at the level of the first flight
+            Assert.Contains(flights[1].Pts, p => Math.Abs(p.Y - 1650) < 1e-6 && Math.Abs(p.X - (9 * 270 + 1200)) < 1e-6);
+            // flight 2 starts on the landing and returns towards the start: its top nosing is at x = 9*270 - 9*270 = 0
+            Assert.Contains(flights[2].Pts, p => Math.Abs(p.Y - 3300) < 1e-6 && Math.Abs(p.X) < 1e-6);
+            Assert.Contains(d.Texts, t => t.Text.StartsWith("LANDING +1.650"));
+            Assert.Contains(d.Texts, t => t.Text == "FFL +3.300");
+            Assert.Contains(d.Texts, t => t.Text == "FFL ±0.000");
+        }
+
+        [Fact]
+        public void EveryRiserAndTreadAppearsInTheFlightOutline()
+        {
+            var (s, c) = Make(StairKind.Single, 20, 20);
+            var d = StairGeometry.Section(s, c, Opt);
+            var flight = d.Polys.Where(p => p.Layer == "SECTION").ElementAt(1);
+            // 20 risers: the outline steps up 20 times by 165
+            var ups = 0;
+            for (int i = 0; i + 1 < flight.Pts.Count; i++)
+                if (Math.Abs(flight.Pts[i + 1].X - flight.Pts[i].X) < 1e-9 && Math.Abs(flight.Pts[i + 1].Y - flight.Pts[i].Y - 165) < 1e-6) ups++;
+            Assert.Equal(20, ups);
+        }
+
+        [Fact]
+        public void SoffitIsTheWaistThicknessBelowThePitchLine()
+        {
+            var (s, c) = Make(StairKind.Single, 20, 20);
+            var d = StairGeometry.Section(s, c, Opt);
+            var flight = d.Polys.Where(p => p.Layer == "SECTION").ElementAt(1);
+            // the two soffit points are the last two before closing; the perpendicular distance from the nosing line is 150
+            double theta = Math.Atan2(165, 270);
+            var pts = flight.Pts;
+            var a = pts[pts.Count - 1]; var b = pts[pts.Count - 2];
+            double slope = (b.Y - a.Y) / (b.X - a.X);
+            Assert.Equal(Math.Tan(theta), slope, 6);
+            // vertical gap between the nosing line (through (0,165)) and the soffit is 150 / cos(theta)
+            double nosingY = 165 + slope * (a.X - 0);
+            Assert.Equal(150.0 / Math.Cos(theta), nosingY - a.Y, 6);
+        }
+
+        [Theory]
+        [InlineData(StairKind.Single)]
+        [InlineData(StairKind.DogLeg)]
+        [InlineData(StairKind.U)]
+        [InlineData(StairKind.L)]
+        public void PlanCountsMatchTheSpec(StairKind kind)
+        {
+            var (s, c) = Make(kind, kind == StairKind.Single ? 20 : 10);
+            var d = StairGeometry.Plan(s, c, Opt);
+            int flights = kind == StairKind.Single ? 1 : 2;
+            // interior riser lines: risers - 2 per flight
+            Assert.Equal(kind == StairKind.Single ? 18 : 16, d.Polys.Count(p => p.Layer == "TREAD"));
+            Assert.Equal(flights, d.Polys.Count(p => p.Layer == "ARROW" && p.Pts.Count == 2) / 3);
+            Assert.All(d.Polys.Where(p => p.Closed), p => Assert.True(IsSimple(p)));
+        }
+
+        [Fact]
+        public void PlanFlightLengthDimensionSaysTreadsTimesGoing()
+        {
+            var (s, c) = Make(StairKind.DogLeg);
+            var d = StairGeometry.Plan(s, c, Opt);
+            Assert.Contains(d.Dims, x => x.Text == "9 x 270 = 2430");
+            Assert.Contains(d.Dims, x => x.Text == "1200"); // width and landing length
+            Assert.Contains(d.Dims, x => x.Text == "2400"); // landing width
+        }
+
+        [Fact]
+        public void UStairKeepsTheWellBetweenTheFlights()
+        {
+            var (s, c) = Make(StairKind.U);
+            s.WellWidth = 200; s.OpenWell = true;
+            c = StairCalc.Calculate(s);
+            var d = StairGeometry.Plan(s, c, Opt);
+            var well = d.Polys.Where(p => p.Layer == "WELL").ToList();
+            Assert.Equal(3, well.Count); // outline and the two diagonals of an open well
+            var outline = well.First(p => p.Closed);
+            Assert.Equal(1200.0, outline.Pts.Min(p => p.Y), 6);
+            Assert.Equal(1400.0, outline.Pts.Max(p => p.Y), 6);
+            // flight 2 starts beyond the well
+            Assert.Equal(2600.0, d.Polys.Where(p => p.Layer == "PLAN").SelectMany(p => p.Pts).Max(p => p.Y), 6);
+        }
+
+        [Fact]
+        public void ClosedWellHasNoCross()
+        {
+            var (s, c) = Make(StairKind.U);
+            s.OpenWell = false;
+            var d = StairGeometry.Plan(s, c, Opt);
+            Assert.Single(d.Polys.Where(p => p.Layer == "WELL"));
+        }
+
+        [Fact]
+        public void RightTurnMirrorsTheSecondFlight()
+        {
+            var (s, c) = Make(StairKind.DogLeg);
+            var left = StairGeometry.Plan(s, c, Opt);
+            s.TurnLeft = false;
+            var right = StairGeometry.Plan(s, c, Opt);
+            Assert.Equal(2400.0, left.Polys.Where(p => p.Layer == "PLAN").SelectMany(p => p.Pts).Max(p => p.Y), 6);
+            Assert.Equal(0.0, right.Polys.Where(p => p.Layer == "PLAN").SelectMany(p => p.Pts).Min(p => p.Y) + 1200.0, 6); // second flight now at v -1200..0
+        }
+
+        [Fact]
+        public void NosingLinesAreOptional()
+        {
+            var (s, c) = Make(StairKind.Single, 20, 20);
+            s.Nosing = 0;
+            Assert.Empty(StairGeometry.Plan(s, c, Opt).Polys.Where(p => p.Layer == "NOSING"));
+            s.Nosing = 25;
+            Assert.Equal(19, StairGeometry.Plan(s, c, Opt).Polys.Count(p => p.Layer == "NOSING"));
+        }
+
+        [Fact]
+        public void LStairPlanTurnsTheSecondFlightNinetyDegrees()
+        {
+            var (s, c) = Make(StairKind.L);
+            var d = StairGeometry.Plan(s, c, Opt);
+            var all = d.Polys.Where(p => p.Layer == "PLAN").SelectMany(p => p.Pts).ToList();
+            // flight 1 runs along u for 9 treads; flight 2 runs along v for 9 treads beyond the width
+            Assert.Equal(9 * 270.0 + 1200.0, all.Max(p => p.X), 6);
+            Assert.Equal(1200.0 + 9 * 270.0, all.Max(p => p.Y), 6);
         }
     }
 }
