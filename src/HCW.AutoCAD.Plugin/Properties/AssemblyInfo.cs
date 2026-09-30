@@ -30,3 +30,5 @@ using Autodesk.AutoCAD.Runtime;
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.IncArrayCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.LayoutRenumberCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.DraftExtraCommands))]
+[assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.AutoDimCommands))]
+[assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.SheetSetCommands))]
