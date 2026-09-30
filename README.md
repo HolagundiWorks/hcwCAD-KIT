@@ -57,7 +57,7 @@ The setup programs are written to `dist\`. Uninstall one host from Windows Setti
 
 ## Build
 
-From the `HCW-AutoCAD-Plugin` folder. `dotnet build` is the command that works with the .NET SDK on this project (the Visual Studio Build Tools MSBuild does not resolve `Microsoft.NET.Sdk`).
+From the repository root. `dotnet build` is the command that works with the .NET SDK on this project (the Visual Studio Build Tools MSBuild does not resolve `Microsoft.NET.Sdk`).
 
 AutoCAD:
 
@@ -85,7 +85,16 @@ The default path is `C:\Program Files\ZWSOFT\ZWCAD 2026\`, or the `ZWCAD_INSTALL
 
 Building `src\HCW.AutoCAD.Plugin.sln` builds AutoCAD, BricsCAD, and ZWCAD. `build\Package-Installers.ps1` builds those three and compiles a setup program for each.
 
-Icons are IBM Carbon Design System PNGs (Apache-2.0), embedded in the DLL. They are tinted for the current ribbon theme so the glyphs stay visible on the light theme and the dark theme. The command-to-icon map is `src/HCW.AutoCAD.Plugin/Resources/icon_map.json`. No separate icon files need to be shipped. Build folders (`bin`, `obj`) and the compiled setup programs (`dist`) are not part of the repository.
+Checks that need no CAD install:
+
+```
+dotnet test tests\HCW.Logic.Tests\HCW.Logic.Tests.csproj
+dotnet build build\CompileCheck.csproj
+```
+
+The first runs the unit tests for the CAD-free logic in `src\HCW.AutoCAD.Plugin\Logic`. The second compiles the plugin sources against the public AutoCAD.NET reference package. GitHub Actions runs both on every push and pull request. Neither replaces testing in the host.
+
+Icons are IBM Carbon Design System PNGs (Apache-2.0), embedded in the DLL. They are tinted for the current ribbon theme so the glyphs stay visible on the light theme and the dark theme. Each ribbon button names its icon in `HcwRibbonApplication.cs`. No separate icon files need to be shipped. Build folders (`bin`, `obj`) and the compiled setup programs (`dist`) are not part of the repository.
 
 ## Drawing units
 
@@ -168,8 +177,8 @@ Each row on the **Doors and windows** tab is one schedule entry:
 | Name | `W1` | The schedule name. Must be unique. |
 | Door or window | `Window` | Drop-down. Filled from the name when you type it (`W…` is a window, otherwise a door). |
 | Type | `UPVC` | Drop-down; the list follows the kind. Doors: Wood, Flush door, UPVC, Aluminium, WPC, Fabricated. Windows: Wood, UPVC, Aluminium, System aluminium. Changing the kind reloads the list. A type saved by an earlier version stays selectable. |
-| Length | `1.2` | Size along the wall, in metres (feet when Imperial). This is the deducted length. |
-| Height | `1.2` | Opening height, in metres (feet when Imperial). |
+| Length | `1.2` | Size along the wall, in metres (feet when the drawing is in feet or inches). This is the deducted length. |
+| Height | `1.2` | Opening height, in metres (feet when the drawing is in feet or inches). |
 | Sill | `0.9` | Optional, for windows. When set, Apply checks that lintel bottom − sill equals the height (within 50 mm / 2 in). |
 | Lintel bottom | `2.4` | Optional. Blank uses the floor's lintel bottom height; a value applies to this opening only and is shown in the schedule table. |
 | Block name | `WIN-SLIDER` | Drawing block(s) that stand for this entry (see above). |
@@ -178,13 +187,13 @@ Each row on the **Doors and windows** tab is one schedule entry:
 Deduction map logic:
 
 1. `MLIN`, `MBRK` and `MBML` label every deduction line as `<wall>-D<n>`: the wall it sits on (`FB01`) and its opening number on that wall (`FB01-D1`) and store its measured length on the label.
-2. On the **Deduction map** tab, each deduction is one row with its measured length. The name of the schedule entry whose length is closest is pre-filled, provided it is within 50 mm (2 in when Imperial): a deduction measured at `1.00` m suggests a `1.0` m entry, and so does `1.04`. If two entries are equally close, or none is in range, the cell stays empty and you choose. Type or change any name yourself.
+2. On the **Deduction map** tab, each deduction is one row with its measured length. The name of the schedule entry whose length is closest is pre-filled, provided it is within 50 mm (2 in when the drawing is in feet or inches): a deduction measured at `1.00` m suggests a `1.0` m entry, and so does `1.04`. If two entries are equally close, or none is in range, the cell stays empty and you choose. Type or change any name yourself.
 3. Deduction names are matched loosely, so case, spaces, hyphens and leading zeros do not matter: `FB01-D1`, `fb01-d1` and `FB 01 D-1` are the same deduction. Drawings labelled with the older `FB D-01` style still map.
 4. On **Apply**, each mapped label is rewritten to `<name> <type>` (`FB01-D1` becomes `W1 UPVC`). The count of each entry becomes the number of deductions mapped to it.
 5. `MPAINT` then deducts the entry's length × height for every mapped opening. An unmapped deduction falls back to its measured length × the wall height.
 6. Apply prints a warning when a name is used twice, when a map points to a name that is not in the schedule, or when the measured deduction length differs from the entry’s length by more than that tolerance.
 
-**Group same size** merges entries with the same kind, type, length and height onto one row before you apply. Schedule sizes are metres, or feet when Imperial is set.
+**Group same size** merges entries with the same kind, type, length and height onto one row before you apply. Schedule sizes are metres, or feet when the drawing is in feet or inches.
 
 Draw the geometry on the layers below before you run the command. Deduction geometry must be close to the line it belongs to (you are asked for a match tolerance; default 0.01 drawing units).
 
@@ -217,7 +226,7 @@ Walls are numbered `FB01`, `FB02` … left to right (then bottom to top) by defa
 
 ### Settings file
 
-`HCWSETTINGS` creates and opens `%APPDATA%\hcwCAD-KIT\settings.ini`. It holds text heights, tolerances, wall numbering, default floor and opening heights, and the `AUTODIM` distances. Each key has a comment. Restart the host after editing.
+`HCWSETTINGS` creates and opens `%APPDATA%\hcwCAD-KIT\settings.ini`. It holds the take-off label height (`TakeoffTextHeightMm`, default 125) and deduction tolerance (`DeductionToleranceMm`, default 10), the deduction-map suggestion tolerance, wall numbering, default floor and opening heights, and the `AUTODIM` distances. Each key has a comment. Restart the host after editing.
 
 ### Sheet set
 
@@ -286,7 +295,7 @@ These commands work on the HCW v4.0 names (`AN-`, `A-`, `I-`, `E-`, `P-`, `S-`, 
 
 ### Room tool settings
 
-These buttons drive the same auto-unit engine as the **hcwCAD-KIT** room panel. Typed `MTH`, `FTH`, `ITH`, and the other prefixed commands change only that prefix’s engine.
+These buttons drive the same auto-unit engine as the **hcwCAD-KIT** room panel. 
 
 | Command | What it does |
 |---|---|
@@ -300,7 +309,7 @@ These buttons drive the same auto-unit engine as the **hcwCAD-KIT** room panel. 
 | `HCWROOMCHECK` | Reports whether rectangle-layer polylines are closed. |
 | `HCWROOMSCHEDULE` | Writes `RoomSchedule-<unit>.csv` beside the drawing from the rooms labelled in this drawing. The room log is saved in the DWG. |
 | `HCWROOMTABLE` | Draws the room schedule (number, room, size, area, total) as a table at a picked point. |
-| `HCWROOMTOTAL` | Sums session-log areas. You can filter by a fragment of the room name (`BEDROOM` matches `GF BEDROOM`). |
+| `HCWROOMTOTAL` | Sums the areas of the rooms labelled in this drawing. You can filter by a fragment of the room name (`BEDROOM` matches `GF BEDROOM`). |
 | `HCWROOMHELP` | Prints the detected unit and reminds you that UNITS is how you change it. |
 
 `HCWROOMLAYER` is registered and can be typed. It is not on the ribbon. It changes the label layer name for later labels.

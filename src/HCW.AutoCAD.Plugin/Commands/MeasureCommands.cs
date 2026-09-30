@@ -70,7 +70,6 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         // ---- unit-aware rounding / formatting (m:rnd / m:m / m:area-from-rnd / m:r2) ----
 
-        public static int RndPublic(double v) => Rnd(v);
 
         /// <summary>Schedule sizes are metres, or feet when the drawing is in feet or inches.</summary>
         public static int RndSchedule(double displayLength)

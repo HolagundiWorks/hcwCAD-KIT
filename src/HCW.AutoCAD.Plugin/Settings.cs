@@ -27,8 +27,6 @@ namespace HCW.AutoCAD.Plugin
             }
         }
 
-        public static void Reload() { _ini = null; }
-
         public static string Get(string key, string fallback) => Ini.Get(key, fallback);
         public static double GetDouble(string key, double fallback) => Ini.GetDouble(key, fallback);
         public static int GetInt(string key, int fallback) => Ini.GetInt(key, fallback);
