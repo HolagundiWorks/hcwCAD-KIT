@@ -41,6 +41,10 @@ namespace HCW.AutoCAD.Plugin.Commands
             public readonly List<Point3d> Jambs = new List<Point3d>();
             public readonly List<double> GridX = new List<double>();
             public readonly List<double> GridY = new List<double>();
+            /// <summary>Extents of each loose piece of window and door geometry, grouped into openings once the units are known.</summary>
+            public readonly List<Box> WindowBoxes = new List<Box>();
+            public readonly List<WallSegment> WallSegments = new List<WallSegment>();
+            public int GeometryOpenings;
             public int Skipped;
         }
 
@@ -76,6 +80,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             double mm = ResolveUnitsPerMm(ed, Math.Max(spanX, spanY));
             if (mm <= 0) return;
 
+            FinishOpenings(plan, mm);
             double step = Settings.GetDouble("AutoDimStepMm", 10) * _scale * mm;
             double gap = Settings.GetDouble("AutoDimGapMm", 12) * _scale * mm;
             var input = new PlanInput
@@ -96,7 +101,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             int repeated;
             var chains = DimPlanner.Chains(input, sides, out repeated);
 
-            ed.WriteMessage("\nAUTODIM: read " + plan.Structural.Count + " wall point(s), " + plan.Jambs.Count + " opening point(s), "
+            ed.WriteMessage("\nAUTODIM: read " + plan.Structural.Count + " wall point(s), " + plan.Jambs.Count + " opening point(s)"
+                + (plan.GeometryOpenings > 0 ? " (" + plan.GeometryOpenings + " opening(s) grouped from window and door geometry)" : "") + ", "
                 + (plan.GridX.Count + plan.GridY.Count) + " grid line(s); plan " + spanX.ToString("0.##", CultureInfo.InvariantCulture)
                 + " x " + spanY.ToString("0.##", CultureInfo.InvariantCulture) + " drawing units.");
             if (chains.Count == 0)
@@ -172,6 +178,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             double roomSpan = rooms.Max(r => Math.Max(r.Max(p => p.X) - r.Min(p => p.X), r.Max(p => p.Y) - r.Min(p => p.Y)));
             double mm = ResolveUnitsPerMm(ed, roomSpan, 1000.0);
             if (mm <= 0) return;
+            FinishOpenings(plan, mm);
             double step = Settings.GetDouble("AutoDimStepMm", 10) * _scale * mm;
             double inset = Settings.GetDouble("AutoDimRoomInsetMm", 8) * _scale * mm;
             double minLen = Settings.GetDouble("AutoDimMinMm", 3) * _scale * mm;
@@ -590,12 +597,25 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (walls.Contains(layer))
                 {
                     var curve = ent as Curve;
-                    if (curve != null) Collect(curve, plan.Structural, ref plan.Skipped);
+                    if (curve != null)
+                    {
+                        Collect(curve, plan.Structural, ref plan.Skipped);
+                        AddSegments(curve, plan.WallSegments);
+                    }
                 }
                 else if (windows.Contains(layer))
                 {
+                    // loose window and door geometry: kept as boxes, grouped into one opening each by FinishOpenings
                     var curve = ent as Curve;
-                    if (curve != null) Collect(curve, plan.Jambs, ref plan.Skipped);
+                    if (curve != null)
+                    {
+                        try
+                        {
+                            var e = curve.GeometricExtents;
+                            plan.WindowBoxes.Add(new Box(e.MinPoint.X, e.MinPoint.Y, e.MaxPoint.X, e.MaxPoint.Y));
+                        }
+                        catch { }
+                    }
                 }
                 else if (columns.Contains(layer))
                 {
@@ -618,6 +638,46 @@ namespace HCW.AutoCAD.Plugin.Commands
                 Collect(found.Curve, plan.Jambs, ref plan.Skipped);
 
             GatherFromDrawing(tr, db, plan);
+        }
+
+        /// <summary>
+        /// Groups the loose window and door geometry (frame lines, sills, leaves, swing arcs) into one opening each and adds
+        /// each opening's two outer edges along its wall as jamb points. Needs the real-size scale, so it runs after the
+        /// drawing units are settled. Pieces within <c>AutoDimOpeningJoinMm</c> of each other belong to one opening.
+        /// </summary>
+        private static void FinishOpenings(Plan plan, double mm)
+        {
+            if (plan.WindowBoxes.Count == 0) return;
+            double join = Settings.GetDouble("AutoDimOpeningJoinMm", 20) * mm;
+            foreach (var opening in OpeningClusters.Cluster(plan.WindowBoxes, join))
+            {
+                bool horizontal = OpeningClusters.InHorizontalWall(opening, plan.WallSegments);
+                foreach (var p in OpeningClusters.Jambs(opening, horizontal))
+                    plan.Jambs.Add(new Point3d(p.X, p.Y, 0));
+                plan.GeometryOpenings++;
+            }
+            plan.WindowBoxes.Clear();
+        }
+
+        /// <summary>Straight segments of a wall line or polyline, for finding which way the nearest wall runs.</summary>
+        private static void AddSegments(Curve curve, List<WallSegment> into)
+        {
+            var line = curve as Line;
+            if (line != null)
+            {
+                into.Add(new WallSegment(line.StartPoint.X, line.StartPoint.Y, line.EndPoint.X, line.EndPoint.Y));
+                return;
+            }
+            var poly = curve as Polyline;
+            if (poly == null) return;
+            int n = poly.NumberOfVertices;
+            int last = poly.Closed ? n : n - 1;
+            for (int i = 0; i < last; i++)
+            {
+                if (poly.GetSegmentType(i) != SegmentType.Line) continue;
+                var a = poly.GetPoint3dAt(i); var b = poly.GetPoint3dAt((i + 1) % n);
+                into.Add(new WallSegment(a.X, a.Y, b.X, b.Y));
+            }
         }
 
         private static void AddCorners(BlockReference block, List<Point3d> into)

@@ -584,3 +584,88 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class OpeningClusterTests
+    {
+        [Fact]
+        public void FrameLinesOfOneWindowBecomeOneOpening()
+        {
+            // three lines along a 1.2 m window in a 0.23 wall at y 0..0.23, and its two short jamb lines
+            var boxes = new[]
+            {
+                new Box(2.0, 0.00, 3.2, 0.00), new Box(2.0, 0.115, 3.2, 0.115), new Box(2.0, 0.23, 3.2, 0.23),
+                new Box(2.0, 0.00, 2.0, 0.23), new Box(3.2, 0.00, 3.2, 0.23)
+            };
+            var openings = OpeningClusters.Cluster(boxes, 0.02);
+            Assert.Single(openings);
+            Assert.Equal(2.0, openings[0].MinX, 6);
+            Assert.Equal(3.2, openings[0].MaxX, 6);
+        }
+
+        [Fact]
+        public void SeparateOpeningsStaySeparate()
+        {
+            var boxes = new[] { new Box(2, 0, 3.2, 0.23), new Box(6, 0, 7, 0.23) };
+            Assert.Equal(2, OpeningClusters.Cluster(boxes, 0.02).Count);
+        }
+
+        [Fact]
+        public void TouchingPiecesMerge()
+        {
+            var boxes = new[] { new Box(2, 0, 3, 0.23), new Box(3.005, 0, 4, 0.23) };
+            var openings = OpeningClusters.Cluster(boxes, 0.02);
+            Assert.Single(openings);
+            Assert.Equal(4.0, openings[0].MaxX, 6);
+        }
+
+        [Fact]
+        public void DoorWithSwingKeepsItsWidthAlongTheWall()
+        {
+            // leaf and swing arc of a 0.9 door in a horizontal wall: a 0.9 x 0.9 box
+            var boxes = new[] { new Box(1.0, 0.0, 1.9, 0.0), new Box(1.0, 0.0, 1.0, 0.9), new Box(1.0, 0.0, 1.9, 0.9) };
+            var door = OpeningClusters.Cluster(boxes, 0.02).Single();
+            Assert.Equal(0.9, door.Width, 6);
+            var walls = new[] { new WallSegment(0, 0, 10, 0), new WallSegment(0, 8, 10, 8) };
+            Assert.True(OpeningClusters.InHorizontalWall(door, walls));
+            var jambs = OpeningClusters.Jambs(door, true).ToList();
+            Assert.Equal(1.0, jambs[0].X, 6);
+            Assert.Equal(1.9, jambs[1].X, 6);
+        }
+
+        [Fact]
+        public void OpeningInAVerticalWallGivesYJambs()
+        {
+            var door = new Box(0.0, 3.0, 0.9, 3.9);
+            var walls = new[] { new WallSegment(0.2, 0, 0.2, 8), new WallSegment(0, 0, 10, 0) };
+            Assert.False(OpeningClusters.InHorizontalWall(door, walls));
+            var jambs = OpeningClusters.Jambs(door, false).ToList();
+            Assert.Equal(3.0, jambs[0].Y, 6);
+            Assert.Equal(3.9, jambs[1].Y, 6);
+        }
+
+        [Fact]
+        public void WithoutWallsTheLongerSideDecides()
+        {
+            Assert.True(OpeningClusters.InHorizontalWall(new Box(0, 0, 1.2, 0.2), new WallSegment[0]));
+            Assert.False(OpeningClusters.InHorizontalWall(new Box(0, 0, 0.2, 1.2), new WallSegment[0]));
+        }
+
+        [Fact]
+        public void JambsFeedThePlannerAsOneOpening()
+        {
+            var plan = new PlanInput { Band = 0.6, Merge = 0.005, MinLength = 0.3 };
+            foreach (var p in new[] { new PlanPoint(0, 0), new PlanPoint(10, 0), new PlanPoint(10, 8), new PlanPoint(0, 8) })
+                plan.Structural.Add(p);
+            var window = new Box(2.0, 0.0, 3.2, 0.23);
+            plan.Jambs.AddRange(OpeningClusters.Jambs(window, true));
+            int repeated;
+            var bottom = DimPlanner.Chains(plan, new[] { PlanSide.Bottom }, out repeated);
+            var openings = bottom.Single(c => c.Kind == "Openings");
+            // 0..2, 2..3.2 (the window), 3.2..10: no spurious point inside the window
+            Assert.Equal(3, openings.Segments.Count);
+            Assert.Equal(1.2, openings.Segments[1].Value - openings.Segments[1].Key, 6);
+        }
+    }
+}

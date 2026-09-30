@@ -48,6 +48,7 @@ namespace HCW.AutoCAD.Plugin
             Entry("AutoDimGapMm", "12", "AUTODIM: plotted distance from the plan to the first chain, in millimetres."),
             Entry("AutoDimMinMm", "3", "AUTODIM: dimensions shorter than this plotted length are skipped, in millimetres."),
             Entry("AutoDimBandM", "0.6", "AUTODIM: depth of the outer band (drawing metres) whose openings go on the outside chain."),
+            Entry("AutoDimOpeningJoinMm", "20", "AUTODIM: window and door geometry pieces closer than this (real-size millimetres) are one opening."),
             Entry("AutoDimRoomInsetMm", "8", "AUTODIMROOM: plotted distance from the room's walls to its first dimension line, in millimetres."),
             Entry("AutoDimTextWidthFactor", "0.75", "AUTODIM: width of one character as a fraction of the text height, used to decide when a dimension is too short for its text."),
             Entry("AutoDimGridLayers", "AN-GRID;A-GRID", "AUTODIM: layers whose horizontal and vertical lines are read as the structural grid (separate with ;). Walls, windows, columns and furniture layers are chosen in the dialog."),

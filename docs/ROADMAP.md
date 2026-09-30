@@ -7,7 +7,7 @@ What is not built yet. Everything else is described in the [README](../README.md
 `AUTODIM`, `AUTODIMROOM` and `AUTODIMWALL` are built (see the README). Still to do:
 
 1. **Rooms from walls.** `AUTODIMROOM` needs room outlines. Deriving the clear size of each room from the wall faces would remove that step.
-2. **Non-rectangular rooms.** Openings along the edges of L-shaped and other outlines (today only rectangular rooms get them).
+2. **Openings from wall gaps.** A break in a wall line is not yet labelled as an opening. **Non-rectangular rooms.** Openings along the edges of L-shaped and other outlines (today only rectangular rooms get them).
 3. **Cross-chain collisions.** Rows stop a chain overprinting itself; a text moved to row 3 can still meet the next chain's text at some step and scale settings.
 4. **Associative dimensions**, so moving a wall updates them.
 5. **Levels and tags.** Level marks, opening tags (`D1`, `W1`) from the schedule, and room names beside the room dimensions.
