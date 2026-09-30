@@ -99,7 +99,7 @@ Several tools read the drawing’s insertion units (`INSUNITS`, the UNITS comman
 | `HCWSTYLES` | Sizes text from a 2.5 mm plotted height at a typical sheet scale, converted into the drawing’s units. |
 | `BPLTSTART` | Sets the drawing to metres, decimal length units, 3 decimal places. |
 
-Room-label text height, floor prefix, and the session log live in memory. They reset when AutoCAD closes or when you run the matching reset command. They are not saved in the DWG.
+Room-label text height and floor prefix live in memory and reset when the host closes or when you run the matching reset command. The room log (used by the schedule, table and totals) is saved in the DWG.
 
 ---
 
@@ -119,7 +119,7 @@ The ribbon uses one panel. It does not ask you to pick Metric, Feet, or Inches �
 2. Ask for the first corner and the opposite corner.
 3. Use the current text height (about 125 mm in real size, converted to drawing units). Change it with **Text Height** on the same panel (`HCWROOMTH`). The command does not ask every time.
 4. Draw a closed rectangle on the corners you picked (unless rectangle drawing is off) and three centred text lines: room name, width × height, and `Area: …`.
-5. Remember the room in a session log used by the schedule and total commands.
+5. Save the room in the drawing's room log, used by the schedule, table and total commands.
 
 Text height, floor prefix, and the rectangle toggle are on the Room Labels panel. `RAREA` labels the area of a selected polyline at its centre. `RTAG` replaces the text of one existing TEXT object. The new name is upper case, and includes the floor prefix when one is set.
 
@@ -197,6 +197,36 @@ Draw the geometry on the layers below before you run the command. Deduction geom
 
 A deduction that does not match a parent is labelled `D? NO LINE` and is not included in the total. Labels go on `MEASURE-LABELS`. `MCLEAR` erases objects on `MEASURE-LABELS` and `MEASURE-TABLE` only. It does not erase the measured lines or the stored schedule.
 
+### Excel export, rates and bill
+
+`MEXPORT` asks **Csv** or **Xlsx**. Csv saves the latest take-off, as before. **Xlsx** (also `MEXPORTX`) writes `<drawing>-Takeoffs.xlsx` beside the drawing (or in the temp folder), one sheet per saved take-off. Every take-off is saved in the drawing under its name (`Bricks`, `WallPaint`, `Areas` …); running it again replaces that one. Export works after restarting the host.
+
+On the **Rates** tab of `MSCHED` give each take-off a unit and a price. A rated take-off adds a line to a **Bill** sheet: quantity, rate, and amount as an Excel formula (`Quantity × Rate`), with a total. The quantity is the last cell of the take-off's `GRAND TOTAL` row, or of its `TOTAL` row when it has no grand total.
+
+### Wall numbering
+
+Walls are numbered `FB01`, `FB02` … left to right (then bottom to top) by default. Set `WallNumbering` in the settings file to `TopBottom` (top to bottom, then left to right) or `Path`: the take-off then asks for a line on a visible layer and numbers the walls by their distance along it.
+
+### Settings file
+
+`HCWSETTINGS` creates and opens `%APPDATA%\hcwCAD-KIT\settings.ini`. It holds text heights, tolerances, wall numbering, default floor and opening heights, and the `AUTODIM` distances. Each key has a comment. Restart the host after editing.
+
+### Sheet set
+
+`SHEETSET` makes numbered sheets from a template layout (title block, notes and a viewport). It asks for the template, the number of sheets, a prefix and first number, and the plot scale. Started from the Model tab it also asks for a model window per sheet (Enter uses the whole drawing); started from a layout it uses the drawing extents. Each new layout gets its viewport set to the scale and centred, and the title block's `DRAWING_NO` (and `DRAWING_TITLE`, when you type one). An existing layout name is never overwritten.
+
+### Auto dimension (working drawings)
+
+`AUTODIM` dimensions the outside of an axis-aligned plan. Select the walls (lines and polylines), choose the sides and chains, and give the plot scale.
+
+| Chain (nearest the plan first) | Points used |
+|---|---|
+| Openings | Door and window jambs, from the deduction lines (on `MEASURE-DEDUCT`, and inside door and window blocks), with the wall pieces between them |
+| Structure | Wall ends and corners in the side's outer band |
+| Overall | First to last point on that side |
+
+Chains sit on `AN-DIMS` in the `HCW-WORKING` style (or the current style), a fixed plotted distance apart (`AutoDimStepMm`, `AutoDimGapMm`), so they are the same on paper at any scale. Points within 5 mm are merged, dimensions shorter than `AutoDimMinMm` plotted are skipped, and a chain that repeats the one inside it is left out. Angled and curved segments are skipped and counted. `AUTODIMCLEAR` removes only what `AUTODIM` made.
+
 ### Area and text
 
 | Command | What it does |
@@ -260,7 +290,8 @@ These buttons drive the same auto-unit engine as the **hcwCAD-KIT** room panel. 
 | `HCWROOMFLOOR` | Sets a prefix such as `GF` or `FF`. Press Enter with an empty string to clear it. New labels become `GF BEDROOM`. |
 | `HCWROOMAUDIT` | Counts TEXT on the label layer and objects on the rectangle layer. Three text objects are expected per rectangle. |
 | `HCWROOMCHECK` | Reports whether rectangle-layer polylines are closed. |
-| `HCWROOMSCHEDULE` | Writes `RoomSchedule-<unit>.csv` beside the drawing from rooms labelled **in this session**. Restarting AutoCAD clears that log. |
+| `HCWROOMSCHEDULE` | Writes `RoomSchedule-<unit>.csv` beside the drawing from the rooms labelled in this drawing. The room log is saved in the DWG. |
+| `HCWROOMTABLE` | Draws the room schedule (number, room, size, area, total) as a table at a picked point. |
 | `HCWROOMTOTAL` | Sums session-log areas. You can filter by a fragment of the room name (`BEDROOM` matches `GF BEDROOM`). |
 | `HCWROOMHELP` | Prints the detected unit and reminds you that UNITS is how you change it. |
 

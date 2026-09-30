@@ -1,22 +1,27 @@
 # hcwCAD-KIT roadmap: optimisations, enhancements, and auto-dimension design
 
-Status: partly implemented (see the table). Implemented items were written without a build (no CAD API in the authoring environment); build and test them in each host before release.
+Status: mostly implemented (see the table).
 
 | Item | Status |
 |---|---|
-| Door and window blocks with a deduction line, mapped by block name (new) | Implemented |
-| Label index instead of a full scan per deduction (`MPAINT`) | Implemented |
-| Bounding-box reject before the exact deduction-to-wall distance test | Implemented |
-| Last take-off saved in the drawing (`MEXPORT` after a restart) | Implemented |
+| Door and window blocks with a deduction line, mapped by block name | Implemented |
+| Label index instead of a full scan per deduction (`MPAINT`); bounding-box reject before the distance test | Implemented |
+| Take-offs saved in the drawing by name; `MEXPORT` after a restart | Implemented |
+| Excel export (`.xlsx`, one sheet per take-off), rates and a Bill sheet | Implemented |
 | Sill height and lintel − sill check | Implemented |
 | One schedule table per group, with totals | Implemented |
-| Copy/array: clone once | Not done |
-| Wall numbering along a path or by room | Not done |
-| Excel export, rates and cost, settings file, room schedule in the drawing, sheet set | Not done |
-| Colouring mapped deduction lines | Not done (lines inside blocks cannot be recoloured per insert) |
+| Wall numbering: left to right, top to bottom, or along a path | Implemented |
+| Settings file (`settings.ini`) | Implemented |
+| Room log saved in the drawing, room table | Implemented |
+| Sheet set (`SHEETSET`) | Implemented |
+| `AUTODIM` v1 (axis-aligned plans, outside chains) | Implemented |
+| Unit tests (`tests/HCW.Logic.Tests`), CI, compile check against AutoCAD.NET | Implemented |
+| Copy/array: clone once | Not done: the cost is per placement either way, and cloning entities directly can lose block attributes. Needs measuring in a large drawing first |
+| Colouring mapped deduction lines | Not done: lines inside a block cannot be recoloured per insert |
 | One-step undo | Nothing to do: each command is already one undo step |
-| Unit tests and CI | Not done (needs the pure logic moved to a CAD-free library, and a runner with the host DLLs for the builds) |
-| `AUTODIM` | Design only; the opening-source question is answered (blocks with a deduction line), see section 3 |
+| `AUTODIM` interior room dimensions, angled walls, collision handling, associative dimensions | Not done (see section 3, order of work) |
+
+Everything marked Implemented compiles against the AutoCAD .NET reference package and the logic has unit tests, but the commands have not been run inside AutoCAD, BricsCAD or ZWCAD. Test them in each host before release.
 
 ## 1. Optimisations (code)
 

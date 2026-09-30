@@ -274,3 +274,47 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class DimChainsTests
+    {
+        [Fact]
+        public void MergeSortsAndCollapsesNearPoints()
+        {
+            var merged = DimChains.Merge(new[] { 5.0, 0.0, 0.004, 3.0, 3.003, 10.0 }, 0.005);
+            Assert.Equal(new[] { 0.0, 3.0, 5.0, 10.0 }, merged.ToArray());
+        }
+
+        [Fact]
+        public void SegmentsAreConsecutivePairsAboveMinimum()
+        {
+            var segs = DimChains.Segments(new[] { 0.0, 0.2, 3.0, 5.0 }, 0.5);
+            Assert.Equal(2, segs.Count);
+            Assert.Equal(0.2, segs[0].Key, 6);
+            Assert.Equal(3.0, segs[0].Value, 6);
+            Assert.Equal(5.0, segs[1].Value, 6);
+        }
+
+        [Fact]
+        public void OverallIsFirstToLast()
+        {
+            var overall = DimChains.Overall(new[] { 1.0, 4.0, 9.0 }, 0.5);
+            Assert.Single(overall);
+            Assert.Equal(1.0, overall[0].Key, 6);
+            Assert.Equal(9.0, overall[0].Value, 6);
+            Assert.Empty(DimChains.Overall(new[] { 1.0, 1.2 }, 0.5));
+            Assert.Empty(DimChains.Overall(new[] { 1.0 }, 0.5));
+        }
+
+        [Fact]
+        public void RepeatedChainIsDetected()
+        {
+            var a = DimChains.Overall(new[] { 0.0, 10.0 }, 0.5);
+            var b = DimChains.Segments(new[] { 0.0, 10.0 }, 0.5);
+            Assert.True(DimChains.Same(a, b, 0.01));
+            var c = DimChains.Segments(new[] { 0.0, 4.0, 10.0 }, 0.5);
+            Assert.False(DimChains.Same(a, c, 0.01));
+        }
+    }
+}
