@@ -669,3 +669,49 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class ClusterEquivalenceTests
+    {
+        // the straightforward all-pairs grouping, as a reference
+        private static int BruteGroups(System.Collections.Generic.IList<Box> boxes, double tol)
+        {
+            int n = boxes.Count;
+            var parent = Enumerable.Range(0, n).ToArray();
+            System.Func<int, int> find = null;
+            find = i => parent[i] == i ? i : (parent[i] = find(parent[i]));
+            for (int i = 0; i < n; i++)
+                for (int j = i + 1; j < n; j++)
+                {
+                    var a = boxes[i]; var b = boxes[j];
+                    if (a.MinX - tol <= b.MaxX && b.MinX - tol <= a.MaxX && a.MinY - tol <= b.MaxY && b.MinY - tol <= a.MaxY)
+                        parent[find(i)] = find(j);
+                }
+            return Enumerable.Range(0, n).Select(find).Distinct().Count();
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(2)]
+        [InlineData(3)]
+        public void SweepGivesTheSameGroupsAsComparingEveryPair(int seed)
+        {
+            var rnd = new System.Random(seed);
+            var boxes = new System.Collections.Generic.List<Box>();
+            for (int i = 0; i < 600; i++)
+            {
+                double x = rnd.NextDouble() * 40, y = rnd.NextDouble() * 30;
+                boxes.Add(new Box(x, y, x + rnd.NextDouble() * 1.5, y + rnd.NextDouble() * 0.4));
+            }
+            Assert.Equal(BruteGroups(boxes, 0.02), OpeningClusters.Cluster(boxes, 0.02).Count);
+        }
+
+        [Fact]
+        public void EmptyAndSingle()
+        {
+            Assert.Empty(OpeningClusters.Cluster(new Box[0], 0.02));
+            Assert.Single(OpeningClusters.Cluster(new[] { new Box(0, 0, 1, 1) }, 0.02));
+        }
+    }
+}

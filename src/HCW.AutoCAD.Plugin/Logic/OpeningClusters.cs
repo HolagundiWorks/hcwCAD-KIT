@@ -28,22 +28,33 @@ namespace HCW.AutoCAD.Plugin.Logic
     /// </summary>
     public static class OpeningClusters
     {
-        /// <summary>Groups boxes that overlap or come within <paramref name="tolerance"/> of each other; returns one box per group.</summary>
+        /// <summary>
+        /// Groups boxes that overlap or come within <paramref name="tolerance"/> of each other; returns one box per group.
+        /// Boxes are sorted by their left edge and each is compared only with the boxes that start before its right edge,
+        /// so the work grows with how many boxes lie side by side, not with the square of the total.
+        /// </summary>
         public static List<Box> Cluster(IList<Box> boxes, double tolerance)
         {
             int n = boxes.Count;
             var parent = Enumerable.Range(0, n).ToArray();
-            Func<int, int> find = null;
-            find = i => parent[i] == i ? i : (parent[i] = find(parent[i]));
+            Func<int, int> find = i =>
+            {
+                while (parent[i] != i) { parent[i] = parent[parent[i]]; i = parent[i]; }
+                return i;
+            };
 
-            for (int i = 0; i < n; i++)
-                for (int j = i + 1; j < n; j++)
+            var order = Enumerable.Range(0, n).OrderBy(i => boxes[i].MinX).ToArray();
+            for (int oi = 0; oi < n; oi++)
+            {
+                var a = boxes[order[oi]];
+                for (int oj = oi + 1; oj < n; oj++)
                 {
-                    var a = boxes[i]; var b = boxes[j];
-                    if (a.MinX - tolerance <= b.MaxX && b.MinX - tolerance <= a.MaxX
-                        && a.MinY - tolerance <= b.MaxY && b.MinY - tolerance <= a.MaxY)
-                        parent[find(i)] = find(j);
+                    var b = boxes[order[oj]];
+                    if (b.MinX - tolerance > a.MaxX) break; // every later box starts even further right
+                    if (a.MinY - tolerance <= b.MaxY && b.MinY - tolerance <= a.MaxY)
+                        parent[find(order[oi])] = find(order[oj]);
                 }
+            }
 
             var merged = new Dictionary<int, Box>();
             for (int i = 0; i < n; i++)

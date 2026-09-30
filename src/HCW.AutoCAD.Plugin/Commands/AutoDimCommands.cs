@@ -588,57 +588,84 @@ namespace HCW.AutoCAD.Plugin.Commands
             var windows = new HashSet<string>(choice.Windows, StringComparer.OrdinalIgnoreCase);
             var columns = new HashSet<string>(choice.Columns, StringComparer.OrdinalIgnoreCase);
             var fitments = new HashSet<string>(choice.Furniture, StringComparer.OrdinalIgnoreCase);
+            var gridLayers = Layers("AutoDimGridLayers", "AN-GRID;A-GRID");
+            double tol = Util.MmToDrawingUnits(1.0);
 
+            // door and window blocks: the line inside them is the opening (on the window layers, or anywhere when none are chosen)
+            var blocks = new BlockOpenings.Reader(choice.Windows.Count > 0 ? choice.Windows : null);
+            var found = new List<BlockOpenings.Found>();
+
+            // One pass over the space. Objects that cannot matter (text, hatches, dimensions ...) are skipped
+            // from their type alone, without being opened.
             foreach (ObjectId id in space)
             {
+                if (!Relevant(id)) continue;
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                 if (ent == null) continue;
                 string layer = ent.Layer;
+
+                var block = ent as BlockReference;
+                if (block != null)
+                {
+                    blocks.Add(tr, block, found);
+                    if (columns.Contains(layer)) AddCorners(block, plan.Structural);
+                    else if (fitments.Contains(layer) && furniture != null)
+                    {
+                        try { furniture.Add(block.GeometricExtents); } catch { }
+                    }
+                    continue;
+                }
+
+                var curve = ent as Curve;
+                if (curve == null) continue;
+
                 if (walls.Contains(layer))
                 {
-                    var curve = ent as Curve;
-                    if (curve != null)
-                    {
-                        Collect(curve, plan.Structural, ref plan.Skipped);
-                        AddSegments(curve, plan.WallSegments);
-                    }
+                    Collect(curve, plan.Structural, ref plan.Skipped);
+                    AddSegments(curve, plan.WallSegments);
                 }
                 else if (windows.Contains(layer))
                 {
                     // loose window and door geometry: kept as boxes, grouped into one opening each by FinishOpenings
-                    var curve = ent as Curve;
-                    if (curve != null)
+                    try
                     {
-                        try
-                        {
-                            var e = curve.GeometricExtents;
-                            plan.WindowBoxes.Add(new Box(e.MinPoint.X, e.MinPoint.Y, e.MaxPoint.X, e.MaxPoint.Y));
-                        }
-                        catch { }
+                        var e = curve.GeometricExtents;
+                        plan.WindowBoxes.Add(new Box(e.MinPoint.X, e.MinPoint.Y, e.MaxPoint.X, e.MaxPoint.Y));
                     }
+                    catch { }
                 }
                 else if (columns.Contains(layer))
                 {
-                    var poly = ent as Polyline;
-                    var block = ent as BlockReference;
+                    var poly = curve as Polyline;
                     if (poly != null && poly.Closed)
-                    {
                         for (int i = 0; i < poly.NumberOfVertices; i++) plan.Structural.Add(poly.GetPoint3dAt(i));
-                    }
-                    else if (block != null) AddCorners(block, plan.Structural);
                 }
-                else if (fitments.Contains(layer) && furniture != null && ent is BlockReference)
+
+                // read whatever the choice: standalone deduction lines and the structural grid
+                if (string.Equals(layer, MeasureCommands.LayDed, StringComparison.OrdinalIgnoreCase))
+                    Collect(curve, plan.Jambs, ref plan.Skipped);
+                else if (curve is Line && gridLayers.Contains(layer))
                 {
-                    try { furniture.Add(ent.GeometricExtents); } catch { }
+                    var line = (Line)curve;
+                    if (Math.Abs(line.StartPoint.X - line.EndPoint.X) <= tol) plan.GridX.Add(line.StartPoint.X);
+                    else if (Math.Abs(line.StartPoint.Y - line.EndPoint.Y) <= tol) plan.GridY.Add(line.StartPoint.Y);
                 }
             }
 
-            // windows and doors that are blocks: the line inside them is the opening
-            foreach (var found in BlockOpenings.Collect(tr, space, choice.Windows.Count > 0 ? choice.Windows : null))
-                Collect(found.Curve, plan.Jambs, ref plan.Skipped);
-
-            GatherFromDrawing(tr, db, plan);
+            foreach (var f in found)
+            {
+                Collect(f.Curve, plan.Jambs, ref plan.Skipped);
+                f.Curve.Dispose(); // a copy that never entered the drawing
+            }
         }
+
+        /// <summary>Only these object types can be walls, openings, columns, furniture blocks or grid lines.</summary>
+        private static readonly HashSet<string> RelevantTypes = new HashSet<string>
+        {
+            "LINE", "LWPOLYLINE", "POLYLINE", "ARC", "CIRCLE", "ELLIPSE", "SPLINE", "INSERT"
+        };
+
+        private static bool Relevant(ObjectId id) => RelevantTypes.Contains(id.ObjectClass.DxfName);
 
         /// <summary>
         /// Groups the loose window and door geometry (frame lines, sills, leaves, swing arcs) into one opening each and adds
@@ -706,28 +733,6 @@ namespace HCW.AutoCAD.Plugin.Commands
                 var state = Util.IsolateLayers(tr, db, choice.Shown().Concat(new[] { DimLayer }));
                 foreach (var name in state.Hidden) MeasureCommands.MeasureState.HiddenByMeasure.Add(name);
                 tr.Commit();
-            }
-        }
-
-        /// <summary>Grid lines and the standalone deduction lines: read whatever the layer choice.</summary>
-        private static void GatherFromDrawing(Transaction tr, Database db, Plan plan)
-        {
-            var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
-
-            var gridLayers = Layers("AutoDimGridLayers", "AN-GRID;A-GRID");
-            double tol = Util.MmToDrawingUnits(1.0);
-            foreach (ObjectId id in space)
-            {
-                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                if (ent == null) continue;
-                if (ent is Curve && string.Equals(ent.Layer, MeasureCommands.LayDed, StringComparison.OrdinalIgnoreCase))
-                    Collect((Curve)ent, plan.Jambs, ref plan.Skipped);
-                else if (ent is Line && gridLayers.Contains(ent.Layer))
-                {
-                    var line = (Line)ent;
-                    if (Math.Abs(line.StartPoint.X - line.EndPoint.X) <= tol) plan.GridX.Add(line.StartPoint.X);
-                    else if (Math.Abs(line.StartPoint.Y - line.EndPoint.Y) <= tol) plan.GridY.Add(line.StartPoint.Y);
-                }
             }
         }
 

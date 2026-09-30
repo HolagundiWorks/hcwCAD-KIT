@@ -50,18 +50,33 @@ namespace HCW.AutoCAD.Plugin
         /// </summary>
         public static List<Found> Collect(Transaction tr, BlockTableRecord space, ICollection<string> onLayers = null)
         {
-            HashSet<string> layers = onLayers == null ? null : new HashSet<string>(onLayers, StringComparer.OrdinalIgnoreCase);
+            var reader = new Reader(onLayers);
             var result = new List<Found>();
-            // Definitions are read once, however many times the block is inserted.
-            var lines = new Dictionary<ObjectId, List<Curve>>();
             foreach (ObjectId id in space)
             {
                 var br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
-                if (br == null) continue;
-                if (layers != null && !layers.Contains(br.Layer)) continue;
+                if (br != null) reader.Add(tr, br, result);
+            }
+            return result;
+        }
+
+        /// <summary>Reads inserts one at a time (so a caller already walking the space need not walk it again). Each block definition is read once.</summary>
+        public class Reader
+        {
+            private readonly HashSet<string> _layers;
+            private readonly Dictionary<ObjectId, List<Curve>> _lines = new Dictionary<ObjectId, List<Curve>>();
+
+            public Reader(ICollection<string> onLayers)
+            {
+                _layers = onLayers == null ? null : new HashSet<string>(onLayers, StringComparer.OrdinalIgnoreCase);
+            }
+
+            public void Add(Transaction tr, BlockReference br, List<Found> into)
+            {
+                if (_layers != null && !_layers.Contains(br.Layer)) return;
 
                 List<Curve> deductions;
-                if (!lines.TryGetValue(br.BlockTableRecord, out deductions))
+                if (!_lines.TryGetValue(br.BlockTableRecord, out deductions))
                 {
                     deductions = new List<Curve>();
                     var def = (BlockTableRecord)tr.GetObject(br.BlockTableRecord, OpenMode.ForRead);
@@ -71,23 +86,23 @@ namespace HCW.AutoCAD.Plugin
                         if (curve != null && string.Equals(curve.Layer, MeasureCommands.LayDed, StringComparison.OrdinalIgnoreCase))
                             deductions.Add(curve);
                     }
-                    lines[br.BlockTableRecord] = deductions;
+                    _lines[br.BlockTableRecord] = deductions;
                 }
+                if (deductions.Count == 0 && _layers == null) return;
+
                 string name = EffectiveName(tr, br);
                 if (deductions.Count == 0)
                 {
-                    if (layers == null) continue;
                     var fallback = ExtentsLine(br);
-                    if (fallback != null) result.Add(new Found { Curve = fallback, BlockName = name });
-                    continue;
+                    if (fallback != null) into.Add(new Found { Curve = fallback, BlockName = name });
+                    return;
                 }
                 foreach (var curve in deductions)
                 {
                     var moved = curve.GetTransformedCopy(br.BlockTransform) as Curve;
-                    if (moved != null) result.Add(new Found { Curve = moved, BlockName = name });
+                    if (moved != null) into.Add(new Found { Curve = moved, BlockName = name });
                 }
             }
-            return result;
         }
     }
 }
