@@ -194,6 +194,7 @@ namespace HCW.AutoCAD.Plugin.UI
         private RibbonPanel BuildElectricalPanel()
         {
             var src = NewSource("Electrical");
+            AddLarge(src, "ELBLOCKS", "Map\nBlocks", "box", "Choose which blocks are the switchboards, the light points and the fan points");
             AddLarge(src, "ELNUM", "Number\nBlocks", "tag", "Give every switchboard, light point and fan point block its ID (SB-01, LP-01, FP-01)");
             AddLarge(src, "ELCONNECT", "Check\nWiring", "rule", "Find which points are wired to which board, and flag what is not wired");
             AddLarge(src, "ELSCHEDULE", "Schedule", "table-of-contents", "Draw the connection schedule for lights and fans");

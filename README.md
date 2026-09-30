@@ -333,17 +333,18 @@ Everything is on `AECSTAIR-*` layers (`AN-DIMS` for dimensions) and tagged with 
 
 Number the electrical blocks, draw the wiring as ordinary lines and polylines, and the tool works out which points are wired to which board and draws the connection schedule. It is part of the plugin (not a LISP routine), so it works the same in AutoCAD, BricsCAD and ZWCAD.
 
-**Blocks.** A switchboard is a block named `SB`, a light point `LP`, a fan point `FP`. The names are settings (`ElectricalBoardBlocks`, `ElectricalLightBlocks`, `ElectricalFanBlocks`; separate several with `;`, `*` matches anything, for example `LP*`). Dynamic blocks are matched on their own name.
+**Blocks.** `ELBLOCKS` opens a dialog listing every block in the drawing in three lists: **Switchboards**, **Light points** and **Fan points**. Tick the blocks for each role, or use **Pick from drawing…** to select a block and have its name ticked for you. A block has one role. The choice is saved in the drawing, so the blocks can have any names. Until you choose, the names `SB`, `LP` and `FP` are used (settings `ElectricalBoardBlocks`, `ElectricalLightBlocks`, `ElectricalFanBlocks`; `;` separates several, `*` matches anything). If the drawing has no block by those names and nothing is mapped, the commands below open the dialog themselves. Dynamic blocks are matched on their own name.
 
 | Command | What it does |
 |---|---|
-| `SBNUM`, `LPNUM`, `FPNUM`, `ELNUM` | Give every block of that kind an ID: `SB-01`, `LP-01`, `FP-01`. `ELNUM` does all three. Choose **Keep** (blocks keep the ID they have, new blocks get the next numbers) or **All** (start again from 1, left to right then bottom to top). |
+| `ELBLOCKS` | Map which blocks are switchboards, light points and fan points (see above). |
+| `SBNUM`, `LPNUM`, `FPNUM`, `ELNUM` | Give every block of that kind an ID and write it beside the block as text: `SB-01`, `LP-01`, `FP-01`. `ELNUM` does all three. Choose **Keep** (blocks keep the ID they have, new blocks get the next numbers) or **All** (start again from 1, left to right then bottom to top). |
 | `ELLAYERS` | Choose the layers the wiring is drawn on: one list for lighting wires, one for fan wires. **Pick from drawing…** takes the layers of objects you select. Saved in the drawing. Asked automatically the first time it is needed. |
 | `ELCONNECT` | Works out the connections and prints them: per kind, the points, boards and circuits; points wired to more than one board; points not wired to any board; boards with nothing wired to them. Circles on `EL-CHECK` flag what is not wired. |
 | `ELSCHEDULE` | Draws the schedule as a table. Choose **Light**, **Fan** or **Both**, the layout, the plot scale, and pick the top-left corner. |
 | `ELUPDATE` | After you change the drawing: numbers new blocks, moves the ID text, re-checks the wiring and redraws every schedule already in the drawing, in place and at the same text size. |
 
-**The ID stays with the block.** It is stored on the block itself (extended data), not only as text, so it follows the block when it is moved or the wiring is redrawn. If the block has attributes `ID`, `NUMBER` and `TAG`, they are filled in too (`LP-01`, `01`, `LP`) and no separate text is added. Otherwise the ID is written as text beside the block on `EL-LABELS`; the text follows the block when you run any of the commands above. A **copied block carries its old ID with it**, so a repeated ID is renumbered (the one first in reading order keeps it).
+**The ID stays with the block.** It is stored on the block itself (extended data), not only as text, so it follows the block when it is moved or the wiring is redrawn. If the block has attributes `ID`, `NUMBER` and `TAG`, they are filled in too (`LP-01`, `01`, `LP`). The ID is also written as text beside every block on `EL-LABELS`, so each one can be identified on the drawing (unless the block already shows a visible `ID` attribute); the text follows the block when you run any of the commands above. A **copied block carries its old ID with it**, so a repeated ID is renumbered (the one first in reading order keeps it).
 
 **How a connection is found.** From geometry only, no reading of the picture:
 
@@ -365,7 +366,7 @@ So `LP-01 ── LP-02 ── SB-01` gives both lights on `SB-01`, and a light w
 
 `Point` layout, one row per point: `LP-03` → `SB-01, SB-02`. The connection is `Direct` for a point wired to one board and `2 Way`, `3 Way` … for more. Lighting and fan schedules are separate (`ELECTRICAL LIGHTING CONNECTION SCHEDULE`, `ELECTRICAL FAN CONNECTION SCHEDULE`) and are read from their own wiring layers, so lights and fans can share a wiring layer and each schedule still reads only its own points. Tables are drawn on `EL-TABLE`.
 
-Settings (see `HCWSETTINGS`): the block names, `ElectricalSnapMm`, `ElectricalLabels` (0 turns the ID text off), `ElectricalLabelLayer`, `ElectricalTableTextMm`.
+Settings (see `HCWSETTINGS`): the default block names, `ElectricalSnapMm`, `ElectricalLabels` (0 turns the ID text off), `ElectricalLabelLayer`, `ElectricalLabelHeightMm` (0 sizes the text from the block, at least 150 mm real size), `ElectricalTableTextMm`.
 
 ### Area and text
 

@@ -13,9 +13,12 @@ namespace HCW.AutoCAD.Plugin.Commands
     /// <summary>
     /// Electrical layout automation.
     ///
-    /// Blocks: SB is a switchboard, LP a light point, FP a fan point (the block names are settings; * matches anything).
+    /// Blocks: which block is a switchboard, a light point and a fan point is chosen with ELBLOCKS (saved in the drawing);
+    /// until it is, the names SB, LP and FP from the settings are used (* matches anything).
+    /// ELBLOCKS                    map the blocks: which are switchboards, light points and fan points.
     /// SBNUM, LPNUM, FPNUM, ELNUM  give every block an ID (SB-01, LP-02 ...) kept on the block itself (extended data, and the
-    ///                             ID, NUMBER and TAG attributes when the block has them), so it follows the block when moved.
+    ///                             ID, NUMBER and TAG attributes when the block has them), so it follows the block when moved,
+    ///                             and write the ID as text beside the block so it can be read on the drawing.
     /// ELLAYERS                    choose the layers the wiring lines are drawn on (one set for lights, one for fans).
     /// ELCONNECT                   works out from the wiring which points reach which board, and flags what is not wired.
     /// ELSCHEDULE                  draws the connection schedule as a table (lights, fans, or both).
@@ -49,8 +52,27 @@ namespace HCW.AutoCAD.Plugin.Commands
         private static readonly Kind[] PointKinds = { Light, Fan };
         private static readonly Kind[] AllKinds = { Board, Light, Fan };
 
-        private static string[] Patterns(Kind kind)
+        private const string BlocksRecord = "BLOCKS";
+
+        private static string[] DefaultPatterns(Kind kind)
             => Settings.Get(kind.Setting, kind.Code).Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+        /// <summary>The block names chosen with ELBLOCKS for each kind code (SB, LP, FP); empty lists when nothing was chosen.</summary>
+        private static Dictionary<string, List<string>> LoadBlockMap(Transaction tr, Database db)
+        {
+            var map = AllKinds.ToDictionary(k => k.Code, k => new List<string>());
+            foreach (var line in DrawingStore.Read(tr, db, StoreDictionary, BlocksRecord))
+            {
+                if (string.IsNullOrEmpty(line) || line == "EMPTY") continue;
+                var p = Fields.Split(line);
+                if (map.ContainsKey(p[0])) map[p[0]] = p.Skip(1).Where(n => n.Length > 0).ToList();
+            }
+            return map;
+        }
+
+        /// <summary>The names that count as this kind: the ones chosen for the drawing, or the settings when none were chosen.</summary>
+        private static string[] PatternsFor(Dictionary<string, List<string>> map, Kind kind)
+            => map[kind.Code].Count > 0 ? map[kind.Code].ToArray() : DefaultPatterns(kind);
 
         /// <summary>One switchboard or point block found in the drawing.</summary>
         private class ElBlock
@@ -61,8 +83,130 @@ namespace HCW.AutoCAD.Plugin.Commands
             public string Existing = "";
             public string Assigned = "";
             public Box Box;
+            /// <summary>The block has an ID attribute (filled in whenever the ID is written).</summary>
             public bool HasIdAttribute;
+            /// <summary>That attribute is visible, so the ID already shows beside the block without separate text.</summary>
+            public bool IdAttributeVisible;
             public string CurrentId => Assigned.Length > 0 ? Assigned : Existing;
+        }
+
+        // ------------------------------------------------------------------ mapping the blocks
+
+        [CommandMethod("ELBLOCKS")]
+        public void ElBlocks()
+        {
+            var ed = Util.Ed;
+            var map = AskBlocks(ed, Util.Db);
+            if (map == null) return;
+            foreach (var kind in AllKinds)
+                ed.WriteMessage("\n  " + kind.Label + (kind == Board ? "es" : " points") + ": " + (map[kind.Code].Count == 0 ? "(none: settings names " + string.Join("/", DefaultPatterns(kind)) + ")" : string.Join(", ", map[kind.Code])));
+            ed.WriteMessage("\nELBLOCKS: saved in the drawing. Run ELNUM to number them.");
+        }
+
+        /// <summary>
+        /// When no block in the drawing is a switchboard, light or fan point by the saved mapping or the default names,
+        /// asks which blocks they are. False when the user cancels that.
+        /// </summary>
+        private static bool EnsureBlocks(Editor ed, Database db)
+        {
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                bool nothingMapped = AllKinds.All(k => LoadBlockMap(tr, db)[k.Code].Count == 0);
+                bool nothingFound = ReadBlocks(tr, db).Count == 0;
+                tr.Commit();
+                if (!(nothingMapped && nothingFound)) return true;
+            }
+            ed.WriteMessage("\nNo block is named " + string.Join("/", DefaultPatterns(Board)) + ", " + string.Join("/", DefaultPatterns(Light)) + " or "
+                + string.Join("/", DefaultPatterns(Fan)) + ". Choose which blocks are the switchboards, light points and fan points.");
+            return AskBlocks(ed, db) != null;
+        }
+
+        /// <summary>
+        /// Shows every block in the drawing in three lists (switchboards, light points, fan points) and saves the choice in the
+        /// drawing. "Pick from drawing" takes the blocks you select. A block has one role. Null on Cancel.
+        /// </summary>
+        private static Dictionary<string, List<string>> AskBlocks(Editor ed, Database db)
+        {
+            var names = new List<string>();
+            Dictionary<string, List<string>> map;
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var table = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                foreach (ObjectId id in table)
+                {
+                    var rec = (BlockTableRecord)tr.GetObject(id, OpenMode.ForRead);
+                    if (rec.IsAnonymous || rec.IsLayout || rec.IsFromExternalReference || rec.IsDependent) continue;
+                    names.Add(rec.Name);
+                }
+                map = LoadBlockMap(tr, db);
+                tr.Commit();
+            }
+            foreach (var kind in AllKinds)
+                map[kind.Code] = map[kind.Code].Where(n => names.Contains(n, StringComparer.OrdinalIgnoreCase)).ToList();
+            // a drawing with nothing chosen yet starts from the default names
+            foreach (var kind in AllKinds)
+                if (map[kind.Code].Count == 0)
+                    map[kind.Code] = names.Where(n => ElectricalNumbering.NameMatches(n, DefaultPatterns(kind))).ToList();
+
+            while (true)
+            {
+                var lists = new List<KeyValuePair<string, List<string>>>
+                {
+                    new KeyValuePair<string, List<string>>("Switchboards", map["SB"]),
+                    new KeyValuePair<string, List<string>>("Light points", map["LP"]),
+                    new KeyValuePair<string, List<string>>("Fan points", map["FP"])
+                };
+                using (var dlg = new UI.LayerListsForm("hcwCAD-KIT — Electrical blocks",
+                    "Tick which blocks are the switchboards, the light points and the fan points. A block has one role. Use Pick from drawing to select a block in the drawing instead of finding its name.",
+                    names, lists))
+                {
+                    var result = dlg.ShowDialog();
+                    var read = dlg.Read();
+                    map["SB"] = read[0];
+                    map["LP"] = read[1].Where(n => !read[0].Contains(n)).ToList();
+                    map["FP"] = read[2].Where(n => !read[0].Contains(n) && !read[1].Contains(n)).ToList();
+                    if (result == System.Windows.Forms.DialogResult.Retry)
+                    {
+                        PickBlockNames(ed, db, map, AllKinds[dlg.PickIndex]);
+                        continue;
+                    }
+                    if (result != System.Windows.Forms.DialogResult.OK) return null;
+                    break;
+                }
+            }
+
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                DrawingStore.Write(tr, db, StoreDictionary, BlocksRecord, AllKinds.Select(k => Fields.Join(new[] { k.Code }.Concat(map[k.Code]).ToArray())));
+                tr.Commit();
+            }
+            return map;
+        }
+
+        private static void PickBlockNames(Editor ed, Database db, Dictionary<string, List<string>> map, Kind kind)
+        {
+            var filter = new SelectionFilter(new[] { new TypedValue(0, "INSERT") });
+            var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect the " + kind.Label.ToLowerInvariant() + (kind == Board ? "" : " point") + " blocks: " }, filter);
+            if (psr.Status != PromptStatus.OK) return;
+            var picked = new List<string>();
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                foreach (SelectedObject so in psr.Value)
+                {
+                    var br = tr.GetObject(so.ObjectId, OpenMode.ForRead) as BlockReference;
+                    if (br == null) continue;
+                    string name = BlockOpenings.EffectiveName(tr, br);
+                    if (!picked.Contains(name, StringComparer.OrdinalIgnoreCase)) picked.Add(name);
+                }
+                tr.Commit();
+            }
+            foreach (var name in picked)
+            {
+                foreach (var list in map.Values) list.RemoveAll(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+                map[kind.Code].Add(name);
+            }
+            if (picked.Count > 0) ed.WriteMessage("\nAdded: " + string.Join(", ", picked) + ".");
         }
 
         // ------------------------------------------------------------------ numbering
@@ -76,6 +220,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed;
             var db = Util.Db;
+            if (!EnsureBlocks(ed, db)) return;
             var opt = new PromptKeywordOptions("\nRenumber [Keep/All] <" + _renumber + ">: ") { AllowNone = true };
             opt.Keywords.Add("Keep");
             opt.Keywords.Add("All");
@@ -92,14 +237,15 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var mine = blocks.Where(b => b.Kind == kind).ToList();
                     if (mine.Count == 0)
                     {
-                        ed.WriteMessage("\n" + kind.Code + "NUM: no block named " + string.Join(" or ", Patterns(kind)) + " in this drawing.");
+                        ed.WriteMessage("\n" + kind.Code + "NUM: no block is mapped as " + kind.Label.ToLowerInvariant() + ". Run ELBLOCKS to choose which blocks they are.");
                         continue;
                     }
                     int kept = AssignIds(tr, mine, kind, _renumber == "All");
                     ed.WriteMessage("\n" + kind.Code + "NUM: " + mine.Count + " " + kind.Label.ToLowerInvariant() + " block(s) numbered; "
                         + kept + " kept their number, " + (mine.Count - kept) + " new or changed.");
                 }
-                SyncLabels(tr, db, blocks);
+                int shown = SyncLabels(tr, db, blocks);
+                if (shown > 0) ed.WriteMessage("\nEach ID is written beside its block (layer " + Settings.Get("ElectricalLabelLayer", "EL-LABELS") + ").");
                 tr.Commit();
             }
         }
@@ -343,6 +489,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed;
             var db = Util.Db;
+            if (!EnsureBlocks(ed, db)) return;
             List<ElBlock> blocks;
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -351,8 +498,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
             if (!blocks.Any(b => b.Kind != Board) || !blocks.Any(b => b.Kind == Board))
             {
-                ed.WriteMessage("\nELCONNECT: needs at least one switchboard block (" + string.Join("/", Patterns(Board))
-                    + ") and one light or fan point block (" + string.Join("/", Patterns(Light)) + ", " + string.Join("/", Patterns(Fan)) + ").");
+                ed.WriteMessage("\nELCONNECT: needs at least one switchboard block and one light or fan point block. Run ELBLOCKS to choose which blocks they are.");
                 return;
             }
             var wiring = EnsureWiring(ed, db, blocks);
@@ -433,6 +579,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed;
             var db = Util.Db;
+            if (!EnsureBlocks(ed, db)) return;
 
             var whichOpt = new PromptKeywordOptions("\nSchedule for [Light/Fan/Both] <" + _which + ">: ") { AllowNone = true };
             foreach (var k in new[] { "Light", "Fan", "Both" }) whichOpt.Keywords.Add(k);
@@ -502,6 +649,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed;
             var db = Util.Db;
+            if (!EnsureBlocks(ed, db)) return;
             List<ElBlock> blocks;
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -604,7 +752,8 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var result = new List<ElBlock>();
             var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
-            var patterns = AllKinds.ToDictionary(k => k, Patterns);
+            var map = LoadBlockMap(tr, db);
+            var patterns = AllKinds.ToDictionary(k => k, k => PatternsFor(map, k));
             foreach (ObjectId id in space)
             {
                 if (id.ObjectClass.DxfName != "INSERT") continue;
@@ -626,7 +775,11 @@ namespace HCW.AutoCAD.Plugin.Commands
                 foreach (ObjectId attId in br.AttributeCollection)
                 {
                     var att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
-                    if (att != null && string.Equals(att.Tag, "ID", StringComparison.OrdinalIgnoreCase)) block.HasIdAttribute = true;
+                    if (att != null && string.Equals(att.Tag, "ID", StringComparison.OrdinalIgnoreCase))
+                    {
+                        block.HasIdAttribute = true;
+                        block.IdAttributeVisible = !att.Invisible;
+                    }
                 }
                 result.Add(block);
             }
@@ -672,9 +825,10 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// Puts each block's ID beside it as text (unless the block shows it in an ID attribute), moves the text when the block
         /// has moved, and removes text whose block is gone. The text is tied to its block by the block's handle.
         /// </summary>
-        private static void SyncLabels(Transaction tr, Database db, List<ElBlock> blocks)
+        private static int SyncLabels(Transaction tr, Database db, List<ElBlock> blocks)
         {
-            if (Settings.GetInt("ElectricalLabels", 1) == 0) return;
+            if (Settings.GetInt("ElectricalLabels", 1) == 0) return 0;
+            int shown = 0;
             string layer = Settings.Get("ElectricalLabelLayer", "EL-LABELS");
             Util.EnsureLayer(tr, db, layer, 3);
             EnsureRegApp(tr, db);
@@ -688,7 +842,6 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
 
             var live = new HashSet<string>();
-            double fallback = Util.MmToDrawingUnits(250);
             foreach (var block in blocks)
             {
                 var br = (BlockReference)tr.GetObject(block.Id, OpenMode.ForRead);
@@ -698,14 +851,16 @@ namespace HCW.AutoCAD.Plugin.Commands
                 ObjectId labelId;
                 bool has = labels.TryGetValue(handle, out labelId);
 
-                if (block.HasIdAttribute || id.Length == 0)
+                if (block.IdAttributeVisible || id.Length == 0)
                 {
                     if (has) ((Entity)tr.GetObject(labelId, OpenMode.ForWrite)).Erase();
                     continue;
                 }
                 double size = Math.Max(block.Box.Width, block.Box.Height);
-                double height = size > 0 ? 0.4 * size : fallback;
+                double fixedHeight = Settings.GetDouble("ElectricalLabelHeightMm", 0);
+                double height = fixedHeight > 0 ? Util.MmToDrawingUnits(fixedHeight) : Math.Max(0.4 * size, Util.MmToDrawingUnits(150));
                 var at = new Point3d(block.Box.MaxX + 0.15 * height, block.Box.CentreY, 0);
+                shown++;
                 if (has)
                 {
                     var text = (DBText)tr.GetObject(labelId, OpenMode.ForWrite);
@@ -726,6 +881,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
             foreach (var entry in labels)
                 if (!live.Contains(entry.Key)) ((Entity)tr.GetObject(entry.Value, OpenMode.ForWrite)).Erase();
+            return shown;
         }
     }
 }
