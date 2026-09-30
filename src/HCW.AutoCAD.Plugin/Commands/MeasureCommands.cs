@@ -435,6 +435,35 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("MFLOOR")]
         public void MFloor() => RunAreas(LayFlor, "FL", "FloorArea", "\nSelect floor outlines on MEASURE-FLOOR: ");
 
+        /// <summary>Draws the saved schedule as a table at a picked point.</summary>
+        [CommandMethod("MSCHEDTABLE")]
+        public void MSchedTable()
+        {
+            var ed = Util.Ed; var db = Util.Db;
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var book = MeasureBook.Load(tr, db);
+                if (ScheduleRows(book).Count == 0)
+                {
+                    ed.WriteMessage("\nMSCHEDTABLE: the schedule is empty. Run MSCHED first.");
+                    return;
+                }
+                MakeLayers(tr, db);
+                if (InsertScheduleTable(ed, tr, db, book)) tr.Commit();
+            }
+        }
+
+        private static bool InsertScheduleTable(Editor ed, Transaction tr, Database db, MeasureBook book)
+        {
+            var rows = ScheduleRows(book);
+            if (rows.Count == 0) return false;
+            var ppr = ed.GetPoint("\nPick a point for the schedule table: ");
+            if (ppr.Status != PromptStatus.OK) return false;
+            DrawTable(tr, db, ppr.Value, new[] { "Item", "Detail", "Size", "Count" }, rows, MeasureState.TextHeight);
+            return true;
+        }
+
         [CommandMethod("MSCHED")]
         public void MSched()
         {
@@ -466,6 +495,15 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
                 book = dlg.Read();
                 book.CountFromMaps();
+                foreach (var floor in book.Floors)
+                {
+                    if (floor.FflHeight > 0 && floor.Height > floor.FflHeight)
+                        ed.WriteMessage("\nWARNING: " + floor.Name + " ceiling height " + floor.Height + " is more than its FFL to FFL height " + floor.FflHeight + ".");
+                    if (floor.Height > 0 && floor.LintelBottom > floor.Height)
+                        ed.WriteMessage("\nWARNING: " + floor.Name + " lintel bottom " + floor.LintelBottom + " is above its ceiling height " + floor.Height + ".");
+                    foreach (var o in book.Openings.Where(x => x.Height > floor.LintelBottom && floor.LintelBottom > 0))
+                        ed.WriteMessage("\nWARNING: " + o.Mark + " is " + o.Height + " high, above the " + floor.Name + " lintel bottom " + floor.LintelBottom + ".");
+                }
                 foreach (var dup in book.Openings.GroupBy(o => o.Mark, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
                     ed.WriteMessage("\nWARNING: schedule name " + dup.Key + " is used more than once.");
                 foreach (var map in book.Maps)
@@ -486,17 +524,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     MakeLayers(tr, db);
                     book.Save(tr, db);
                     int renamed = ApplyNames(tr, db, book);
-                    if (dlg.DrawTable)
-                    {
-                        double th = MeasureState.TextHeight;
-                        var rows = ScheduleRows(book);
-                        if (rows.Count > 0)
-                        {
-                            var ppr = ed.GetPoint("\nPick a point for the schedule table: ");
-                            if (ppr.Status == PromptStatus.OK)
-                                DrawTable(tr, db, ppr.Value, new[] { "Item", "Detail", "Size", "Count" }, rows, th);
-                        }
-                    }
+                    if (dlg.DrawTable) InsertScheduleTable(ed, tr, db, book);
                     tr.Commit();
                     ed.WriteMessage("\nSchedule saved. " + renamed + " measured name(s) updated.");
                 }
@@ -984,7 +1012,14 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var rows = new List<string[]>();
             foreach (var floor in book.Floors)
-                rows.Add(new[] { floor.Name, "Ceiling height", floor.Height.ToString("0.###") + " " + ScheduleUnit, "1" });
+            {
+                if (floor.FflHeight > 0)
+                    rows.Add(new[] { floor.Name, "FFL to FFL height", floor.FflHeight.ToString("0.###") + " " + ScheduleUnit, "" });
+                if (floor.Height > 0)
+                    rows.Add(new[] { floor.Name, "Ceiling height", floor.Height.ToString("0.###") + " " + ScheduleUnit, "" });
+                if (floor.LintelBottom > 0)
+                    rows.Add(new[] { floor.Name, "Lintel bottom height", floor.LintelBottom.ToString("0.###") + " " + ScheduleUnit, "" });
+            }
             foreach (var opening in book.Openings)
                 rows.Add(new[]
                 {

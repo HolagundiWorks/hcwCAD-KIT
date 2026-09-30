@@ -27,7 +27,7 @@ namespace HCW.AutoCAD.Plugin.UI
             MinimumSize = new Size(640, 420);
 
             var tabs = new TabControl { Dock = DockStyle.Fill };
-            _floors = Grid("Floor", "Ceiling height (" + heightUnit + ")");
+            _floors = Grid("Floor", "FFL to FFL height (" + heightUnit + ")", "Ceiling height (" + heightUnit + ")", "Lintel bottom height (" + heightUnit + ")");
             _openings = Grid("Name", "Door or window", "Type", "Length (" + heightUnit + ")", "Height (" + heightUnit + ")", "Count");
             SetupOpeningGrid();
             _columns = Grid("Mark", "Width (" + heightUnit + ")", "Depth (" + heightUnit + ")", "Name", "Count");
@@ -38,7 +38,7 @@ namespace HCW.AutoCAD.Plugin.UI
             FillColumns(book);
             FillMaps(book, deductionLabels);
 
-            tabs.TabPages.Add(Page("Floors", _floors, "Each row is one floor. Wall paint uses these ceiling heights."));
+            tabs.TabPages.Add(Page("Floors", _floors, "Each row is one floor. FFL to FFL is finished floor level to the next; lintel bottom is measured up from the FFL. Wall paint uses the ceiling height."));
             tabs.TabPages.Add(Page("Doors and windows", _openings, "Name (W1), door or window, type (pick from the list), length and height. Length is the size along the wall that is deducted."));
             tabs.TabPages.Add(Page("Columns", _columns, "Concrete columns of the same size share one mark."));
             tabs.TabPages.Add(Page("Deduction map", _maps, "Each measured deduction (FB01-D1) maps to one schedule name (W1). The closest schedule length within 50 mm (2 in) is pre-filled."));
@@ -67,7 +67,7 @@ namespace HCW.AutoCAD.Plugin.UI
                 if (row.IsNewRow) continue;
                 string name = Cell(row, 0);
                 if (name.Length == 0) continue;
-                book.Floors.Add(new MeasureBook.FloorSpec { Name = name, Height = Num(row, 1) });
+                book.Floors.Add(new MeasureBook.FloorSpec { Name = name, FflHeight = Num(row, 1), Height = Num(row, 2), LintelBottom = Num(row, 3) });
             }
             foreach (DataGridViewRow row in _openings.Rows)
             {
@@ -190,9 +190,9 @@ namespace HCW.AutoCAD.Plugin.UI
         private void FillFloors(MeasureBook book)
         {
             if (book.Floors.Count == 0)
-                _floors.Rows.Add("Ground", "3");
+                _floors.Rows.Add("Ground", "3.15", "3", "2.1");
             foreach (var f in book.Floors)
-                _floors.Rows.Add(f.Name, f.Height.ToString("0.###"));
+                _floors.Rows.Add(f.Name, f.FflHeight.ToString("0.###"), f.Height.ToString("0.###"), f.LintelBottom.ToString("0.###"));
         }
 
         private void FillOpenings(MeasureBook book)

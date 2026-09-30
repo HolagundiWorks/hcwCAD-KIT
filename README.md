@@ -133,6 +133,14 @@ Walls, beams, and lintels of the same rounded length share one name (`FB-A`, `HB
 
 `MSCHED` stores the schedule in the drawing: floors and ceiling heights, doors and windows, concrete columns, and a map from each measured deduction to a schedule name.
 
+#### Floors
+
+Each row on the **Floors** tab records one floor: **FFL to FFL height** (finished floor level to the next), **ceiling height** (wall paint uses it) and **lintel bottom height** (the underside of the lintel, measured up from the FFL). Apply warns when a ceiling is taller than its FFL to FFL height, when the lintel bottom is above the ceiling, and when a door or window is taller than the lintel bottom.
+
+#### Schedule table
+
+The schedule is drawn on `MEASURE-TABLE` as Item, Detail, Size and Count: three rows per floor (FFL to FFL, ceiling, lintel bottom), then the doors and windows, columns, and deduction map. Tick **Draw schedule on the sheet** in `MSCHED`, or use the **Insert Schedule** button (`MSCHEDTABLE`) at any time to pick a point and draw the saved schedule. It uses the Measure text height.
+
 #### Door and window schedule
 
 Each row on the **Doors and windows** tab is one schedule entry:
@@ -169,6 +177,7 @@ Draw the geometry on the layers below before you run the command. Deduction geom
 | `MPAINT` | Full brick, half brick, or linear walls, plus `MEASURE-DEDUCT` | Wall length × ceiling height. A mapped opening uses its schedule width × height |
 | `MCEIL` | Closed outlines on `MEASURE-CEILING` | Ceiling paint, grouped by equal area (`CP-A`) |
 | `MFLOOR` | Closed outlines on `MEASURE-FLOOR` | Floor area, grouped by equal area (`FL-A`) |
+| `MSCHEDTABLE` | The saved schedule | Draws the schedule as a table at a picked point |
 | `MSCHED` | Labels already on `MEASURE-LABELS` | Edit the in-drawing schedule and rewrite mapped names |
 | `MAREA` (`MARE` still works) | Closed polylines, circles, ellipses, or splines on `MEASURE-AREA` | Numbered areas `A1`… with area and perimeter |
 | `MSLAB` (`MSLB` still works) | Slab outlines on `MEASURE-SLAB`, openings on `MEASURE-SLAB-DEDUCT` | Each opening is deducted from the slab whose outline contains the opening’s centroid |

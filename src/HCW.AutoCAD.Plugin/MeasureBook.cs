@@ -173,7 +173,7 @@ namespace HCW.AutoCAD.Plugin
         private IEnumerable<string> Serialize()
         {
             foreach (var f in Floors)
-                yield return "F|" + Esc(f.Name) + "|" + Num(f.Height);
+                yield return "F|" + Esc(f.Name) + "|" + Num(f.Height) + "|" + Num(f.FflHeight) + "|" + Num(f.LintelBottom);
             foreach (var o in Openings)
                 yield return "O|" + Esc(o.Mark) + "|" + Esc(o.Kind) + "|" + Num(o.Width) + "|" + Num(o.Height) + "|" + Esc(o.Type) + "|" + o.Count.ToString(CultureInfo.InvariantCulture);
             foreach (var c in Columns)
@@ -188,7 +188,7 @@ namespace HCW.AutoCAD.Plugin
             var p = Split(line);
             if (p.Length < 2) return;
             if (p[0] == "F" && p.Length >= 3)
-                book.Floors.Add(new FloorSpec { Name = p[1], Height = D(p[2]) });
+                book.Floors.Add(new FloorSpec { Name = p[1], Height = D(p[2]), FflHeight = p.Length > 3 ? D(p[3]) : 0, LintelBottom = p.Length > 4 ? D(p[4]) : 0 });
             else if (p[0] == "O" && p.Length >= 7)
                 book.Openings.Add(new OpeningSpec { Mark = p[1], Kind = p[2], Width = D(p[3]), Height = D(p[4]), Type = p[5], Count = I(p[6]) });
             else if (p[0] == "C" && p.Length >= 6)
@@ -235,7 +235,12 @@ namespace HCW.AutoCAD.Plugin
         public class FloorSpec
         {
             public string Name = "Ground";
+            /// <summary>Ceiling height above the finished floor level (FFL). Wall paint uses it.</summary>
             public double Height = 3.0;
+            /// <summary>Finished floor level to the next finished floor level (FFL to FFL).</summary>
+            public double FflHeight = 3.15;
+            /// <summary>Height of the underside of the lintel above the FFL.</summary>
+            public double LintelBottom = 2.1;
         }
 
         /// <summary>Choices offered in the schedule for each kind of opening.</summary>

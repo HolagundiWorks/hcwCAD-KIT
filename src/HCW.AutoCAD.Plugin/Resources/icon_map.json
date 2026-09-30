@@ -45,6 +45,7 @@
   "MSLB": "floorplan",
   "MSHOW": "view",
   "MCLEAR": "clean",
+  "MSCHEDTABLE": "table-of-contents",
   "POLYAREA": "area--custom",
   "INCCOPY": "copy",
   "MEXPORT": "document--export",

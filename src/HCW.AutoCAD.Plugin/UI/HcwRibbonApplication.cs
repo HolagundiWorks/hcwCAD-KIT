@@ -171,6 +171,7 @@ namespace HCW.AutoCAD.Plugin.UI
                 });
             AddLarge(src, "MCOL", "Columns", "column", "Group concrete columns of the same size. MREC still numbers plain rectangles.");
             AddLarge(src, "MSCHED", "Schedule", "report", "Floors, doors, windows, columns, and deduction name map");
+            AddLarge(src, "MSCHEDTABLE", "Insert\nSchedule", "table-of-contents", "Draw the saved schedule as a table in the drawing");
             AddLarge(src, "MAREA", "Area", "area", "Closed-shape area and perimeter. MARE still works.");
             AddLarge(src, "MSLAB", "Slab", "floorplan", "Slab area with opening deductions. MSLB still works.");
             AddSmallGroup(src,
