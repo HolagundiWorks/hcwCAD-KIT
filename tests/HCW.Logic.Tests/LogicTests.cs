@@ -715,3 +715,173 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class ElectricalTests
+    {
+        private static ElNode Board(string id, double x, double y) => new ElNode { Id = id, IsBoard = true, Box = new Box(x - 0.1, y - 0.1, x + 0.1, y + 0.1) };
+        private static ElNode Point(string id, double x, double y) => new ElNode { Id = id, IsBoard = false, Box = new Box(x - 0.1, y - 0.1, x + 0.1, y + 0.1) };
+        private static ElWire Wire(params double[] xy)
+        {
+            var w = new ElWire();
+            for (int i = 0; i < xy.Length; i += 2) w.Points.Add(new PlanPoint(xy[i], xy[i + 1]));
+            return w;
+        }
+
+        [Fact]
+        public void TwoLightsOnOneBoard()
+        {
+            var nodes = new[] { Board("SB-01", 0, 0), Point("LP-01", 5, 0), Point("LP-02", 5, 3) };
+            var wires = new[] { Wire(0.1, 0, 5, 0), Wire(0.1, 0, 0.1, 3, 5, 3) };
+            var rows = ElectricalSchedule.ByBoard(nodes, ElectricalNet.Build(nodes, wires, 0.05));
+            Assert.Equal(new[] { "SB-01/LP-01/Direct", "SB-01/LP-02/Direct" }, rows.Select(r => r.Board + "/" + r.Point + "/" + r.Connection).ToArray());
+        }
+
+        [Fact]
+        public void DaisyChainedLightReachesTheBoardThroughItsNeighbour()
+        {
+            // LP-01 --- LP-02 --- SB-01
+            var nodes = new[] { Board("SB-01", 10, 0), Point("LP-01", 0, 0), Point("LP-02", 5, 0) };
+            var wires = new[] { Wire(0.1, 0, 4.9, 0), Wire(5.1, 0, 9.9, 0) };
+            var nets = ElectricalNet.Build(nodes, wires, 0.05);
+            var rows = ElectricalSchedule.ByBoard(nodes, nets);
+            Assert.Equal(2, rows.Count);
+            Assert.All(rows, r => Assert.Equal("SB-01", r.Board));
+            Assert.All(rows, r => Assert.Equal("Direct", r.Connection));
+        }
+
+        [Fact]
+        public void TwoWayPointDoesNotMixTheBoardsOtherLights()
+        {
+            var nodes = new[]
+            {
+                Board("SB-01", 0, 0), Board("SB-02", 20, 0),
+                Point("LP-01", 5, 5), Point("LP-03", 10, 0)
+            };
+            var wires = new[]
+            {
+                Wire(0.1, 0, 9.9, 0),        // SB-01 to LP-03
+                Wire(10.1, 0, 19.9, 0),      // LP-03 to SB-02
+                Wire(0.1, 0.1, 0.1, 5, 4.9, 5) // SB-01 to LP-01
+            };
+            var nets = ElectricalNet.Build(nodes, wires, 0.05);
+            var rows = ElectricalSchedule.ByBoard(nodes, nets);
+            var text = rows.Select(r => r.Board + " " + r.Point + " " + r.Connection).ToArray();
+            Assert.Equal(new[] { "SB-01 LP-01 Direct", "SB-01 LP-03 2 Way", "SB-02 LP-03 2 Way" }, text);
+            var byPoint = ElectricalSchedule.ByPoint(nodes, nets);
+            Assert.Equal("LP-03", byPoint[1].Key);
+            Assert.Equal("SB-01, SB-02", byPoint[1].Value);
+        }
+
+        [Fact]
+        public void TJunctionJoinsWires()
+        {
+            var nodes = new[] { Board("SB-01", 0, 0), Point("LP-01", 10, 5), Point("LP-02", 10, -5) };
+            var wires = new[] { Wire(0.1, 0, 10, 0), Wire(10, 0, 10, 4.9), Wire(10, 0, 10, -4.9) };
+            var rows = ElectricalSchedule.ByBoard(nodes, ElectricalNet.Build(nodes, wires, 0.05));
+            Assert.Equal(2, rows.Count);
+        }
+
+        [Fact]
+        public void CrossingWiresDoNotConnect()
+        {
+            var nodes = new[] { Board("SB-01", 0, 0), Point("LP-01", 10, 0), Board("SB-02", 5, -5), Point("LP-02", 5, 5) };
+            var wires = new[] { Wire(0.1, 0, 9.9, 0), Wire(5, -4.9, 5, 4.9) };
+            var rows = ElectricalSchedule.ByBoard(nodes, ElectricalNet.Build(nodes, wires, 0.05));
+            var text = rows.Select(r => r.Board + " " + r.Point).ToArray();
+            Assert.Equal(new[] { "SB-01 LP-01", "SB-02 LP-02" }, text);
+        }
+
+        [Fact]
+        public void UnconnectedNodesAreReported()
+        {
+            var nodes = new[] { Board("SB-01", 0, 0), Point("LP-01", 5, 0), Point("LP-02", 50, 50) };
+            var wires = new[] { Wire(0.1, 0, 4.9, 0) };
+            var nets = ElectricalNet.Build(nodes, wires, 0.05);
+            Assert.Equal(new[] { 2 }, ElectricalSchedule.Unconnected(nodes, nets).ToArray());
+        }
+
+        [Fact]
+        public void WireToMissingBoardLeavesPointsUnconnected()
+        {
+            var nodes = new[] { Point("LP-01", 5, 0), Point("LP-02", 10, 0) };
+            var wires = new[] { Wire(5.1, 0, 9.9, 0) };
+            var nets = ElectricalNet.Build(nodes, wires, 0.05);
+            Assert.Equal(2, ElectricalSchedule.Unconnected(nodes, nets).Count);
+            Assert.Empty(ElectricalSchedule.ByBoard(nodes, nets));
+        }
+
+        [Fact]
+        public void NaturalOrder()
+        {
+            var ids = new[] { "SB-10", "SB-02", "LP-01", "SB-01" };
+            var sorted = ids.OrderBy(x => x, System.Collections.Generic.Comparer<string>.Create(ElectricalSchedule.NaturalCompare)).ToArray();
+            Assert.Equal(new[] { "LP-01", "SB-01", "SB-02", "SB-10" }, sorted);
+        }
+    }
+
+    public class ElectricalNumberingTests
+    {
+        private static NumberItem Item(int key, double x, double y, string existing = "") => new NumberItem { Key = key, X = x, Y = y, Existing = existing };
+
+        [Fact]
+        public void FirstNumberingIsInReadingOrder()
+        {
+            var ids = ElectricalNumbering.Assign(new[] { Item(0, 9, 0), Item(1, 1, 5), Item(2, 1, 2) }, "LP", false);
+            Assert.Equal("LP-01", ids[2]); // x 1, y 2
+            Assert.Equal("LP-02", ids[1]); // x 1, y 5
+            Assert.Equal("LP-03", ids[0]);
+        }
+
+        [Fact]
+        public void ExistingIdsAreKeptAndNewOnesFollow()
+        {
+            var ids = ElectricalNumbering.Assign(new[] { Item(0, 0, 0, "LP-05"), Item(1, 5, 0), Item(2, 9, 0, "LP-02") }, "LP", false);
+            Assert.Equal("LP-05", ids[0]);
+            Assert.Equal("LP-02", ids[2]);
+            Assert.Equal("LP-06", ids[1]);
+        }
+
+        [Fact]
+        public void CopiedBlockWithARepeatedIdGetsANewOne()
+        {
+            var ids = ElectricalNumbering.Assign(new[] { Item(0, 0, 0, "LP-01"), Item(1, 8, 0, "LP-01") }, "LP", false);
+            Assert.Equal("LP-01", ids[0]);
+            Assert.Equal("LP-02", ids[1]);
+        }
+
+        [Fact]
+        public void WrongPrefixIsRenumbered()
+        {
+            var ids = ElectricalNumbering.Assign(new[] { Item(0, 0, 0, "FP-01") }, "LP", false);
+            Assert.Equal("LP-01", ids[0]);
+        }
+
+        [Fact]
+        public void RenumberAllStartsAgain()
+        {
+            var ids = ElectricalNumbering.Assign(new[] { Item(0, 5, 0, "LP-01"), Item(1, 0, 0, "LP-07") }, "LP", true);
+            Assert.Equal("LP-01", ids[1]);
+            Assert.Equal("LP-02", ids[0]);
+        }
+
+        [Fact]
+        public void NumbersGrowPastNinetyNine()
+        {
+            Assert.Equal("LP-99", ElectricalNumbering.Format("LP", 99));
+            Assert.Equal("LP-100", ElectricalNumbering.Format("LP", 100));
+        }
+
+        [Theory]
+        [InlineData("LP", "LP", true)]
+        [InlineData("lp", "LP", true)]
+        [InlineData("LP_2W", "LP*", true)]
+        [InlineData("SB", "LP*", false)]
+        [InlineData("", "LP", false)]
+        public void BlockNameMatching(string name, string pattern, bool expected)
+        {
+            Assert.Equal(expected, ElectricalNumbering.NameMatches(name, new[] { pattern }));
+        }
+    }
+}

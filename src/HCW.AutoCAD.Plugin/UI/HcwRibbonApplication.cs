@@ -50,6 +50,7 @@ namespace HCW.AutoCAD.Plugin.UI
             toolsTab.Panels.Add(BuildNotesPanel());
             toolsTab.Panels.Add(BuildRoomToolsPanel());
             toolsTab.Panels.Add(BuildMeasurePanel());
+            toolsTab.Panels.Add(BuildElectricalPanel());
             toolsTab.Panels.Add(BuildAreaTextPanel());
 
             var settingsTab = new RibbonTab { Title = "hcwCAD-KIT Settings", Id = SettingsTabId };
@@ -178,6 +179,21 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("MEXPORT", "Export", "document--export", "Save the last take-off as CSV, or every take-off as one Excel workbook"),
                 ("MEXPORTX", "Export Excel", "document--export", "Save every take-off as one Excel workbook, with a Bill sheet for rated take-offs"),
                 ("MCLEAR", "Clear Labels", "clean", "Erase take-off label and table objects"));
+            return Wrap(src);
+        }
+
+        private RibbonPanel BuildElectricalPanel()
+        {
+            var src = NewSource("Electrical");
+            AddLarge(src, "ELNUM", "Number\nBlocks", "tag", "Give every switchboard, light point and fan point block its ID (SB-01, LP-01, FP-01)");
+            AddLarge(src, "ELCONNECT", "Check\nWiring", "rule", "Find which points are wired to which board, and flag what is not wired");
+            AddLarge(src, "ELSCHEDULE", "Schedule", "table-of-contents", "Draw the connection schedule for lights and fans");
+            AddLarge(src, "ELUPDATE", "Update", "reset", "Number new blocks, move labels, re-check the wiring and redraw the schedules");
+            AddSmallGroup(src,
+                ("SBNUM", "Number SB", "tag--edit", "Number the switchboard blocks"),
+                ("LPNUM", "Number LP", "tag--edit", "Number the light point blocks"),
+                ("FPNUM", "Number FP", "tag--edit", "Number the fan point blocks"),
+                ("ELLAYERS", "Wiring Layers", "layers", "Choose the layers the wiring lines are drawn on"));
             return Wrap(src);
         }
 

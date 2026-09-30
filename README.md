@@ -8,7 +8,7 @@ On load the plugin adds two ribbon tabs and switches to **hcwCAD-KIT**:
 
 | Tab | Use it for |
 |---|---|
-| **hcwCAD-KIT** | Notes and sheet fields, room labels, take-off, area and text |
+| **hcwCAD-KIT** | Notes and sheet fields, room labels, take-off, electrical layout, area and text |
 | **hcwCAD-KIT Settings** | Layer creation, layer checks, BPLT setup, room checks, text checks |
 
 Every button sends its command as if it were typed (`_COMMAND`). You can type any command at the command line without using the ribbon.
@@ -276,6 +276,44 @@ Points within 5 mm merge, dimensions shorter than `AutoDimMinMm` plotted are ski
 **Short dimensions.** A dimension too short for its text has the text moved to a second or third row, with a leader, in the direction away from the plan (or into the room), so texts do not overprint. The width of a character is `AutoDimTextWidthFactor` of the text height.
 
 Dimensions are plain, not associative: move the walls and re-run the command after `AUTODIMCLEAR`.
+
+### Electrical layout
+
+Number the electrical blocks, draw the wiring as ordinary lines and polylines, and the tool works out which points are wired to which board and draws the connection schedule. It is part of the plugin (not a LISP routine), so it works the same in AutoCAD, BricsCAD and ZWCAD.
+
+**Blocks.** A switchboard is a block named `SB`, a light point `LP`, a fan point `FP`. The names are settings (`ElectricalBoardBlocks`, `ElectricalLightBlocks`, `ElectricalFanBlocks`; separate several with `;`, `*` matches anything, for example `LP*`). Dynamic blocks are matched on their own name.
+
+| Command | What it does |
+|---|---|
+| `SBNUM`, `LPNUM`, `FPNUM`, `ELNUM` | Give every block of that kind an ID: `SB-01`, `LP-01`, `FP-01`. `ELNUM` does all three. Choose **Keep** (blocks keep the ID they have, new blocks get the next numbers) or **All** (start again from 1, left to right then bottom to top). |
+| `ELLAYERS` | Choose the layers the wiring is drawn on: one list for lighting wires, one for fan wires. **Pick from drawing…** takes the layers of objects you select. Saved in the drawing. Asked automatically the first time it is needed. |
+| `ELCONNECT` | Works out the connections and prints them: per kind, the points, boards and circuits; points wired to more than one board; points not wired to any board; boards with nothing wired to them. Circles on `EL-CHECK` flag what is not wired. |
+| `ELSCHEDULE` | Draws the schedule as a table. Choose **Light**, **Fan** or **Both**, the layout, the plot scale, and pick the top-left corner. |
+| `ELUPDATE` | After you change the drawing: numbers new blocks, moves the ID text, re-checks the wiring and redraws every schedule already in the drawing, in place and at the same text size. |
+
+**The ID stays with the block.** It is stored on the block itself (extended data), not only as text, so it follows the block when it is moved or the wiring is redrawn. If the block has attributes `ID`, `NUMBER` and `TAG`, they are filled in too (`LP-01`, `01`, `LP`) and no separate text is added. Otherwise the ID is written as text beside the block on `EL-LABELS`; the text follows the block when you run any of the commands above. A **copied block carries its old ID with it**, so a repeated ID is renumbered (the one first in reading order keeps it).
+
+**How a connection is found.** From geometry only, no reading of the picture:
+
+1. A wire (line, polyline, arc, spline) reaches a block when one of its vertices is within `ElectricalSnapMm` (default 100 mm real size) of the block's extents.
+2. Wires that meet end to end, or in a T, are one run. Wires that only cross are not joined.
+3. A **point is a junction**: all wires that reach the same light or fan point are one circuit, so a run from one light to the next carries on to the board.
+4. A **board is a terminal**: two runs that only meet at a board are separate circuits.
+
+So `LP-01 ── LP-02 ── SB-01` gives both lights on `SB-01`, and a light wired to two boards is a 2 way point without joining the two boards' other lights.
+
+**The schedules.** `Board` layout, one row per board and point:
+
+| SB | LP | Connection |
+|---|---|---|
+| SB-01 | LP-01 | Direct |
+| SB-01 | LP-02 | Direct |
+| SB-01 | LP-03 | 2 Way |
+| SB-02 | LP-03 | 2 Way |
+
+`Point` layout, one row per point: `LP-03` → `SB-01, SB-02`. The connection is `Direct` for a point wired to one board and `2 Way`, `3 Way` … for more. Lighting and fan schedules are separate (`ELECTRICAL LIGHTING CONNECTION SCHEDULE`, `ELECTRICAL FAN CONNECTION SCHEDULE`) and are read from their own wiring layers, so lights and fans can share a wiring layer and each schedule still reads only its own points. Tables are drawn on `EL-TABLE`.
+
+Settings (see `HCWSETTINGS`): the block names, `ElectricalSnapMm`, `ElectricalLabels` (0 turns the ID text off), `ElectricalLabelLayer`, `ElectricalTableTextMm`.
 
 ### Area and text
 

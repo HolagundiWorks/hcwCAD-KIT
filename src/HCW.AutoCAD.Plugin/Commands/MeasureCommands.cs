@@ -1449,9 +1449,11 @@ namespace HCW.AutoCAD.Plugin.Commands
             catch { ed.WriteMessage("\nCould not write CSV file (is it open elsewhere?)."); }
         }
 
-        internal static void DrawTable(Transaction tr, Database db, Point3d pt, string[] headers, List<string[]> rows, double h)
+        internal static List<ObjectId> DrawTable(Transaction tr, Database db, Point3d pt, string[] headers, List<string[]> rows, double h, string layer = null)
         {
             var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+            var made = new List<ObjectId>();
+            layer = layer ?? LayTbl;
             var all = new List<string[]> { headers };
             all.AddRange(rows);
             int nc = headers.Length, nr = all.Count;
@@ -1470,13 +1472,13 @@ namespace HCW.AutoCAD.Plugin.Commands
 
             for (int k = 0; k <= nr; k++)
             {
-                var ln = new Line(new Point3d(xs[0], y0 - k * rh, 0), new Point3d(xs[nc], y0 - k * rh, 0)) { Layer = LayTbl };
-                btr.AppendEntity(ln); tr.AddNewlyCreatedDBObject(ln, true);
+                var ln = new Line(new Point3d(xs[0], y0 - k * rh, 0), new Point3d(xs[nc], y0 - k * rh, 0)) { Layer = layer };
+                made.Add(btr.AppendEntity(ln)); tr.AddNewlyCreatedDBObject(ln, true);
             }
             foreach (var x in xs)
             {
-                var ln = new Line(new Point3d(x, y0, 0), new Point3d(x, y0 - nr * rh, 0)) { Layer = LayTbl };
-                btr.AppendEntity(ln); tr.AddNewlyCreatedDBObject(ln, true);
+                var ln = new Line(new Point3d(x, y0, 0), new Point3d(x, y0 - nr * rh, 0)) { Layer = layer };
+                made.Add(btr.AppendEntity(ln)); tr.AddNewlyCreatedDBObject(ln, true);
             }
             for (int k = 0; k < nr; k++)
             {
@@ -1485,11 +1487,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var t = new DBText
                     {
                         Position = new Point3d(xs[j] + 0.5 * h, y0 - (k + 1) * rh + 0.5 * h, 0),
-                        Height = h, TextString = all[k][j] ?? "", Layer = LayTbl
+                        Height = h, TextString = all[k][j] ?? "", Layer = layer
                     };
-                    btr.AppendEntity(t); tr.AddNewlyCreatedDBObject(t, true);
+                    made.Add(btr.AppendEntity(t)); tr.AddNewlyCreatedDBObject(t, true);
                 }
             }
+            return made;
         }
     }
 }

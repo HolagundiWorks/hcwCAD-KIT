@@ -14,6 +14,16 @@ What is not built yet. Everything else is described in the [README](../README.md
 
 Open questions: single-line (centreline) walls and mixed drawings are not handled: only faces (two lines or a closed outline).
 
+## Electrical
+
+`SBNUM`, `LPNUM`, `FPNUM`, `ELCONNECT`, `ELSCHEDULE` and `ELUPDATE` are built (see the README). Still to do:
+
+- **Other points:** switches, sockets and fittings on the same pattern, with each switch tied to the lights it controls.
+- **Circuits and loads:** number the circuits per board, give each point a wattage, and total the load per board and circuit.
+- **Cable lengths:** the length of each run from the wiring polylines, for a cable schedule.
+- **Live labels:** ID text follows a moved block only when a command runs; a reactor would move it at once.
+- **Pass-through wires:** a wire that runs straight through a symbol does not connect to it today (only vertices do).
+
 ## Take-off
 
 - **Copy/array.** `INCARRAY` and `INCCOPY` deep-clone the selection once per copy. Cloning entities directly would be lighter but can lose block attributes. Measure on a large drawing before changing it.

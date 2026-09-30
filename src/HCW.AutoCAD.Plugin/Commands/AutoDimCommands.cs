@@ -742,7 +742,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// drawing is really in. The drawing itself is not changed. <paramref name="minMm"/> is the smallest real
         /// size that counts as plausible for what was selected (2 m for a plan, 1 m for a room, 20 cm for one wall).
         /// </summary>
-        private static double ResolveUnitsPerMm(Editor ed, double span, double minMm = 2000.0)
+        internal static double ResolveUnitsPerMm(Editor ed, double span, double minMm = 2000.0)
         {
             double mm = Util.MmToDrawingUnits(1.0);
             double realMm = span / mm;

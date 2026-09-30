@@ -53,6 +53,13 @@ namespace HCW.AutoCAD.Plugin
             Entry("AutoDimTextWidthFactor", "0.75", "AUTODIM: width of one character as a fraction of the text height, used to decide when a dimension is too short for its text."),
             Entry("AutoDimGridLayers", "AN-GRID;A-GRID", "AUTODIM: layers whose horizontal and vertical lines are read as the structural grid (separate with ;). Walls, windows, columns and furniture layers are chosen in the dialog."),
             Entry("AutoDimFurnitureOffsetMm", "6", "AUTODIMROOM: plotted distance from a furniture block to its width and depth dimensions, in millimetres."),
+            Entry("ElectricalBoardBlocks", "SB", "Electrical: block names that are switchboards (separate with ;, * matches anything, for example SB*)."),
+            Entry("ElectricalLightBlocks", "LP", "Electrical: block names that are light points."),
+            Entry("ElectricalFanBlocks", "FP", "Electrical: block names that are fan points."),
+            Entry("ElectricalSnapMm", "100", "Electrical: a wire reaches a block when one of its vertices is within this real-size distance (millimetres) of the block's extents."),
+            Entry("ElectricalLabels", "1", "Electrical: 1 writes each block's ID beside it as text (blocks with an ID attribute show it there instead); 0 turns the text off."),
+            Entry("ElectricalLabelLayer", "EL-LABELS", "Electrical: layer for the ID text."),
+            Entry("ElectricalTableTextMm", "2.5", "Electrical: plotted text height of the schedules, in millimetres."),
             Entry("AutoDimStyle", "HCW-WORKING", "AUTODIM: dimension style used; the current style is used when it does not exist.")
         };
 
