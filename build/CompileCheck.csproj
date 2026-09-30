@@ -21,6 +21,8 @@
     <Compile Include="..\src\HCW.AutoCAD.Plugin\**\*.cs" Exclude="..\src\HCW.AutoCAD.Plugin\obj\**;..\src\HCW.AutoCAD.Plugin\bin\**" />
     <PackageReference Include="AutoCAD.NET" Version="24.3.0" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
     <Reference Include="PresentationCore" />

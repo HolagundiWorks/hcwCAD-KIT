@@ -404,6 +404,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("HCWROOMSCHEDULE")]
         public void HcwRoomSchedule() => UI.RoomUnitSelector.Current.Schedule(Util.Ed, Util.Db);
 
+        [CommandMethod("HCWROOMTABLE")]
+        public void HcwRoomTable() => UI.RoomUnitSelector.Current.Table(Util.Ed, Util.Db);
+
         [CommandMethod("HCWROOMTOTAL")]
         public void HcwRoomTotal() => UI.RoomUnitSelector.Current.Total(Util.Ed);
 

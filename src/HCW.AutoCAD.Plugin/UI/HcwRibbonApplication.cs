@@ -60,6 +60,7 @@ namespace HCW.AutoCAD.Plugin.UI
             settingsTab.Panels.Add(BuildBpltSetupPanel());
             settingsTab.Panels.Add(BuildRoomChecksPanel());
             settingsTab.Panels.Add(BuildTextChecksPanel());
+            settingsTab.Panels.Add(BuildPluginPanel());
 
             rc.ActiveTab = toolsTab;
         }
@@ -180,7 +181,8 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("MFLOOR", "Floor", "area", "Floor area, grouped by equal area"),
                 ("MSETUP", "Units", "settings", "Metric (metres) or Imperial (feet and inches) for this session"),
                 ("MSHOW", "Restore Layers", "view", "Turn back on only the layers Measure hid"),
-                ("MEXPORT", "Export CSV", "document--export", "Save the last take-off as a CSV file beside the drawing"),
+                ("MEXPORT", "Export", "document--export", "Save the last take-off as CSV, or every take-off as one Excel workbook"),
+                ("MEXPORTX", "Export Excel", "document--export", "Save every take-off as one Excel workbook, with a Bill sheet for rated take-offs"),
                 ("MCLEAR", "Clear Labels", "clean", "Erase Measure label and table objects"));
             return Wrap(src);
         }
@@ -231,8 +233,9 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("HCWROOMSET", "Settings", "settings", "Show text height, layers, floor prefix and the detected unit"),
                 ("HCWROOMAUDIT", "Audit", "checkmark--outline", "Compare label and rectangle counts"),
                 ("HCWROOMCHECK", "Check Rects", "rule", "Verify room rectangles are closed"),
-                ("HCWROOMSCHEDULE", "Export CSV", "calendar", "Export this session's room labels to CSV"),
-                ("HCWROOMTOTAL", "Total Area", "report--data", "Total area of rooms labelled this session"),
+                ("HCWROOMSCHEDULE", "Export CSV", "calendar", "Export the room labels in this drawing to CSV"),
+                ("HCWROOMTABLE", "Room Table", "table-of-contents", "Draw the room schedule as a table"),
+                ("HCWROOMTOTAL", "Total Area", "report--data", "Total area of the rooms labelled in this drawing"),
                 ("HCWROOMHELP", "Help", "help", "How ROOM reads the drawing units"));
             return Wrap(src);
         }
@@ -246,6 +249,13 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("BPLTCHECK", "Check AP-", "rule", "Verify every required AP- layer has a closed polyline"),
                 ("BPLTAREA", "Area Summary", "area", "Report gross area per AP- layer"),
                 ("BPLTREPORT", "Export Report", "report", "Export the full BPLT layer report as CSV"));
+            return Wrap(src);
+        }
+
+        private RibbonPanel BuildPluginPanel()
+        {
+            var src = NewSource("Plugin");
+            AddLarge(src, "HCWSETTINGS", "Settings\nFile", "settings", "Open settings.ini: text heights, tolerances, numbering order and defaults");
             return Wrap(src);
         }
 

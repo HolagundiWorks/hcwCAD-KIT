@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Linq;
+using HCW.AutoCAD.Plugin.Logic;
+using HCW.AutoCAD.Plugin.Commands;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -30,6 +33,38 @@ namespace HCW.AutoCAD.Plugin
         public string FloorPrefix = "";
         public double? TextHeightUnits;
         public readonly List<RoomLogEntry> Log = new List<RoomLogEntry>();
+
+        private const string StoreDictionary = "HCW_ROOMS";
+        private const string StoreRecord = "LOG";
+
+        /// <summary>Reads the room log saved in the drawing, so schedules and totals survive a restart.</summary>
+        private void LoadLog(Transaction tr, Database db)
+        {
+            Log.Clear();
+            foreach (var line in DrawingStore.Read(tr, db, StoreDictionary, StoreRecord))
+            {
+                if (string.IsNullOrEmpty(line) || line == "EMPTY") continue;
+                var p = Fields.Split(line);
+                if (p.Length < 8) continue;
+                Func<string, double> d = t =>
+                {
+                    double v;
+                    return double.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out v) ? v : 0;
+                };
+                Log.Add(new RoomLogEntry
+                {
+                    System = p[0], RoomType = p[1], AreaUnit = p[2],
+                    Width = d(p[3]), Height = d(p[4]), AreaValue = d(p[5]), X = d(p[6]), Y = d(p[7])
+                });
+            }
+        }
+
+        private void SaveLog(Transaction tr, Database db)
+        {
+            Func<double, string> n = v => v.ToString("R", CultureInfo.InvariantCulture);
+            DrawingStore.Write(tr, db, StoreDictionary, StoreRecord, Log.Select(e => Fields.Join(
+                e.System, e.RoomType, e.AreaUnit, n(e.Width), n(e.Height), n(e.AreaValue), n(e.X), n(e.Y))));
+        }
 
         public abstract string SystemTag { get; }     // "M" / "F" / "I"
         public abstract string HeightPromptUnit { get; }  // "metres" / "feet" / "inches"
@@ -128,6 +163,7 @@ namespace HCW.AutoCAD.Plugin
                 AddCenteredText(tr, btr, dimText, center + down * (th * 1.5), th * 0.8, ucs);
                 AddCenteredText(tr, btr, areaText, center + down * (th * 2.8), th * 0.7, ucs);
 
+                LoadLog(tr, db);
                 Log.Add(new RoomLogEntry
                 {
                     System = SystemTag,
@@ -139,6 +175,7 @@ namespace HCW.AutoCAD.Plugin
                     X = center.X,
                     Y = center.Y
                 });
+                SaveLog(tr, db);
 
                 tr.Commit();
             }
@@ -356,9 +393,19 @@ namespace HCW.AutoCAD.Plugin
             }
         }
 
+        private void RefreshLog(Database db)
+        {
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                LoadLog(tr, db);
+                tr.Commit();
+            }
+        }
+
         public void Schedule(Editor ed, Database db)
         {
-            if (Log.Count == 0) { ed.WriteMessage("\nNo room records logged this session."); return; }
+            RefreshLog(db);
+            if (Log.Count == 0) { ed.WriteMessage("\nNo room records in this drawing."); return; }
             string dwgPath = db.Filename;
             string dir = string.IsNullOrEmpty(dwgPath) ? Path.GetTempPath() : Path.GetDirectoryName(dwgPath) + Path.DirectorySeparatorChar;
             string csvPath = dir + $"RoomSchedule-{UnitDisplayName}.csv";
@@ -367,14 +414,42 @@ namespace HCW.AutoCAD.Plugin
                 r.RoomType, r.Width.ToString("F3"), r.Height.ToString("F3"), r.AreaValue.ToString("F3"), r.X.ToString("F3"), r.Y.ToString("F3")
             });
             Util.WriteCsv(csvPath, new[] { "RoomType", "Width", "Height", $"Area_{AreaUnitLabel}", "InsX", "InsY" }, rows);
-            ed.WriteMessage($"\nMSCHEDULE: {Log.Count} label(s) (this session) exported to {csvPath}");
+            ed.WriteMessage($"\nMSCHEDULE: {Log.Count} label(s) (in this drawing) exported to {csvPath}");
+        }
+
+        /// <summary>Draws the room schedule as a table at a picked point: number, room, size and area, then the total.</summary>
+        public void Table(Editor ed, Database db)
+        {
+            RefreshLog(db);
+            if (Log.Count == 0) { ed.WriteMessage("\nNo room records in this drawing."); return; }
+            var ppr = ed.GetPoint("\nPick a point for the room schedule (top-left): ");
+            if (ppr.Status != PromptStatus.OK) return;
+            var rows = new List<string[]>();
+            int no = 0;
+            double total = 0;
+            foreach (var e in Log.OrderBy(r => r.RoomType, StringComparer.OrdinalIgnoreCase))
+            {
+                no++;
+                total += e.AreaValue;
+                rows.Add(new[] { no.ToString(), e.RoomType.ToUpperInvariant(), FormatDim(e.Width, e.Height), e.AreaValue.ToString("F2") });
+            }
+            rows.Add(new[] { "", "TOTAL", "", total.ToString("F2") });
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                MeasureCommands.EnsureTableLayer(tr, db);
+                MeasureCommands.DrawTable(tr, db, ppr.Value, new[] { "No", "Room", "Size", "Area (" + AreaUnitLabel + ")" }, rows, TextHeight);
+                tr.Commit();
+            }
+            ed.WriteMessage("\nRoom schedule: " + no + " room(s), total " + total.ToString("F2") + " " + AreaUnitLabel + ".");
         }
 
         public void Total(Editor ed)
         {
+            RefreshLog(Util.Db);
             var r = ed.GetString("\nRoom type filter (e.g. BEDROOM, or Enter for all): ");
             string filter = r.Status == PromptStatus.OK ? (r.StringResult ?? "") : "";
-            if (Log.Count == 0) { ed.WriteMessage("\nNo room records logged this session."); return; }
+            if (Log.Count == 0) { ed.WriteMessage("\nNo room records in this drawing."); return; }
             double total = 0; int count = 0;
             foreach (var e in Log)
             {

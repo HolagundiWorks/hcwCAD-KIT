@@ -23,6 +23,7 @@ namespace HCW.AutoCAD.Plugin.UI
         private readonly DataGridView _openings;
         private readonly DataGridView _columns;
         private readonly DataGridView _maps;
+        private readonly DataGridView _rates;
         private readonly CheckBox _draw;
         private readonly IList<BlockFound> _blocks;
 
@@ -45,15 +46,20 @@ namespace HCW.AutoCAD.Plugin.UI
             _columns = Grid("Mark", "Width (" + heightUnit + ")", "Depth (" + heightUnit + ")", "Name", "Count");
             _maps = Grid("Deduction", "Measured length", "Schedule name");
             _maps.Columns[1].ReadOnly = true;
+            _rates = Grid("Take-off", "Unit", "Rate");
+            _rates.Columns[0].ReadOnly = false;
             FillFloors(book);
             FillOpenings(book);
             FillColumns(book);
             FillMaps(book, deductionLabels);
+            foreach (var r in book.Rates)
+                _rates.Rows.Add(r.Takeoff, r.Unit, r.Rate > 0 ? r.Rate.ToString("0.##") : "");
 
             tabs.TabPages.Add(Page("Floors", _floors, "Each row is one floor. FFL to FFL is finished floor level to the next; lintel bottom is measured up from the FFL. Wall paint uses the ceiling height."));
             tabs.TabPages.Add(Page("Doors and windows", _openings, "Name (W1), door or window, type (pick from the list), length and height. Length is the size along the wall that is deducted. Sill and lintel bottom are optional: a blank lintel bottom uses the floor's value. Block name links door and window blocks (with a line on MEASURE-DEDUCT) to this entry; separate several names with ;. " + BlockHint()));
             tabs.TabPages.Add(Page("Columns", _columns, "Concrete columns of the same size share one mark."));
             tabs.TabPages.Add(Page("Deduction map", _maps, "Each measured deduction (FB01-D1) maps to one schedule name (W1). The closest schedule length within 50 mm (2 in) is pre-filled."));
+            tabs.TabPages.Add(Page("Rates", _rates, "Price per unit for each take-off (name as saved, for example WallPaint). Rated take-offs get a Bill sheet in the Excel export (MEXPORTX)."));
             Controls.Add(tabs);
 
             var bar = new Panel { Dock = DockStyle.Bottom, Height = 46 };
@@ -75,9 +81,26 @@ namespace HCW.AutoCAD.Plugin.UI
             CancelButton = cancel;
         }
 
+        /// <summary>Adds a row to the Rates tab for each saved take-off that has none yet. Units are (name, unit) pairs.</summary>
+        public void SetTakeoffNames(IEnumerable<KeyValuePair<string, string>> takeoffs)
+        {
+            var have = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataGridViewRow row in _rates.Rows)
+                if (!row.IsNewRow) have.Add(Cell(row, 0));
+            foreach (var t in takeoffs)
+                if (have.Add(t.Key)) _rates.Rows.Add(t.Key, t.Value, "");
+        }
+
         public MeasureBook Read()
         {
             var book = new MeasureBook();
+            foreach (DataGridViewRow row in _rates.Rows)
+            {
+                if (row.IsNewRow) continue;
+                string name = Cell(row, 0);
+                if (name.Length == 0) continue;
+                book.Rates.Add(new MeasureBook.RateSpec { Takeoff = name, Unit = Cell(row, 1), Rate = Num(row, 2) });
+            }
             foreach (DataGridViewRow row in _floors.Rows)
             {
                 if (row.IsNewRow) continue;
@@ -165,7 +188,7 @@ namespace HCW.AutoCAD.Plugin.UI
                 row.Cells[1].Value = kind;
                 FillTypes(row, MeasureBook.TypesFor(kind)[0]);
                 row.Cells[3].Value = block.Length.ToString("0.###");
-                row.Cells[4].Value = window ? "1.2" : "2.1";
+                row.Cells[4].Value = (window ? Settings.GetDouble("DefaultWindowHeight", 1.2) : Settings.GetDouble("DefaultDoorHeight", 2.1)).ToString("0.###");
                 row.Cells[7].Value = block.Name;
                 row.Cells[8].Value = "1";
             }
@@ -251,7 +274,10 @@ namespace HCW.AutoCAD.Plugin.UI
         private void FillFloors(MeasureBook book)
         {
             if (book.Floors.Count == 0)
-                _floors.Rows.Add("Ground", "3.15", "3", "2.1");
+                _floors.Rows.Add("Ground",
+                    Settings.GetDouble("DefaultFflHeight", 3.15).ToString("0.###"),
+                    Settings.GetDouble("DefaultCeilingHeight", 3.0).ToString("0.###"),
+                    Settings.GetDouble("DefaultLintelBottom", 2.1).ToString("0.###"));
             foreach (var f in book.Floors)
                 _floors.Rows.Add(f.Name, f.FflHeight.ToString("0.###"), f.Height.ToString("0.###"), f.LintelBottom.ToString("0.###"));
         }

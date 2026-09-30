@@ -20,6 +20,15 @@ namespace HCW.AutoCAD.Plugin
         public List<OpeningSpec> Openings = new List<OpeningSpec>();
         public List<ColumnSpec> Columns = new List<ColumnSpec>();
         public List<DeductionMap> Maps = new List<DeductionMap>();
+        public List<RateSpec> Rates = new List<RateSpec>();
+
+        /// <summary>A price for one take-off (matched on its name, for example WallPaint), used in the Excel bill.</summary>
+        public class RateSpec
+        {
+            public string Takeoff = "";
+            public string Unit = "";
+            public double Rate;
+        }
 
         public string MarkFor(string rawLabel)
         {
@@ -95,51 +104,10 @@ namespace HCW.AutoCAD.Plugin
         }
 
         private static IEnumerable<string> ReadLines(Transaction tr, Database db, string record)
-        {
-            var lines = new List<string>();
-            var nod = (DBDictionary)tr.GetObject(db.NamedObjectsDictionaryId, OpenMode.ForRead);
-            if (!nod.Contains(DictName)) return lines;
-            var dict = (DBDictionary)tr.GetObject(nod.GetAt(DictName), OpenMode.ForRead);
-            if (!dict.Contains(record)) return lines;
-            var xr = tr.GetObject(dict.GetAt(record), OpenMode.ForRead) as Xrecord;
-            if (xr?.Data == null) return lines;
-            foreach (TypedValue tv in xr.Data)
-                if (tv.TypeCode == (int)DxfCode.Text) lines.Add(tv.Value as string);
-            return lines;
-        }
+            => DrawingStore.Read(tr, db, DictName, record);
 
         private static void WriteLines(Transaction tr, Database db, string record, IEnumerable<string> lines)
-        {
-            var nod = (DBDictionary)tr.GetObject(db.NamedObjectsDictionaryId, OpenMode.ForRead);
-            DBDictionary dict;
-            if (nod.Contains(DictName))
-                dict = (DBDictionary)tr.GetObject(nod.GetAt(DictName), OpenMode.ForWrite);
-            else
-            {
-                nod.UpgradeOpen();
-                dict = new DBDictionary();
-                nod.SetAt(DictName, dict);
-                tr.AddNewlyCreatedDBObject(dict, true);
-            }
-
-            var data = new ResultBuffer();
-            foreach (var line in lines)
-                data.Add(new TypedValue((int)DxfCode.Text, line));
-            if (data.AsArray().Length == 0)
-                data.Add(new TypedValue((int)DxfCode.Text, "EMPTY"));
-
-            if (dict.Contains(record))
-            {
-                var xr = (Xrecord)tr.GetObject(dict.GetAt(record), OpenMode.ForWrite);
-                xr.Data = data;
-            }
-            else
-            {
-                var xr = new Xrecord { Data = data };
-                dict.SetAt(record, xr);
-                tr.AddNewlyCreatedDBObject(xr, true);
-            }
-        }
+            => DrawingStore.Write(tr, db, DictName, record, lines);
 
         /// <summary>The most recent take-off result, kept in the drawing so MEXPORT works after a restart.</summary>
         public class Takeoff
@@ -149,18 +117,32 @@ namespace HCW.AutoCAD.Plugin
             public List<string[]> Rows = new List<string[]>();
         }
 
+        private const string TakeoffPrefix = "TO_";
+        private const string LastTakeoff = "TO_LAST";
+
+        /// <summary>Stores a take-off under its name (a repeat run replaces it) and remembers it as the latest.</summary>
         public static void SaveTakeoff(Transaction tr, Database db, string name, string[] headers, List<string[]> rows)
         {
             var lines = new List<string> { "N|" + Esc(name), "H|" + string.Join("|", headers.Select(Esc)) };
             foreach (var r in rows)
                 lines.Add("R|" + string.Join("|", r.Select(Esc)));
-            WriteLines(tr, db, "TAKEOFF", lines);
+            WriteLines(tr, db, TakeoffPrefix + name, lines);
+            WriteLines(tr, db, LastTakeoff, new[] { name });
         }
 
+        /// <summary>The most recent take-off, or null when none was saved.</summary>
         public static Takeoff LoadTakeoff(Transaction tr, Database db)
         {
+            foreach (var name in ReadLines(tr, db, LastTakeoff))
+                if (!string.IsNullOrEmpty(name) && name != "EMPTY")
+                    return LoadTakeoff(tr, db, name);
+            return null;
+        }
+
+        public static Takeoff LoadTakeoff(Transaction tr, Database db, string name)
+        {
             var t = new Takeoff();
-            foreach (var line in ReadLines(tr, db, "TAKEOFF"))
+            foreach (var line in ReadLines(tr, db, TakeoffPrefix + name))
             {
                 if (string.IsNullOrEmpty(line) || line == "EMPTY") continue;
                 var p = Split(line);
@@ -169,6 +151,26 @@ namespace HCW.AutoCAD.Plugin
                 else if (p[0] == "R") t.Rows.Add(p.Skip(1).ToArray());
             }
             return t.Rows.Count == 0 && t.Headers.Length == 0 ? null : t;
+        }
+
+        /// <summary>Every saved take-off, in name order.</summary>
+        public static List<Takeoff> LoadAllTakeoffs(Transaction tr, Database db)
+        {
+            var all = new List<Takeoff>();
+            var nod = (DBDictionary)tr.GetObject(db.NamedObjectsDictionaryId, OpenMode.ForRead);
+            if (!nod.Contains(DictName)) return all;
+            var dict = (DBDictionary)tr.GetObject(nod.GetAt(DictName), OpenMode.ForRead);
+            var names = new List<string>();
+            foreach (DBDictionaryEntry entry in dict)
+                if (entry.Key.StartsWith(TakeoffPrefix, StringComparison.Ordinal) && entry.Key != LastTakeoff)
+                    names.Add(entry.Key.Substring(TakeoffPrefix.Length));
+            names.Sort(StringComparer.OrdinalIgnoreCase);
+            foreach (var name in names)
+            {
+                var t = LoadTakeoff(tr, db, name);
+                if (t != null) all.Add(t);
+            }
+            return all;
         }
 
         public void GroupSameSizes()
@@ -211,6 +213,8 @@ namespace HCW.AutoCAD.Plugin
                 yield return "C|" + Esc(c.Mark) + "|" + Num(c.Width) + "|" + Num(c.Depth) + "|" + Esc(c.Name) + "|" + c.Count.ToString(CultureInfo.InvariantCulture);
             foreach (var m in Maps)
                 yield return "M|" + Esc(m.Label) + "|" + Esc(m.Mark);
+            foreach (var r in Rates)
+                yield return "P|" + Esc(r.Takeoff) + "|" + Esc(r.Unit) + "|" + Num(r.Rate);
         }
 
         private static void Parse(MeasureBook book, string line)
@@ -224,32 +228,14 @@ namespace HCW.AutoCAD.Plugin
                 book.Openings.Add(new OpeningSpec { Mark = p[1], Kind = p[2], Width = D(p[3]), Height = D(p[4]), Type = p[5], Count = I(p[6]), LintelBottom = p.Length > 7 ? D(p[7]) : 0, Sill = p.Length > 8 ? D(p[8]) : 0, BlockName = p.Length > 9 ? p[9] : "" });
             else if (p[0] == "C" && p.Length >= 6)
                 book.Columns.Add(new ColumnSpec { Mark = p[1], Width = D(p[2]), Depth = D(p[3]), Name = p[4], Count = I(p[5]) });
+            else if (p[0] == "P" && p.Length >= 4)
+                book.Rates.Add(new RateSpec { Takeoff = p[1], Unit = p[2], Rate = D(p[3]) });
             else if (p[0] == "M" && p.Length >= 3)
                 book.Maps.Add(new DeductionMap { Label = p[1], Mark = p[2] });
         }
 
-        private static string Esc(string s) => (s ?? "").Replace("\\", "\\\\").Replace("|", "\\p");
-        private static string[] Split(string line)
-        {
-            var parts = new List<string>();
-            var cur = new System.Text.StringBuilder();
-            for (int i = 0; i < line.Length; i++)
-            {
-                if (line[i] == '\\' && i + 1 < line.Length)
-                {
-                    char n = line[++i];
-                    cur.Append(n == 'p' ? '|' : n);
-                }
-                else if (line[i] == '|')
-                {
-                    parts.Add(cur.ToString());
-                    cur.Clear();
-                }
-                else cur.Append(line[i]);
-            }
-            parts.Add(cur.ToString());
-            return parts.ToArray();
-        }
+        private static string Esc(string s) => HCW.AutoCAD.Plugin.Logic.Fields.Escape(s);
+        private static string[] Split(string line) => HCW.AutoCAD.Plugin.Logic.Fields.Split(line);
 
         private static string Num(double v) => v.ToString("0.####", CultureInfo.InvariantCulture);
         private static double D(string s)
@@ -267,11 +253,11 @@ namespace HCW.AutoCAD.Plugin
         {
             public string Name = "Ground";
             /// <summary>Ceiling height above the finished floor level (FFL). Wall paint uses it.</summary>
-            public double Height = 3.0;
+            public double Height = Settings.GetDouble("DefaultCeilingHeight", 3.0);
             /// <summary>Finished floor level to the next finished floor level (FFL to FFL).</summary>
-            public double FflHeight = 3.15;
+            public double FflHeight = Settings.GetDouble("DefaultFflHeight", 3.15);
             /// <summary>Height of the underside of the lintel above the FFL.</summary>
-            public double LintelBottom = 2.1;
+            public double LintelBottom = Settings.GetDouble("DefaultLintelBottom", 2.1);
         }
 
         /// <summary>Choices offered in the schedule for each kind of opening.</summary>

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using HCW.AutoCAD.Plugin;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -22,8 +23,8 @@ namespace HCW.AutoCAD.Plugin.Commands
         public static class MeasureState
         {
             public static UnitSys Units = UnitSys.Metric;
-            public static double TextHeight = 0.25;
-            public static double DedupTolerance = 0.01;
+            public static double TextHeight = Settings.GetDouble("MeasureTextHeight", 0.25);
+            public static double DedupTolerance = Settings.GetDouble("DeductionTolerance", 0.01);
             /// <summary>Layers this session's Measure commands turned off. MSHOW restores only these.</summary>
             public static readonly HashSet<string> HiddenByMeasure = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
@@ -40,6 +41,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         public const string LaySdd = "MEASURE-SLAB-DEDUCT";
         public const string LayLbl = "MEASURE-LABELS";
         public const string LayTbl = "MEASURE-TABLE";
+
+        /// <summary>Makes sure the table layer exists (used by other tools that draw tables).</summary>
+        internal static void EnsureTableLayer(Transaction tr, Database db) => Util.EnsureLayer(tr, db, LayTbl, 4);
 
         private static void MakeLayers(Transaction tr, Database db)
         {
@@ -77,7 +81,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         /// <summary>How far a deduction may differ from a schedule length and still be suggested: 50 mm, or 2 in (16 eighths).</summary>
-        public static int SuggestTolerance => MeasureState.Units == UnitSys.Imperial ? 16 : 5;
+        public static int SuggestTolerance => MeasureState.Units == UnitSys.Imperial
+            ? Settings.GetInt("SuggestToleranceEighths", 16)
+            : Settings.GetInt("SuggestToleranceCm", 5);
 
         private static string ScheduleUnit => MeasureState.Units == UnitSys.Imperial ? "ft" : "m";
 
@@ -273,6 +279,18 @@ namespace HCW.AutoCAD.Plugin.Commands
                     }
                     bool bookChanged = false;
 
+                    string order = Settings.Get("WallNumbering", "LeftRight");
+                    Curve numberPath = null;
+                    if (string.Equals(order, "Path", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var pathOpts = new PromptEntityOptions("\nPick the path line for wall numbering (on a visible layer, Enter = left to right): ");
+                        pathOpts.SetRejectMessage("\nPick a line, polyline or arc.");
+                        pathOpts.AddAllowedClass(typeof(Curve), false);
+                        var pathRes = ed.GetEntity(pathOpts);
+                        if (pathRes.Status == PromptStatus.OK)
+                            numberPath = (Curve)tr.GetObject(pathRes.ObjectId, OpenMode.ForRead);
+                    }
+
                     // match each deduction to the typed line it overlaps (nearest within tolerance)
                     var pidx = new int?[deds.Count];
                     for (int di = 0; di < deds.Count; di++)
@@ -303,7 +321,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                         // Number the walls left to right, then bottom to top: FB01, FB02, ...
                         var wallNo = new Dictionary<int, int>();
                         int serial = 0;
-                        foreach (var seg in segs.OrderBy(x => CurveMid(grp[x.index].ent).X).ThenBy(x => CurveMid(grp[x.index].ent).Y))
+                        foreach (var seg in OrderWalls(segs, grp.Select(g => g.ent).ToList(), order, numberPath))
                             wallNo[seg.index] = ++serial;
                         foreach (var bucket in segs.GroupBy(s => s.gross).OrderByDescending(s => s.Key))
                         {
@@ -503,9 +521,18 @@ namespace HCW.AutoCAD.Plugin.Commands
             var labels = new List<KeyValuePair<string, int>>();
             var lengths = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var blocks = new List<UI.BlockFound>();
+            var takeoffUnits = new List<KeyValuePair<string, string>>();
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 book = MeasureBook.Load(tr, db);
+                foreach (var saved in MeasureBook.LoadAllTakeoffs(tr, db))
+                {
+                    // The unit is the bracketed part of the last column heading, e.g. "Net (m2)".
+                    string last = saved.Headers.Length > 0 ? saved.Headers[saved.Headers.Length - 1] : "";
+                    int open = last.LastIndexOf('('), close = last.LastIndexOf(')');
+                    takeoffUnits.Add(new KeyValuePair<string, string>(saved.Name,
+                        open >= 0 && close > open ? last.Substring(open + 1, close - open - 1) : ""));
+                }
                 var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
                 foreach (var group in BlockOpenings.Collect(tr, space).GroupBy(f => f.BlockName, StringComparer.OrdinalIgnoreCase))
                 {
@@ -534,6 +561,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
             using (var dlg = new UI.MeasureScheduleForm(book, labels, ScheduleUnit, blocks))
             {
+                dlg.SetTakeoffNames(takeoffUnits);
                 if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
                 book = dlg.Read();
                 book.CountFromMaps();
@@ -1211,6 +1239,19 @@ namespace HCW.AutoCAD.Plugin.Commands
                     + " but " + opening.Mark + " is " + M(opening.WidthRounded) + ".");
         }
 
+        /// <summary>
+        /// Order in which walls are numbered: LeftRight (then bottom to top), TopBottom (then left to right),
+        /// or Path (by distance along a picked line, measured to the closest point to each wall's midpoint).
+        /// </summary>
+        private static IEnumerable<(int index, int gross)> OrderWalls(List<(int index, int gross)> segs, List<Curve> curves, string order, Curve path)
+        {
+            if (path != null)
+                return segs.OrderBy(x => path.GetDistAtPoint(path.GetClosestPointTo(CurveMid(curves[x.index]), false)));
+            if (string.Equals(order, "TopBottom", StringComparison.OrdinalIgnoreCase))
+                return segs.OrderByDescending(x => CurveMid(curves[x.index]).Y).ThenBy(x => CurveMid(curves[x.index]).X);
+            return segs.OrderBy(x => CurveMid(curves[x.index]).X).ThenBy(x => CurveMid(curves[x.index]).Y);
+        }
+
         /// <summary>Quick reject before the exact distance test: do the two curves' boxes come within the tolerance?</summary>
         private static bool Near(Curve a, Curve b, double tol)
         {
@@ -1236,14 +1277,71 @@ namespace HCW.AutoCAD.Plugin.Commands
             _lastHeaders = headers;
             _lastRows = rows;
             MeasureBook.SaveTakeoff(tr, db, defName, headers, rows);
-            ed.WriteMessage("\nRun MEXPORT to save this take-off as CSV.");
+            ed.WriteMessage("\nRun MEXPORT to save this take-off as CSV or Excel.");
         }
 
         private static string _lastName;
         private static string[] _lastHeaders;
         private static List<string[]> _lastRows;
 
+        /// <summary>Creates the settings file if needed and opens it for editing.</summary>
+        [CommandMethod("HCWSETTINGS")]
+        public void OpenSettings()
+        {
+            var ed = Util.Ed;
+            string path = Settings.EnsureFile();
+            ed.WriteMessage("\nSettings file: " + path + "\nRestart the host after editing it.");
+            try { System.Diagnostics.Process.Start(path); }
+            catch { ed.WriteMessage("\nCould not open it; open the file in any text editor."); }
+        }
+
+        /// <summary>Saves take-offs: the latest as CSV, or every saved take-off as one Excel workbook.</summary>
         [CommandMethod("MEXPORT")]
+        public void Export()
+        {
+            var ed = Util.Ed;
+            var opt = new PromptKeywordOptions("\nExport as [Csv/Xlsx] <Csv>: ") { AllowNone = true };
+            opt.Keywords.Add("Csv");
+            opt.Keywords.Add("Xlsx");
+            var pick = ed.GetKeywords(opt);
+            if (pick.Status != PromptStatus.OK && pick.Status != PromptStatus.None) return;
+            if (pick.Status == PromptStatus.OK && pick.StringResult == "Xlsx") ExportXlsx();
+            else ExportCsv();
+        }
+
+        [CommandMethod("MEXPORTX")]
+        public void ExportXlsx()
+        {
+            var ed = Util.Ed; var db = Util.Db;
+            List<MeasureBook.Takeoff> saved;
+            MeasureBook book;
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                saved = MeasureBook.LoadAllTakeoffs(tr, db);
+                book = MeasureBook.Load(tr, db);
+                tr.Commit();
+            }
+            if (saved.Count == 0)
+            {
+                ed.WriteMessage("\nMEXPORTX: run a take-off first.");
+                return;
+            }
+            var data = saved.Select(t => new Logic.Billing.TakeoffData { Name = t.Name, Headers = t.Headers, Rows = t.Rows }).ToList();
+            var rates = book.Rates.Select(r => new Logic.Billing.RateData { Takeoff = r.Takeoff, Unit = r.Unit, Rate = r.Rate }).ToList();
+
+            var dwgPath = db.Filename;
+            string dir = string.IsNullOrEmpty(dwgPath) ? Path.GetTempPath() : Path.GetDirectoryName(dwgPath) + Path.DirectorySeparatorChar;
+            string stem = string.IsNullOrEmpty(dwgPath) ? "Drawing" : Path.GetFileNameWithoutExtension(dwgPath);
+            string path = dir + stem + "-Takeoffs.xlsx";
+            try
+            {
+                Logic.XlsxWriter.Write(path, Logic.Billing.Sheets(data, rates));
+                ed.WriteMessage("\nSaved: " + path + " (" + data.Count + " take-off sheet" + (data.Count == 1 ? "" : "s")
+                    + (rates.Any(r => r.Rate > 0) ? ", with a Bill sheet" : "") + ").");
+            }
+            catch { ed.WriteMessage("\nCould not write the Excel file (is it open elsewhere?)."); }
+        }
+
         public void ExportCsv()
         {
             var ed = Util.Ed;
@@ -1278,7 +1376,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             catch { ed.WriteMessage("\nCould not write CSV file (is it open elsewhere?)."); }
         }
 
-        private static void DrawTable(Transaction tr, Database db, Point3d pt, string[] headers, List<string[]> rows, double h)
+        internal static void DrawTable(Transaction tr, Database db, Point3d pt, string[] headers, List<string[]> rows, double h)
         {
             var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
             var all = new List<string[]> { headers };
