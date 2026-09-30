@@ -264,6 +264,15 @@ namespace HCW.AutoCAD.Plugin.Commands
                     }
                     if (grp.Count == 0) { ed.WriteMessage("\nNo matching typed lines selected."); return; }
 
+                    // Door and window blocks add their own deduction line (index -> block name).
+                    var blockOf = new Dictionary<int, string>();
+                    foreach (var found in BlockOpenings.Collect(tr, (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead)))
+                    {
+                        blockOf[deds.Count] = found.BlockName;
+                        deds.Add(found.Curve);
+                    }
+                    bool bookChanged = false;
+
                     // match each deduction to the typed line it overlaps (nearest within tolerance)
                     var pidx = new int?[deds.Count];
                     for (int di = 0; di < deds.Count; di++)
@@ -271,6 +280,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                         int? best = null; double bd = double.MaxValue;
                         for (int k = 0; k < grp.Count; k++)
                         {
+                            if (!Near(deds[di], grp[k].ent, tol)) continue;
                             double md = MaxDist(deds[di], grp[k].ent);
                             if (md <= tol && md < bd) { bd = md; best = k; }
                         }
@@ -317,6 +327,9 @@ namespace HCW.AutoCAD.Plugin.Commands
                                     dsum += dv;
                                     // Wall FB01, its first opening: FB01-D1.
                                     string raw = wallId + "-D" + openingNo;
+                                    string blockName;
+                                    if (blockOf.TryGetValue(j, out blockName))
+                                        MapBlock(ed, book, blockName, raw, dv, ref bookChanged);
                                     var dmp = CurveMid(deds[j]);
                                     PlaceLabel(tr, db, btr, new Point3d(dmp.X, dmp.Y - 0.8 * th, 0), raw, book, th, measured: dv);
                                     string shown = DisplayName(book, raw);
@@ -342,7 +355,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                     int unm = 0;
                     for (int j = 0; j < deds.Count; j++)
                     {
-                        if (pidx[j] == null)
+                        // A block deduction that touches none of the selected walls belongs to another wall.
+                        if (pidx[j] == null && !blockOf.ContainsKey(j))
                         {
                             unm++;
                             var dmp = CurveMid(deds[j]);
@@ -359,6 +373,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var headers = singleTypeNoPrefix
                         ? new[] { "Item", $"Length x count ({LenLabel})", $"Deduction ({LenLabel})", $"Net ({LenLabel})" }
                         : new[] { "Item", "Type", $"Length x count ({LenLabel})", $"Deduction ({LenLabel})", $"Net ({LenLabel})" };
+                    if (bookChanged) book.Save(tr, db);
                     Output(tr, db, csvName, headers, rows, th);
                 }
                 tr.Commit();
@@ -444,7 +459,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 var book = MeasureBook.Load(tr, db);
-                if (ScheduleRows(book).Count == 0)
+                if (ScheduleTables(book).Count == 0)
                 {
                     ed.WriteMessage("\nMSCHEDTABLE: the schedule is empty. Run MSCHED first.");
                     return;
@@ -456,12 +471,28 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private static bool InsertScheduleTable(Editor ed, Transaction tr, Database db, MeasureBook book)
         {
-            var rows = ScheduleRows(book);
-            if (rows.Count == 0) return false;
-            var ppr = ed.GetPoint("\nPick a point for the schedule table: ");
+            var tables = ScheduleTables(book);
+            if (tables.Count == 0) return false;
+            var ppr = ed.GetPoint("\nPick a point for the schedule tables (top-left): ");
             if (ppr.Status != PromptStatus.OK) return false;
-            DrawTable(tr, db, ppr.Value, new[] { "Item", "Detail", "Size", "Count" }, rows, MeasureState.TextHeight);
+            double h = MeasureState.TextHeight;
+            double y = ppr.Value.Y;
+            foreach (var table in tables)
+            {
+                CenteredTextLeft(tr, db, new Point3d(ppr.Value.X, y + 0.6 * h, 0), table.Title, h * 1.2);
+                DrawTable(tr, db, new Point3d(ppr.Value.X, y - 1.5 * h, 0), table.Headers, table.Rows, h);
+                // title line, header row, body rows, then a gap before the next table
+                y -= (table.Rows.Count + 1) * 2.0 * h + 4.5 * h;
+            }
             return true;
+        }
+
+        private static void CenteredTextLeft(Transaction tr, Database db, Point3d pt, string text, double h)
+        {
+            var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+            var t = new DBText { Position = pt, Height = h, TextString = text, Layer = LayTbl };
+            btr.AppendEntity(t);
+            tr.AddNewlyCreatedDBObject(t, true);
         }
 
         [CommandMethod("MSCHED")]
@@ -471,10 +502,21 @@ namespace HCW.AutoCAD.Plugin.Commands
             MeasureBook book;
             var labels = new List<KeyValuePair<string, int>>();
             var lengths = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var blocks = new List<UI.BlockFound>();
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 book = MeasureBook.Load(tr, db);
                 var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+                foreach (var group in BlockOpenings.Collect(tr, space).GroupBy(f => f.BlockName, StringComparer.OrdinalIgnoreCase))
+                {
+                    int first = Rnd(CurveLen(group.First().Curve));
+                    blocks.Add(new UI.BlockFound
+                    {
+                        Name = group.Key,
+                        Count = group.Count(),
+                        Length = MeasureState.Units == UnitSys.Imperial ? first / 8.0 / 12.0 : first / 100.0
+                    });
+                }
                 foreach (ObjectId id in space)
                 {
                     var text = tr.GetObject(id, OpenMode.ForRead) as DBText;
@@ -490,7 +532,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 tr.Commit();
             }
 
-            using (var dlg = new UI.MeasureScheduleForm(book, labels, ScheduleUnit))
+            using (var dlg = new UI.MeasureScheduleForm(book, labels, ScheduleUnit, blocks))
             {
                 if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
                 book = dlg.Read();
@@ -505,6 +547,14 @@ namespace HCW.AutoCAD.Plugin.Commands
                         ed.WriteMessage("\nWARNING: " + floor.Name + " lintel bottom " + floor.LintelBottom + " is above its ceiling height " + floor.Height + ".");
                     foreach (var o in book.Openings.Where(x => x.LintelBottom <= 0 && floor.LintelBottom > 0 && x.Height > floor.LintelBottom))
                         ed.WriteMessage("\nWARNING: " + o.Mark + " is " + o.Height + " high, above the " + floor.Name + " lintel bottom " + floor.LintelBottom + ".");
+                }
+                var lintelFloor = book.Floors.FirstOrDefault(f => f.LintelBottom > 0);
+                foreach (var o in book.Openings.Where(x => x.Sill > 0))
+                {
+                    double lintel = o.LintelBottom > 0 ? o.LintelBottom : (lintelFloor == null ? 0 : lintelFloor.LintelBottom);
+                    if (lintel > 0 && Math.Abs(RndSchedule(lintel - o.Sill) - o.HeightRounded) > SuggestTolerance)
+                        ed.WriteMessage("\nWARNING: " + o.Mark + " sill " + o.Sill + " and lintel bottom " + lintel + " leave "
+                            + Math.Round(lintel - o.Sill, 3) + ", but its height is " + o.Height + ".");
                 }
                 foreach (var dup in book.Openings.GroupBy(o => o.Mark, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
                     ed.WriteMessage("\nWARNING: schedule name " + dup.Key + " is used more than once.");
@@ -566,12 +616,21 @@ namespace HCW.AutoCAD.Plugin.Commands
                     }
                     if (walls.Count == 0) { ed.WriteMessage("\nNo wall lines selected."); return; }
 
+                    var blockOf = new Dictionary<int, string>();
+                    foreach (var found in BlockOpenings.Collect(tr, (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead)))
+                    {
+                        blockOf[deds.Count] = found.BlockName;
+                        deds.Add(found.Curve);
+                    }
+                    var labelIndex = DeductionLabels(tr, db);
+
                     var parent = new int?[deds.Count];
                     for (int i = 0; i < deds.Count; i++)
                     {
                         int? best = null; double bd = double.MaxValue;
                         for (int k = 0; k < walls.Count; k++)
                         {
+                            if (!Near(deds[i], walls[k], MeasureState.DedupTolerance)) continue;
                             double md = MaxDist(deds[i], walls[k]);
                             if (md <= MeasureState.DedupTolerance && md < bd) { bd = md; best = k; }
                         }
@@ -595,7 +654,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                             for (int i = 0; i < deds.Count; i++)
                             {
                                 if (parent[i] != index) continue;
-                                deduct += OpeningArea(tr, db, book, deds[i], height, th);
+                                string blockName;
+                                deduct += OpeningArea(book, labelIndex, deds[i], height, th, blockOf.TryGetValue(i, out blockName) ? blockName : null);
                             }
                         }
                         double net = Math.Max(0, gross - deduct);
@@ -1010,41 +1070,64 @@ namespace HCW.AutoCAD.Plugin.Commands
             return renamed;
         }
 
-        private static List<string[]> ScheduleRows(MeasureBook book)
+        private class ScheduleTable
         {
-            var rows = new List<string[]>();
-            foreach (var floor in book.Floors)
+            public string Title;
+            public string[] Headers;
+            public List<string[]> Rows = new List<string[]>();
+        }
+
+        /// <summary>One table per group: floors, doors and windows, columns, and the deduction map.</summary>
+        private static List<ScheduleTable> ScheduleTables(MeasureBook book)
+        {
+            var tables = new List<ScheduleTable>();
+            string u = " (" + ScheduleUnit + ")";
+            Func<double, string> f = v => v > 0 ? v.ToString("0.###") : "";
+
+            if (book.Floors.Count > 0)
             {
-                if (floor.FflHeight > 0)
-                    rows.Add(new[] { floor.Name, "FFL to FFL height", floor.FflHeight.ToString("0.###") + " " + ScheduleUnit, "" });
-                if (floor.Height > 0)
-                    rows.Add(new[] { floor.Name, "Ceiling height", floor.Height.ToString("0.###") + " " + ScheduleUnit, "" });
-                if (floor.LintelBottom > 0)
-                    rows.Add(new[] { floor.Name, "Lintel bottom height", floor.LintelBottom.ToString("0.###") + " " + ScheduleUnit, "" });
+                var t = new ScheduleTable { Title = "FLOOR HEIGHTS", Headers = new[] { "Floor", "FFL to FFL" + u, "Ceiling" + u, "Lintel bottom" + u } };
+                foreach (var floor in book.Floors)
+                    t.Rows.Add(new[] { floor.Name, f(floor.FflHeight), f(floor.Height), f(floor.LintelBottom) });
+                tables.Add(t);
             }
-            foreach (var opening in book.Openings)
-                rows.Add(new[]
-                {
-                    opening.Mark,
-                    (string.IsNullOrWhiteSpace(opening.Type) ? opening.Kind : opening.Kind + ", " + opening.Type)
-                        + (opening.LintelBottom > 0 ? ", lintel bottom " + opening.LintelBottom.ToString("0.###") + " " + ScheduleUnit : ""),
-                    opening.Width.ToString("0.###") + " x " + opening.Height.ToString("0.###"),
-                    Math.Max(1, opening.Count).ToString()
-                });
-            foreach (var column in book.Columns)
-                rows.Add(new[]
-                {
-                    column.Mark,
-                    string.IsNullOrWhiteSpace(column.Name) ? "Column" : column.Name,
-                    column.Width.ToString("0.###") + " x " + column.Depth.ToString("0.###"),
-                    Math.Max(1, column.Count).ToString()
-                });
-            foreach (var map in book.Maps)
+            if (book.Openings.Count > 0)
             {
-                if (string.IsNullOrWhiteSpace(map.Mark)) continue;
-                rows.Add(new[] { map.Label, "Maps to " + map.Mark, "", "" });
+                var t = new ScheduleTable
+                {
+                    Title = "DOOR AND WINDOW SCHEDULE",
+                    Headers = new[] { "Name", "Kind", "Type", "Length" + u, "Height" + u, "Sill" + u, "Lintel bottom" + u, "Count" }
+                };
+                foreach (var kind in new[] { "Door", "Window" })
+                {
+                    var group = book.Openings.Where(q => string.Equals(q.Kind, kind, StringComparison.OrdinalIgnoreCase)).ToList();
+                    foreach (var o in group)
+                        t.Rows.Add(new[] { o.Mark, o.Kind, o.Type, f(o.Width), f(o.Height), f(o.Sill), f(o.LintelBottom), Math.Max(1, o.Count).ToString() });
+                    if (group.Count > 0)
+                        t.Rows.Add(new[] { "TOTAL", kind + "s", "", "", "", "", "", group.Sum(q => Math.Max(1, q.Count)).ToString() });
+                }
+                // Anything that is neither kind still appears, so no entry goes missing.
+                foreach (var o in book.Openings.Where(q => !string.Equals(q.Kind, "Door", StringComparison.OrdinalIgnoreCase)
+                                                          && !string.Equals(q.Kind, "Window", StringComparison.OrdinalIgnoreCase)))
+                    t.Rows.Add(new[] { o.Mark, o.Kind, o.Type, f(o.Width), f(o.Height), f(o.Sill), f(o.LintelBottom), Math.Max(1, o.Count).ToString() });
+                tables.Add(t);
             }
-            return rows;
+            if (book.Columns.Count > 0)
+            {
+                var t = new ScheduleTable { Title = "COLUMN SCHEDULE", Headers = new[] { "Mark", "Width" + u, "Depth" + u, "Name", "Count" } };
+                foreach (var c in book.Columns)
+                    t.Rows.Add(new[] { c.Mark, f(c.Width), f(c.Depth), c.Name, Math.Max(1, c.Count).ToString() });
+                t.Rows.Add(new[] { "TOTAL", "", "", "", book.Columns.Sum(c => Math.Max(1, c.Count)).ToString() });
+                tables.Add(t);
+            }
+            var mapped = book.Maps.Where(m => !string.IsNullOrWhiteSpace(m.Mark)).ToList();
+            if (mapped.Count > 0)
+            {
+                var t = new ScheduleTable { Title = "DEDUCTION MAP", Headers = new[] { "Deduction", "Schedule name" } };
+                foreach (var m in mapped) t.Rows.Add(new[] { m.Label, m.Mark });
+                tables.Add(t);
+            }
+            return tables;
         }
 
         private static double AskFloorHeight(Editor ed, MeasureBook book)
@@ -1073,24 +1156,72 @@ namespace HCW.AutoCAD.Plugin.Commands
             return floors[index].Height;
         }
 
-        private static double OpeningArea(Transaction tr, Database db, MeasureBook book, Curve deduction, double wallHeight, double textHeight)
+        /// <summary>Positions and names of every deduction label in the current space, read once per run.</summary>
+        private static List<KeyValuePair<Point3d, string>> DeductionLabels(Transaction tr, Database db)
         {
-            var mid = CurveMid(deduction);
+            var list = new List<KeyValuePair<Point3d, string>>();
             var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
             foreach (ObjectId id in space)
             {
                 var text = tr.GetObject(id, OpenMode.ForRead) as DBText;
                 if (text == null || !string.Equals(text.Layer, LayLbl, StringComparison.OrdinalIgnoreCase)) continue;
-                if (text.Position.DistanceTo(mid) > Math.Max(4 * textHeight, 0.25)) continue;
                 string raw = RawLabel(text);
-                if (!IsDeductionLabel(raw)) continue;
-                var opening = book.Opening(book.MarkFor(raw));
+                if (IsDeductionLabel(raw)) list.Add(new KeyValuePair<Point3d, string>(text.Position, raw));
+            }
+            return list;
+        }
+
+        /// <summary>
+        /// Area of one opening: the schedule size when the opening is known (from its block, or from the
+        /// label next to the deduction line), otherwise the measured length times the wall height.
+        /// </summary>
+        private static double OpeningArea(MeasureBook book, List<KeyValuePair<Point3d, string>> labels, Curve deduction,
+            double wallHeight, double textHeight, string blockName)
+        {
+            var byBlock = book.OpeningForBlock(blockName);
+            if (byBlock != null && byBlock.Width > 0 && byBlock.Height > 0)
+                return byBlock.Width * byBlock.Height;
+
+            var mid = CurveMid(deduction);
+            double reach = Math.Max(4 * textHeight, 0.25);
+            foreach (var label in labels)
+            {
+                if (label.Key.DistanceTo(mid) > reach) continue;
+                var opening = book.Opening(book.MarkFor(label.Value));
                 if (opening != null && opening.Width > 0 && opening.Height > 0)
                     return opening.Width * opening.Height;
             }
             int width = Rnd(CurveLen(deduction));
             double length = MeasureState.Units == UnitSys.Imperial ? width / (8.0 * 12.0) : width / 100.0;
             return length * wallHeight;
+        }
+
+        /// <summary>Maps a deduction to the schedule entry its block is assigned to, and checks the length.</summary>
+        private static void MapBlock(Editor ed, MeasureBook book, string blockName, string raw, int measured, ref bool changed)
+        {
+            var opening = book.OpeningForBlock(blockName);
+            if (opening == null) return;
+            if (!string.Equals(book.MarkFor(raw), opening.Mark, StringComparison.OrdinalIgnoreCase))
+            {
+                book.SetMap(raw, opening.Mark);
+                changed = true;
+            }
+            if (Math.Abs(measured - opening.WidthRounded) > SuggestTolerance)
+                ed.WriteMessage("\nWARNING: " + raw + " (block " + blockName + ") measures " + M(measured)
+                    + " but " + opening.Mark + " is " + M(opening.WidthRounded) + ".");
+        }
+
+        /// <summary>Quick reject before the exact distance test: do the two curves' boxes come within the tolerance?</summary>
+        private static bool Near(Curve a, Curve b, double tol)
+        {
+            try
+            {
+                var ea = a.GeometricExtents;
+                var eb = b.GeometricExtents;
+                return ea.MinPoint.X - tol <= eb.MaxPoint.X && eb.MinPoint.X - tol <= ea.MaxPoint.X
+                    && ea.MinPoint.Y - tol <= eb.MaxPoint.Y && eb.MinPoint.Y - tol <= ea.MaxPoint.Y;
+            }
+            catch { return true; }
         }
 
         private static void Output(Transaction tr, Database db, string defName, string[] headers, List<string[]> rows, double h)
@@ -1104,6 +1235,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             _lastName = defName;
             _lastHeaders = headers;
             _lastRows = rows;
+            MeasureBook.SaveTakeoff(tr, db, defName, headers, rows);
             ed.WriteMessage("\nRun MEXPORT to save this take-off as CSV.");
         }
 
@@ -1115,6 +1247,21 @@ namespace HCW.AutoCAD.Plugin.Commands
         public void ExportCsv()
         {
             var ed = Util.Ed;
+            if (_lastRows == null)
+            {
+                // After a restart the last take-off is read back from the drawing.
+                using (var tr = Util.Db.TransactionManager.StartTransaction())
+                {
+                    var saved = MeasureBook.LoadTakeoff(tr, Util.Db);
+                    tr.Commit();
+                    if (saved != null)
+                    {
+                        _lastName = saved.Name;
+                        _lastHeaders = saved.Headers;
+                        _lastRows = saved.Rows;
+                    }
+                }
+            }
             if (_lastRows == null)
             {
                 ed.WriteMessage("\nMEXPORT: run a take-off first.");

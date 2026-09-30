@@ -6,6 +6,15 @@ using System.Windows.Forms;
 
 namespace HCW.AutoCAD.Plugin.UI
 {
+    /// <summary>A door or window block found in the drawing that carries a deduction line.</summary>
+    public class BlockFound
+    {
+        public string Name;
+        public int Count;
+        /// <summary>Deduction line length of the first insert, in schedule units.</summary>
+        public double Length;
+    }
+
     /// <summary>Floors, door and window schedule, columns, and deduction name map.</summary>
     public class MeasureScheduleForm : Form
     {
@@ -14,10 +23,11 @@ namespace HCW.AutoCAD.Plugin.UI
         private readonly DataGridView _columns;
         private readonly DataGridView _maps;
         private readonly CheckBox _draw;
+        private readonly IList<BlockFound> _blocks;
 
         public bool DrawTable => _draw.Checked;
 
-        public MeasureScheduleForm(MeasureBook book, IList<KeyValuePair<string, int>> deductionLabels, string heightUnit)
+        public MeasureScheduleForm(MeasureBook book, IList<KeyValuePair<string, int>> deductionLabels, string heightUnit, IList<BlockFound> blocks = null)
         {
             Text = "hcwCAD-KIT — Measure schedule";
             FormBorderStyle = FormBorderStyle.Sizable;
@@ -26,9 +36,10 @@ namespace HCW.AutoCAD.Plugin.UI
             ClientSize = new Size(760, 520);
             MinimumSize = new Size(640, 420);
 
+            _blocks = blocks ?? new List<BlockFound>();
             var tabs = new TabControl { Dock = DockStyle.Fill };
             _floors = Grid("Floor", "FFL to FFL height (" + heightUnit + ")", "Ceiling height (" + heightUnit + ")", "Lintel bottom height (" + heightUnit + ")");
-            _openings = Grid("Name", "Door or window", "Type", "Length (" + heightUnit + ")", "Height (" + heightUnit + ")", "Lintel bottom (" + heightUnit + ")", "Count");
+            _openings = Grid("Name", "Door or window", "Type", "Length (" + heightUnit + ")", "Height (" + heightUnit + ")", "Sill (" + heightUnit + ")", "Lintel bottom (" + heightUnit + ")", "Block name", "Count");
             SetupOpeningGrid();
             _columns = Grid("Mark", "Width (" + heightUnit + ")", "Depth (" + heightUnit + ")", "Name", "Count");
             _maps = Grid("Deduction", "Measured length", "Schedule name");
@@ -39,7 +50,7 @@ namespace HCW.AutoCAD.Plugin.UI
             FillMaps(book, deductionLabels);
 
             tabs.TabPages.Add(Page("Floors", _floors, "Each row is one floor. FFL to FFL is finished floor level to the next; lintel bottom is measured up from the FFL. Wall paint uses the ceiling height."));
-            tabs.TabPages.Add(Page("Doors and windows", _openings, "Name (W1), door or window, type (pick from the list), length and height. Length is the size along the wall that is deducted. Lintel bottom is optional: leave it blank to use the floor's value, or type a height for this opening only."));
+            tabs.TabPages.Add(Page("Doors and windows", _openings, "Name (W1), door or window, type (pick from the list), length and height. Length is the size along the wall that is deducted. Sill and lintel bottom are optional: a blank lintel bottom uses the floor's value. Block name links door and window blocks (with a line on MEASURE-DEDUCT) to this entry; separate several names with ;. " + BlockHint()));
             tabs.TabPages.Add(Page("Columns", _columns, "Concrete columns of the same size share one mark."));
             tabs.TabPages.Add(Page("Deduction map", _maps, "Each measured deduction (FB01-D1) maps to one schedule name (W1). The closest schedule length within 50 mm (2 in) is pre-filled."));
             Controls.Add(tabs);
@@ -47,10 +58,14 @@ namespace HCW.AutoCAD.Plugin.UI
             var bar = new Panel { Dock = DockStyle.Bottom, Height = 46 };
             var group = new Button { Text = "Group same size", Left = 8, Top = 8, Width = 130 };
             group.Click += (s, e) => Group();
-            _draw = new CheckBox { Text = "Draw schedule on the sheet", Left = 150, Top = 12, Width = 220, Checked = true };
+            var fromBlocks = new Button { Text = "Add from blocks", Left = 146, Top = 8, Width = 120 };
+            fromBlocks.Click += (s, e) => AddFromBlocks();
+            fromBlocks.Enabled = _blocks.Count > 0;
+            _draw = new CheckBox { Text = "Draw schedule on the sheet", Left = 276, Top = 12, Width = 220, Checked = true };
             var ok = new Button { Text = "Apply", Left = 560, Top = 8, Width = 90, DialogResult = DialogResult.OK };
             var cancel = new Button { Text = "Cancel", Left = 658, Top = 8, Width = 90, DialogResult = DialogResult.Cancel };
             bar.Controls.Add(group);
+            bar.Controls.Add(fromBlocks);
             bar.Controls.Add(_draw);
             bar.Controls.Add(ok);
             bar.Controls.Add(cancel);
@@ -82,8 +97,10 @@ namespace HCW.AutoCAD.Plugin.UI
                         : mark.StartsWith("W", StringComparison.OrdinalIgnoreCase) ? "Window" : "Door",
                     Width = Num(row, 3),
                     Height = Num(row, 4),
-                    LintelBottom = Num(row, 5),
-                    Count = Math.Max(1, (int)Num(row, 6))
+                    Sill = Num(row, 5),
+                    LintelBottom = Num(row, 6),
+                    BlockName = Cell(row, 7),
+                    Count = Math.Max(1, (int)Num(row, 8))
                 });
             }
             foreach (DataGridViewRow row in _columns.Rows)
@@ -111,6 +128,48 @@ namespace HCW.AutoCAD.Plugin.UI
             return book;
         }
 
+        private string BlockHint()
+        {
+            if (_blocks.Count == 0) return "";
+            return "Blocks found: " + string.Join(", ", _blocks.Select(b => b.Name + " (" + b.Count + ")")) + ".";
+        }
+
+        /// <summary>One new row for every block not already linked to an entry.</summary>
+        private void AddFromBlocks()
+        {
+            var linked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataGridViewRow existing in _openings.Rows)
+            {
+                if (existing.IsNewRow) continue;
+                used.Add(Cell(existing, 0));
+                foreach (var name in Cell(existing, 7).Split(';'))
+                    if (name.Trim().Length > 0) linked.Add(name.Trim());
+            }
+            foreach (var block in _blocks)
+            {
+                if (linked.Contains(block.Name)) continue;
+                string lower = block.Name.ToLowerInvariant();
+                bool window = lower.Contains("win") || lower.StartsWith("w");
+                string kind = window ? "Window" : "Door";
+                string prefix = window ? "W" : "D";
+                int n = 1;
+                while (used.Contains(prefix + n)) n++;
+                string mark = prefix + n;
+                used.Add(mark);
+
+                int i = _openings.Rows.Add();
+                var row = _openings.Rows[i];
+                row.Cells[0].Value = mark;
+                row.Cells[1].Value = kind;
+                FillTypes(row, MeasureBook.TypesFor(kind)[0]);
+                row.Cells[3].Value = block.Length.ToString("0.###");
+                row.Cells[4].Value = window ? "1.2" : "2.1";
+                row.Cells[7].Value = block.Name;
+                row.Cells[8].Value = "1";
+            }
+        }
+
         private void Group()
         {
             var book = Read();
@@ -124,7 +183,7 @@ namespace HCW.AutoCAD.Plugin.UI
         private static TabPage Page(string title, DataGridView grid, string hint)
         {
             var page = new TabPage(title) { Padding = new Padding(6) };
-            page.Controls.Add(new Label { Dock = DockStyle.Top, Height = 28, Text = hint });
+            page.Controls.Add(new Label { Dock = DockStyle.Top, Height = 52, Text = hint });
             grid.Dock = DockStyle.Fill;
             page.Controls.Add(grid);
             return page;
@@ -207,8 +266,10 @@ namespace HCW.AutoCAD.Plugin.UI
                     FillTypes(row, o.Type);
                     row.Cells[3].Value = o.Width.ToString("0.###");
                     row.Cells[4].Value = o.Height.ToString("0.###");
-                    row.Cells[5].Value = o.LintelBottom > 0 ? o.LintelBottom.ToString("0.###") : "";
-                    row.Cells[6].Value = o.Count.ToString();
+                    row.Cells[5].Value = o.Sill > 0 ? o.Sill.ToString("0.###") : "";
+                    row.Cells[6].Value = o.LintelBottom > 0 ? o.LintelBottom.ToString("0.###") : "";
+                    row.Cells[7].Value = o.BlockName;
+                    row.Cells[8].Value = o.Count.ToString();
                 }
         }
 

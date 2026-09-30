@@ -139,7 +139,17 @@ Each row on the **Floors** tab records one floor: **FFL to FFL height** (finishe
 
 #### Schedule table
 
-The schedule is drawn on `MEASURE-TABLE` as Item, Detail, Size and Count: three rows per floor (FFL to FFL, ceiling, lintel bottom), then the doors and windows, columns, and deduction map. Tick **Draw schedule on the sheet** in `MSCHED`, or use the **Insert Schedule** button (`MSCHEDTABLE`) at any time to pick a point and draw the saved schedule. It uses the Measure text height.
+The schedule is drawn on `MEASURE-TABLE` as separate tables, each with a title: Floor heights, Door and window schedule (doors then windows, each with a total count), Column schedule (with total) and Deduction map. Tick **Draw schedule on the sheet** in `MSCHED`, or use the **Insert Schedule** button (`MSCHEDTABLE`) at any time to pick a top-left point and draw the saved schedule. It uses the Measure text height.
+
+#### Door and window blocks (deduction lines in blocks)
+
+Draw one line on `MEASURE-DEDUCT` inside each door or window block, along the opening length. It can be a dynamic block: the line is read as inserted, so a stretched door gives its own length.
+
+1. `MLIN`, `MBRK`, `MBML` and `MPAINT` read every insert of such a block in the current space. Each inserted line is a deduction, matched to the nearest selected wall within the tolerance. A block that touches none of the selected walls is ignored (it belongs to another wall), with no `D? NO LINE` warning.
+2. Put the block name in the **Block name** column of the schedule entry (several names separated by `;`). The name used is the dynamic block's own name, not its anonymous copy.
+3. When a block deduction is measured, it is mapped to its schedule entry automatically (`FB01-D2` becomes `D1 Flush door`) and the map is saved. If the drawn length differs from the entry's length by more than 50 mm (2 in), a warning is printed.
+4. `MPAINT` uses the entry's length × height for a block opening; lines drawn on `MEASURE-DEDUCT` with no block still use the label map.
+5. **Add from blocks** in `MSCHED` creates one row per block name not yet linked: kind from the name (`win…` or `W…` is a window), a name (`D1`, `W1`), the line length of the first insert, and a default height you then correct. The dialog lists the blocks found and how many inserts each has.
 
 #### Door and window schedule
 
@@ -152,7 +162,9 @@ Each row on the **Doors and windows** tab is one schedule entry:
 | Type | `UPVC` | Drop-down; the list follows the kind. Doors: Wood, Flush door, UPVC, Aluminium, WPC, Fabricated. Windows: Wood, UPVC, Aluminium, System aluminium. Changing the kind reloads the list. A type saved by an earlier version stays selectable. |
 | Length | `1.2` | Size along the wall, in metres (feet when Imperial). This is the deducted length. |
 | Height | `1.2` | Opening height, in metres (feet when Imperial). |
+| Sill | `0.9` | Optional, for windows. When set, Apply checks that lintel bottom − sill equals the height (within 50 mm / 2 in). |
 | Lintel bottom | `2.4` | Optional. Blank uses the floor's lintel bottom height; a value applies to this opening only and is shown in the schedule table. |
+| Block name | `WIN-SLIDER` | Drawing block(s) that stand for this entry (see above). |
 | Count | `3` | Set automatically from the map when you apply. |
 
 Deduction map logic:
@@ -260,7 +272,7 @@ These buttons drive the same auto-unit engine as the **hcwCAD-KIT** room panel. 
 |---|---|
 | `MSETUP` | Metric (1 unit = 1 m) or Imperial (1 unit = 1 inch) for the rest of the session, and creates the MEASURE layers. Schedule heights and sizes are metres, or feet. |
 | `MSHOW` | Turns back on only layers that a Measure command hid and did not restore. Layers you turned off yourself stay off. |
-| `MEXPORT` | Saves the most recent take-off as a CSV beside the drawing. Run a take-off first. |
+| `MEXPORT` | Saves the most recent take-off as a CSV beside the drawing. The take-off is stored in the drawing, so this still works after restarting the host. |
 | `MCLEAR` | Erases MEASURE label and table objects. |
 
 ### BPLT

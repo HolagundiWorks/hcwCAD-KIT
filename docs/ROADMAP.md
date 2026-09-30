@@ -1,6 +1,22 @@
 # hcwCAD-KIT roadmap: optimisations, enhancements, and auto-dimension design
 
-Status: proposal. Nothing here is implemented yet.
+Status: partly implemented (see the table). Implemented items were written without a build (no CAD API in the authoring environment); build and test them in each host before release.
+
+| Item | Status |
+|---|---|
+| Door and window blocks with a deduction line, mapped by block name (new) | Implemented |
+| Label index instead of a full scan per deduction (`MPAINT`) | Implemented |
+| Bounding-box reject before the exact deduction-to-wall distance test | Implemented |
+| Last take-off saved in the drawing (`MEXPORT` after a restart) | Implemented |
+| Sill height and lintel − sill check | Implemented |
+| One schedule table per group, with totals | Implemented |
+| Copy/array: clone once | Not done |
+| Wall numbering along a path or by room | Not done |
+| Excel export, rates and cost, settings file, room schedule in the drawing, sheet set | Not done |
+| Colouring mapped deduction lines | Not done (lines inside blocks cannot be recoloured per insert) |
+| One-step undo | Nothing to do: each command is already one undo step |
+| Unit tests and CI | Not done (needs the pure logic moved to a CAD-free library, and a runner with the host DLLs for the builds) |
+| `AUTODIM` | Design only; the opening-source question is answered (blocks with a deduction line), see section 3 |
 
 ## 1. Optimisations (code)
 
@@ -83,7 +99,7 @@ Do the outside first. For interiors, use rooms (from `ROOM` labels or closed pol
 
 ### Questions to settle
 
-- Are openings drawn as blocks, as gaps in the wall lines, or measured with the deduction lines?
+- ~~Are openings drawn as blocks, as gaps in the wall lines, or measured with the deduction lines?~~ Answered: dynamic door and window blocks with a line on `MEASURE-DEDUCT`. `AUTODIM` should use the same lines for jamb points, and the block name for opening labels.
 - Do you dimension to wall faces or centrelines by default?
 - What plotted scales do you use most (1:50, 1:100)?
 - Should dimensions be associative, so a moved wall updates them?
