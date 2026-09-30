@@ -1,4 +1,5 @@
 using System;
+using HCW.AutoCAD.Plugin.Logic;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -218,23 +219,23 @@ namespace HCW.AutoCAD.Plugin.Commands
                 foreach (ObjectId id in br.AttributeCollection)
                 {
                     var att = (AttributeReference)tr.GetObject(id, OpenMode.ForRead);
-                    src.Fields.Add(Tokenize(att.TextString));
+                    src.Fields.Add(NumberIncrement.Tokenize(att.TextString));
                 }
                 return src;
             }
             if (ent is DBText text)
-                src.Fields.Add(Tokenize(text.TextString));
+                src.Fields.Add(NumberIncrement.Tokenize(text.TextString));
             else if (ent is MText mtext)
-                src.Fields.Add(Tokenize(mtext.Contents));
+                src.Fields.Add(NumberIncrement.Tokenize(mtext.Contents));
             else if (ent is MLeader leader && leader.MText != null)
-                src.Fields.Add(Tokenize(leader.MText.Contents));
+                src.Fields.Add(NumberIncrement.Tokenize(leader.MText.Contents));
             else if (ent is Dimension dim)
-                src.Fields.Add(Tokenize(dim.DimensionText ?? ""));
+                src.Fields.Add(NumberIncrement.Tokenize(dim.DimensionText ?? ""));
             else if (ent is AttributeDefinition ad)
             {
-                src.Fields.Add(Tokenize(ad.Tag));
-                src.Fields.Add(Tokenize(ad.Prompt));
-                src.Fields.Add(Tokenize(ad.TextString));
+                src.Fields.Add(NumberIncrement.Tokenize(ad.Tag));
+                src.Fields.Add(NumberIncrement.Tokenize(ad.Prompt));
+                src.Fields.Add(NumberIncrement.Tokenize(ad.TextString));
             }
             return src;
         }
@@ -249,111 +250,36 @@ namespace HCW.AutoCAD.Plugin.Commands
                 {
                     if (i >= src.Fields.Count) break;
                     var att = (AttributeReference)tr.GetObject(id, OpenMode.ForWrite);
-                    att.TextString = Render(src.Fields[i], delta);
+                    att.TextString = NumberIncrement.Render(_incrementText, src.Fields[i], delta);
                     i++;
                 }
                 return;
             }
             if (ent is DBText text && src.Fields.Count > 0)
-                text.TextString = Render(src.Fields[0], delta);
+                text.TextString = NumberIncrement.Render(_incrementText, src.Fields[0], delta);
             else if (ent is MText mtext && src.Fields.Count > 0)
-                mtext.Contents = Render(src.Fields[0], delta);
+                mtext.Contents = NumberIncrement.Render(_incrementText, src.Fields[0], delta);
             else if (ent is MLeader leader && src.Fields.Count > 0 && leader.MText != null)
             {
                 var mt = leader.MText;
-                mt.Contents = Render(src.Fields[0], delta);
+                mt.Contents = NumberIncrement.Render(_incrementText, src.Fields[0], delta);
                 leader.MText = mt;
             }
             else if (ent is Dimension dim && src.Fields.Count > 0)
-                dim.DimensionText = Render(src.Fields[0], delta);
+                dim.DimensionText = NumberIncrement.Render(_incrementText, src.Fields[0], delta);
             else if (ent is AttributeDefinition ad && src.Fields.Count >= 3)
             {
-                ad.Tag = Render(src.Fields[0], delta);
-                ad.Prompt = Render(src.Fields[1], delta);
-                ad.TextString = Render(src.Fields[2], delta);
+                ad.Tag = NumberIncrement.Render(_incrementText, src.Fields[0], delta);
+                ad.Prompt = NumberIncrement.Render(_incrementText, src.Fields[1], delta);
+                ad.TextString = NumberIncrement.Render(_incrementText, src.Fields[2], delta);
             }
-        }
-
-        private static List<Token> Tokenize(string text)
-        {
-            var tokens = new List<Token>();
-            if (string.IsNullOrEmpty(text))
-            {
-                tokens.Add(new Token("", false));
-                return tokens;
-            }
-            int i = 0;
-            while (i < text.Length)
-            {
-                if (char.IsDigit(text[i]))
-                {
-                    int j = i;
-                    while (j < text.Length && char.IsDigit(text[j])) j++;
-                    if (j < text.Length && text[j] == '.' && j + 1 < text.Length && char.IsDigit(text[j + 1]))
-                    {
-                        j++;
-                        while (j < text.Length && char.IsDigit(text[j])) j++;
-                    }
-                    tokens.Add(new Token(text.Substring(i, j - i), true));
-                    i = j;
-                }
-                else
-                {
-                    int j = i + 1;
-                    while (j < text.Length && !char.IsDigit(text[j])) j++;
-                    tokens.Add(new Token(text.Substring(i, j - i), false));
-                    i = j;
-                }
-            }
-            return tokens;
-        }
-
-        private static string Render(List<Token> tokens, decimal delta)
-        {
-            var sb = new StringBuilder();
-            foreach (var token in tokens)
-                sb.Append(token.IsNumber ? Increment(token.Text, delta) : token.Text);
-            return sb.ToString();
-        }
-
-        private static string Increment(string original, decimal delta)
-        {
-            if (!decimal.TryParse(original, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal value))
-                return original;
-            decimal num = value + delta;
-            string body = original.TrimStart('-');
-            string incBody = _incrementText.TrimStart('-', '+');
-            int dcs = DecimalPlaces(body);
-            int dci = DecimalPlaces(incBody);
-            int places = Math.Max(dcs, dci);
-            string rendered = Math.Abs(num).ToString("F" + places, CultureInfo.InvariantCulture);
-            if (body.Length > 0 && body[0] == '0')
-            {
-                int len = body.Length;
-                if (dcs > 0) len = len - dcs + places;
-                else if (dci > 0) len = len + dci + 1;
-                while (rendered.Length < len) rendered = "0" + rendered;
-            }
-            return num < 0 ? "-" + rendered : rendered;
-        }
-
-        private static int DecimalPlaces(string text)
-        {
-            int dot = text.IndexOf('.');
-            return dot < 0 ? 0 : text.Length - dot - 1;
         }
 
         private sealed class Source
         {
             public ObjectId Id;
-            public readonly List<List<Token>> Fields = new List<List<Token>>();
+            public readonly List<List<NumberIncrement.Token>> Fields = new List<List<NumberIncrement.Token>>();
         }
 
-        private sealed class Token
-        {
-            public readonly string Text;
-            public readonly bool IsNumber;
-            public Token(string text, bool isNumber) { Text = text; IsNumber = isNumber; }
-        }
     }
 }

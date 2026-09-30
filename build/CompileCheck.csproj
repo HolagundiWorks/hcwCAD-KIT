@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Compiles the AutoCAD plugin sources against the public AutoCAD.NET reference package, so a compile
+    error is caught on any machine (Linux CI included) without an AutoCAD install. It builds the
+    same sources as src/HCW.AutoCAD.Plugin but is not the shipped DLL: use the plugin projects for that.
+      dotnet build build/CompileCheck.csproj
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <RootNamespace>HCW.AutoCAD.Plugin</RootNamespace>
+    <AssemblyName>hcwCAD-KIT.compilecheck</AssemblyName>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj\</BaseIntermediateOutputPath>
+    <OutputPath>$(MSBuildThisFileDirectory)bin\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\src\HCW.AutoCAD.Plugin\**\*.cs" Exclude="..\src\HCW.AutoCAD.Plugin\obj\**;..\src\HCW.AutoCAD.Plugin\bin\**" />
+    <PackageReference Include="AutoCAD.NET" Version="24.3.0" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="System.Xaml" />
+  </ItemGroup>
+
+</Project>

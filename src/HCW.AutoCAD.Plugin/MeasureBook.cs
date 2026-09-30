@@ -28,27 +28,7 @@ namespace HCW.AutoCAD.Plugin
             return map == null ? null : map.Mark;
         }
 
-        /// <summary>
-        /// Compares deduction names loosely: case, spaces, hyphens and leading zeros are ignored,
-        /// so "FB01-D1", "fb01-d1" and "FB 01 D-1" are the same deduction.
-        /// </summary>
-        public static string NormKey(string label)
-        {
-            var sb = new System.Text.StringBuilder();
-            bool inDigits = false;
-            foreach (char ch in label ?? "")
-            {
-                if (!char.IsLetterOrDigit(ch)) { inDigits = false; continue; }
-                if (char.IsDigit(ch))
-                {
-                    if (ch == '0' && !inDigits) { inDigits = true; continue; }
-                    inDigits = true;
-                }
-                else inDigits = false;
-                sb.Append(char.ToLowerInvariant(ch));
-            }
-            return sb.ToString();
-        }
+        public static string NormKey(string label) => HCW.AutoCAD.Plugin.Logic.NameMatch.NormKey(label);
 
         /// <summary>
         /// The schedule entry closest in length to a measured deduction, within the tolerance
@@ -57,15 +37,9 @@ namespace HCW.AutoCAD.Plugin
         /// </summary>
         public OpeningSpec SuggestOpening(int measuredLength)
         {
-            int tol = MeasureCommands.SuggestTolerance;
-            var ranked = Openings
-                .Select(o => new { Opening = o, Gap = Math.Abs(o.WidthRounded - measuredLength) })
-                .Where(x => x.Gap <= tol)
-                .OrderBy(x => x.Gap)
-                .ToList();
-            if (ranked.Count == 0) return null;
-            if (ranked.Count > 1 && ranked[1].Gap == ranked[0].Gap) return null;
-            return ranked[0].Opening;
+            int at = HCW.AutoCAD.Plugin.Logic.LengthMatch.Closest(
+                Openings.Select(o => o.WidthRounded).ToList(), measuredLength, MeasureCommands.SuggestTolerance);
+            return at < 0 ? null : Openings[at];
         }
 
         /// <summary>The schedule entry a drawing block is mapped to (matched on the block's effective name).</summary>
