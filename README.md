@@ -127,6 +127,8 @@ Notes stay on the **hcwCAD-KIT** tab. The dropdown places a saved set. **Notes**
 
 **Fields** opens a list you can add to, edit, and save. **Place on sheet** drops the list as a movable block. **Update selected** rewrites a fields block already on the sheet. **Edit Field** picks that block and opens the same list. The title block is no longer on the ribbon. `TITLEBLOCK` still inserts the old A3 sheet if you type it.
 
+Typed names: `TITLENOTES` (notes library), `TITLENOTE` (place the selected set), `TITLENOTESAVE`, `FIELDS` (field list), `FIELDSEDIT` (Edit Field), and `TITLEFIELDS` (fill the boxes of the old A3 title block; `BPLTTITLEBLOCK` is another name for `TITLEBLOCK`).
+
 ### Room labels
 
 The ribbon uses one panel. It does not ask you to pick Metric, Feet, or Inches — the label follows the drawing’s units. `ROOM` opens a list of the 29 room types. `ROOMC` asks you to type a name. (`HCWROOM` and `HCWCUSTOMROOM` are the same commands.) Both then:

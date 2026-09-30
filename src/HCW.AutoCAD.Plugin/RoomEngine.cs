@@ -5,11 +5,9 @@ using System.Globalization;
 using System.Linq;
 using HCW.AutoCAD.Plugin.Logic;
 using HCW.AutoCAD.Plugin.Commands;
-using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
-using Autodesk.AutoCAD.Runtime;
 
 namespace HCW.AutoCAD.Plugin
 {

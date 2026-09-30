@@ -2,7 +2,6 @@ using System;
 using HCW.AutoCAD.Plugin.Logic;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Text;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
