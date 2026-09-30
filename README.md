@@ -226,7 +226,7 @@ Walls are numbered `FB01`, `FB02` … left to right (then bottom to top) by defa
 
 ### Settings file
 
-`HCWSETTINGS` creates and opens `%APPDATA%\hcwCAD-KIT\settings.ini`. It holds the take-off label height (`TakeoffTextHeightMm`, default 125) and deduction tolerance (`DeductionToleranceMm`, default 10), the deduction-map suggestion tolerance, wall numbering, default floor and opening heights, and the `AUTODIM` distances. Each key has a comment. Restart the host after editing.
+`HCWSETTINGS` creates and opens `%APPDATA%\hcwCAD-KIT\settings.ini`. It holds the take-off label height (`TakeoffTextHeightMm`, default 125) and deduction tolerance (`DeductionToleranceMm`, default 10), the deduction-map suggestion tolerance, wall numbering, default floor and opening heights, and the `AUTODIM` distances, layers and text-fit factor. Each key has a comment. Restart the host after editing.
 
 ### Sheet set
 
@@ -234,15 +234,28 @@ Walls are numbered `FB01`, `FB02` … left to right (then bottom to top) by defa
 
 ### Auto dimension (working drawings)
 
-`AUTODIM` dimensions the outside of an axis-aligned plan. Select the walls (lines and polylines), choose the sides and chains, and give the plot scale.
+Four commands make the dimensions for a working drawing. Walls are read as faces: every vertex of a selected line or polyline is a point, so double-line walls give the wall thickness as well as the lengths. Openings come from the deduction lines: lines on `MEASURE-DEDUCT`, and the line inside each door or window block. Dimensions are created on `AN-DIMS` in the `HCW-WORKING` style (or the current style) and tagged. **Clear Auto Dims** (`AUTODIMCLEAR`) removes only those.
 
-| Chain (nearest the plan first) | Points used |
+All distances are plotted millimetres in the settings file, so the drawing looks the same on paper at any scale. You give the plot scale each time.
+
+**`AUTODIM`: outside chains.** Select the walls, then the sides (All, Top, Bottom, Left, Right) and the chains. Four chains per side, nearest the plan first:
+
+| Chain | Points used |
 |---|---|
-| Openings | Door and window jambs, from the deduction lines (on `MEASURE-DEDUCT`, and inside door and window blocks), with the wall pieces between them |
-| Structure | Wall ends and corners in the side's outer band |
+| Openings | Door and window jambs in the side's outer band, with the wall pieces between them |
+| Structure | Wall faces and ends, and column faces, in the outer band |
+| Grid | Lines on the grid layers (`AN-GRID`, `A-GRID`) |
 | Overall | First to last point on that side |
 
-Chains sit on `AN-DIMS` in the `HCW-WORKING` style (or the current style), a fixed plotted distance apart (`AutoDimStepMm`, `AutoDimGapMm`), so they are the same on paper at any scale. Points within 5 mm are merged, dimensions shorter than `AutoDimMinMm` plotted are skipped, and a chain that repeats the one inside it is left out. Angled and curved segments are skipped and counted. `AUTODIMCLEAR` removes only what `AUTODIM` made.
+Points within 5 mm merge, dimensions shorter than `AutoDimMinMm` plotted are skipped, and a chain that repeats the one inside it is left out. Columns are closed polylines on `MEASURE-COLUMN` or `S-COLUMN`.
+
+**`AUTODIMROOM`: inside each room.** Select the room outlines (closed polylines, such as `ROOM-RECT` or `MEASURE-FLOOR` outlines). For a rectangular room it draws, nearest each wall first, the wall's openings (corner, jamb, jamb, corner) where the wall has any, then the clear width along the bottom and the clear depth along the left. Other orthogonal outlines get one dimension per edge, inside the room. Angled edges are skipped and counted.
+
+**`AUTODIMWALL`: any angle.** Select wall segments (lines, polyline segments, arcs). Each straight segment gets an aligned dimension offset outward (away from the middle of the selection) or inward; each arc gets a radius dimension.
+
+**Short dimensions.** A dimension too short for its text has the text moved to a second or third row, with a leader, in the direction away from the plan (or into the room), so texts do not overprint. The width of a character is `AutoDimTextWidthFactor` of the text height.
+
+Dimensions are plain, not associative: move the walls and re-run the command after `AUTODIMCLEAR`.
 
 ### Area and text
 

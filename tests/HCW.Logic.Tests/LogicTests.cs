@@ -318,3 +318,42 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class DimStaggerTests
+    {
+        private static System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<double, double>> Chain(params double[] points)
+        {
+            return DimChains.Segments(points, 0);
+        }
+
+        [Fact]
+        public void LongSegmentsStayOnTheLine()
+        {
+            Assert.Equal(new[] { 0, 0 }, DimChains.Rows(Chain(0, 3, 6), 1.0, 2));
+        }
+
+        [Fact]
+        public void ShortSegmentsAlternateRows()
+        {
+            // three 0.5 wide segments with text 1.0 wide: each text overlaps the last on the same row
+            var rows = DimChains.Rows(Chain(0, 0.5, 1.0, 1.5), 1.0, 2);
+            Assert.Equal(new[] { 1, 2, 1 }, rows);
+        }
+
+        [Fact]
+        public void ShortSegmentBesideLongOneUsesRowOne()
+        {
+            var rows = DimChains.Rows(Chain(0, 4, 4.3, 8), 1.0, 2);
+            Assert.Equal(new[] { 0, 1, 0 }, rows);
+        }
+
+        [Fact]
+        public void FarApartShortSegmentsShareRowOne()
+        {
+            var rows = DimChains.Rows(Chain(0, 0.4, 5, 5.4), 1.0, 2);
+            Assert.Equal(new[] { 1, 0, 1 }, rows);
+        }
+    }
+}

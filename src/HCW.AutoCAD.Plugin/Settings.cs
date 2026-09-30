@@ -44,10 +44,14 @@ namespace HCW.AutoCAD.Plugin
             Entry("DefaultFflHeight", "3.15", "New floor: FFL to FFL height."),
             Entry("DefaultCeilingHeight", "3.0", "New floor: ceiling height."),
             Entry("DefaultLintelBottom", "2.1", "New floor: lintel bottom height."),
-            Entry("AutoDimStepMm", "8", "AUTODIM: plotted distance between dimension chains, in millimetres."),
+            Entry("AutoDimStepMm", "10", "AUTODIM: plotted distance between dimension chains, in millimetres."),
             Entry("AutoDimGapMm", "12", "AUTODIM: plotted distance from the plan to the first chain, in millimetres."),
             Entry("AutoDimMinMm", "3", "AUTODIM: dimensions shorter than this plotted length are skipped, in millimetres."),
             Entry("AutoDimBandM", "0.6", "AUTODIM: depth of the outer band (drawing metres) whose openings go on the outside chain."),
+            Entry("AutoDimRoomInsetMm", "8", "AUTODIMROOM: plotted distance from the room's walls to its first dimension line, in millimetres."),
+            Entry("AutoDimTextWidthFactor", "0.75", "AUTODIM: width of one character as a fraction of the text height, used to decide when a dimension is too short for its text."),
+            Entry("AutoDimGridLayers", "AN-GRID;A-GRID", "AUTODIM: layers whose horizontal and vertical lines are read as the structural grid (separate with ;)."),
+            Entry("AutoDimColumnLayers", "MEASURE-COLUMN;S-COLUMN", "AUTODIM: layers whose closed polylines are read as columns (separate with ;)."),
             Entry("AutoDimStyle", "HCW-WORKING", "AUTODIM: dimension style used; the current style is used when it does not exist.")
         };
 

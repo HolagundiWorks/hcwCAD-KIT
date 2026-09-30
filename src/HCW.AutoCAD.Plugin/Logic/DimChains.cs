@@ -46,5 +46,43 @@ namespace HCW.AutoCAD.Plugin.Logic
                 if (Math.Abs(a[i].Key - b[i].Key) > tolerance || Math.Abs(a[i].Value - b[i].Value) > tolerance) return false;
             return true;
         }
+
+        /// <summary>
+        /// Which row each dimension text sits on. Row 0 is the dimension line itself: used when the segment is
+        /// long enough for its text. A shorter segment's text goes to row 1 or 2 (further out), choosing the
+        /// first row where it does not run into the previous text on that row. Segments must be in order along the chain.
+        /// </summary>
+        public static int[] Rows(IList<KeyValuePair<double, double>> segments, double textWidth, int maxRow)
+        {
+            var rows = new int[segments.Count];
+            var lastRight = new double[maxRow + 1];
+            for (int r = 0; r <= maxRow; r++) lastRight[r] = double.NegativeInfinity;
+            double half = textWidth / 2.0;
+
+            for (int i = 0; i < segments.Count; i++)
+            {
+                double a = segments[i].Key, b = segments[i].Value;
+                double mid = (a + b) / 2.0;
+                if (b - a >= textWidth)
+                {
+                    rows[i] = 0;
+                    lastRight[0] = mid + half;
+                    continue;
+                }
+                int chosen = -1;
+                for (int r = 1; r <= maxRow; r++)
+                    if (mid - half >= lastRight[r]) { chosen = r; break; }
+                if (chosen < 0)
+                {
+                    // nowhere is clear: use the row whose last text ends earliest
+                    chosen = 1;
+                    for (int r = 2; r <= maxRow; r++)
+                        if (lastRight[r] < lastRight[chosen]) chosen = r;
+                }
+                rows[i] = chosen;
+                lastRight[chosen] = mid + half;
+            }
+            return rows;
+        }
     }
 }

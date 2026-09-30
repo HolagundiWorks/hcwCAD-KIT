@@ -2,17 +2,17 @@
 
 What is not built yet. Everything else is described in the [README](../README.md). Nothing here has been run inside a CAD host: the commands compile against the AutoCAD .NET reference package and the CAD-free logic has unit tests, but each host needs its own testing before release.
 
-## Auto dimension (`AUTODIM`) next steps
+## Auto dimension next steps
 
-`AUTODIM` v1 dimensions the outside of axis-aligned plans (openings, structure and overall chains). Still to do, in this order:
+`AUTODIM`, `AUTODIMROOM` and `AUTODIMWALL` are built (see the README). Still to do:
 
-1. **Grid lines and columns** as structure points, so a structural grid drives the middle chain.
-2. **Interior rooms.** Dimension each room's clear width and depth once, just inside the walls, using `ROOM` labels or closed polylines.
-3. **Collision handling.** Move a chain out by a step when its text would overlap another dimension's text.
-4. **Angled and curved walls.** Aligned dimensions along the wall direction, and radius dimensions for arcs. Today they are skipped and counted.
-5. **Associative dimensions**, so moving a wall updates them.
+1. **Rooms from walls.** `AUTODIMROOM` needs room outlines. Deriving the clear size of each room from the wall faces would remove that step.
+2. **Non-rectangular rooms.** Openings along the edges of L-shaped and other outlines (today only rectangular rooms get them).
+3. **Cross-chain collisions.** Rows stop a chain overprinting itself; a text moved to row 3 can still meet the next chain's text at some step and scale settings.
+4. **Associative dimensions**, so moving a wall updates them.
+5. **Levels and tags.** Level marks, opening tags (`D1`, `W1`) from the schedule, and room names beside the room dimensions.
 
-Open questions: dimension to wall faces or centrelines by default when only one face is drawn, and which plotted scales matter most (1:50, 1:100).
+Open questions: single-line (centreline) walls and mixed drawings are not handled: only faces (two lines or a closed outline).
 
 ## Take-off
 
