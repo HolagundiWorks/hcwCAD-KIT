@@ -36,8 +36,8 @@ namespace HCW.AutoCAD.Plugin
         /// <summary>Every key with its default value and a help line, used to write the file.</summary>
         private static readonly KeyValuePair<string, string[]>[] Known =
         {
-            Entry("MeasureTextHeight", "0.25", "Measure label text height in drawing units (metres, or inches when Imperial is chosen)."),
-            Entry("DeductionTolerance", "0.01", "How close a deduction line must be to its wall, in drawing units."),
+            Entry("TakeoffTextHeightMm", "125", "Take-off label text height, in real-size millimetres (converted to the drawing's units)."),
+            Entry("DeductionToleranceMm", "10", "How close a deduction line must be to its wall, in real-size millimetres."),
             Entry("SuggestToleranceCm", "5", "Deduction-map suggestions: allowed length difference in centimetres (Metric). 5 = 50 mm."),
             Entry("SuggestToleranceEighths", "16", "Deduction-map suggestions: allowed difference in eighths of an inch (Imperial). 16 = 2 in."),
             Entry("WallNumbering", "LeftRight", "Wall numbers FB01, FB02...: LeftRight, TopBottom or Path (asks for a path line)."),

@@ -12,9 +12,8 @@ using Autodesk.AutoCAD.Runtime;
 namespace HCW.AutoCAD.Plugin.Commands
 {
     /// <summary>
-    /// hcwCAD-KIT manual take-off. Metric or Imperial is chosen once per
-    /// session with MSETUP and stored on <see cref="MeasureState"/>.
-    /// Commands: MSETUP MLIN MBRK MBML MCOL MREC MPAINT MCEIL MFLOOR MSCHED MARE MSLB MSHOW MCLEAR
+    /// hcwCAD-KIT take-off. Units come from the drawing (INSUNITS).
+    /// TOSTART creates the layers. Each element has its own command.
     /// </summary>
     public class MeasureCommands
     {
@@ -23,8 +22,8 @@ namespace HCW.AutoCAD.Plugin.Commands
         public static class MeasureState
         {
             public static UnitSys Units = UnitSys.Metric;
-            public static double TextHeight = Settings.GetDouble("MeasureTextHeight", 0.25);
-            public static double DedupTolerance = Settings.GetDouble("DeductionTolerance", 0.01);
+            public static double TextHeight = 0.25;
+            public static double DedupTolerance = 0.01;
             /// <summary>Layers this session's Measure commands turned off. MSHOW restores only these.</summary>
             public static readonly HashSet<string> HiddenByMeasure = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
@@ -73,10 +72,22 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         public static int RndPublic(double v) => Rnd(v);
 
-        /// <summary>Schedule sizes are metres, or feet when Imperial is set.</summary>
+        /// <summary>Schedule sizes are metres, or feet when the drawing is in feet or inches.</summary>
         public static int RndSchedule(double displayLength)
         {
-            double drawing = MeasureState.Units == UnitSys.Imperial ? displayLength * 12.0 : displayLength;
+            SyncUnits();
+            double drawing;
+            if (MeasureState.Units == UnitSys.Imperial)
+                drawing = Util.Db.Insunits == UnitsValue.Feet ? displayLength : displayLength * 12.0;
+            else
+            {
+                switch (Util.Db.Insunits)
+                {
+                    case UnitsValue.Millimeters: drawing = displayLength * 1000.0; break;
+                    case UnitsValue.Centimeters: drawing = displayLength * 100.0; break;
+                    default: drawing = displayLength; break;
+                }
+            }
             return Rnd(drawing);
         }
 
@@ -87,14 +98,56 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private static string ScheduleUnit => MeasureState.Units == UnitSys.Imperial ? "ft" : "m";
 
-        private static int Rnd(double v) => MeasureState.Units == UnitSys.Imperial
-            ? (int)Math.Floor(v * 8.0 + 0.5001)
-            : (int)Math.Floor(v * 100.0 + 0.5001);
-
-        private static double R2(double v)
+        private static void SyncUnits()
         {
-            double v2 = MeasureState.Units == UnitSys.Imperial ? v / 144.0 : v;
-            return Math.Floor(v2 * 100.0 + 0.5) / 100.0;
+            var units = Util.Db.Insunits;
+            MeasureState.Units = units == UnitsValue.Feet || units == UnitsValue.Inches
+                ? UnitSys.Imperial : UnitSys.Metric;
+        }
+
+        private static double MetresFromDrawing(double drawing)
+        {
+            switch (Util.Db.Insunits)
+            {
+                case UnitsValue.Millimeters: return drawing / 1000.0;
+                case UnitsValue.Centimeters: return drawing / 100.0;
+                case UnitsValue.Inches: return drawing * 0.0254;
+                case UnitsValue.Feet: return drawing * 0.3048;
+                default: return drawing;
+            }
+        }
+
+        private static double InchesFromDrawing(double drawing)
+        {
+            switch (Util.Db.Insunits)
+            {
+                case UnitsValue.Inches: return drawing;
+                case UnitsValue.Feet: return drawing * 12.0;
+                case UnitsValue.Millimeters: return drawing / 25.4;
+                case UnitsValue.Centimeters: return drawing / 2.54;
+                default: return drawing / 0.0254;
+            }
+        }
+
+        private static int Rnd(double drawing)
+        {
+            if (MeasureState.Units == UnitSys.Imperial)
+                return (int)Math.Floor(InchesFromDrawing(drawing) * 8.0 + 0.5001);
+            return (int)Math.Floor(MetresFromDrawing(drawing) * 100.0 + 0.5001);
+        }
+
+        private static double R2(double drawingArea)
+        {
+            double shown;
+            switch (Util.Db.Insunits)
+            {
+                case UnitsValue.Millimeters: shown = drawingArea / 1e6; break;
+                case UnitsValue.Centimeters: shown = drawingArea / 1e4; break;
+                case UnitsValue.Inches: shown = drawingArea / 144.0; break;
+                case UnitsValue.Feet: shown = drawingArea; break;
+                default: shown = drawingArea; break;
+            }
+            return Math.Floor(shown * 100.0 + 0.5) / 100.0;
         }
 
         private static double AreaFromRnd(int len, int brd)
@@ -129,27 +182,61 @@ namespace HCW.AutoCAD.Plugin.Commands
         private static string LenLabel => MeasureState.Units == UnitSys.Imperial ? "ft-in" : "m";
         private static string AreaLabel => MeasureState.Units == UnitSys.Imperial ? "sq ft" : "sq m";
 
+        [CommandMethod("TOSTART")]
         [CommandMethod("MSETUP")]
         public void MSetup()
         {
             var ed = Util.Ed; var db = Util.Db;
-            var pko = new PromptKeywordOptions($"\nMeasurement unit system [Metric/Imperial] <{(MeasureState.Units == UnitSys.Imperial ? "Imperial" : "Metric")}>: ");
-            pko.Keywords.Add("Metric"); pko.Keywords.Add("Imperial");
-            pko.Keywords.Default = MeasureState.Units == UnitSys.Imperial ? "Imperial" : "Metric";
-            var pkr = ed.GetKeywords(pko);
-            if (pkr.Status == PromptStatus.OK)
-                MeasureState.Units = pkr.StringResult == "Imperial" ? UnitSys.Imperial : UnitSys.Metric;
-
+            if (!Prepare()) return;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 MakeLayers(tr, db);
+                var lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+                if (lt.Has(LayLin)) db.Clayer = lt[LayLin];
                 tr.Commit();
             }
-            ed.WriteMessage("\nUnit system: " + (MeasureState.Units == UnitSys.Imperial
-                ? "Imperial (1 drawing unit = 1 inch; lengths round to 1/8\")"
-                : "Metric (1 drawing unit = 1 meter; lengths round to 1 cm)"));
-            ed.WriteMessage($"\nLayers ready: {LayLin}, {LayDed}, {LayFb}, {LayHb}, {LayBm}, {LayLt}, {LayCnt}, {LayAre}, {LaySlb}, {LaySdd}");
+            ed.WriteMessage("\nTake-off ready. Units: " + UnitSentence() + ".");
+            ed.WriteMessage("\nDraw on the TAKE-OFF layers, then click that element. Openings go on " + LayDed + ".");
+            ed.WriteMessage("\nLinear " + LayLin + ", brick " + LayFb + " / " + LayHb
+                + ", beams " + LayBm + ", lintels " + LayLt + ", columns " + LayCol
+                + ", ceiling " + LayCeil + ", floor " + LayFlor + ".");
+        }
+
+        private static bool Prepare()
+        {
+            var db = Util.Db;
+            var ed = Util.Ed;
+            if (db.Insunits == UnitsValue.Undefined)
+            {
+                var pko = new PromptKeywordOptions("\nDrawing units are unset. Treat distances as [Millimetres/Metres] <Millimetres>: ");
+                pko.Keywords.Add("Millimetres");
+                pko.Keywords.Add("Metres");
+                pko.Keywords.Default = "Millimetres";
+                pko.AllowNone = true;
+                var r = ed.GetKeywords(pko);
+                if (r.Status == PromptStatus.Cancel) return false;
+                bool metres = r.Status == PromptStatus.OK && r.StringResult == "Metres";
+                using (Util.Doc.LockDocument())
+                    db.Insunits = metres ? UnitsValue.Meters : UnitsValue.Millimeters;
+                ed.WriteMessage(metres ? "\nUnits set to metres." : "\nUnits set to millimetres.");
+            }
+            SyncUnits();
+            MeasureState.TextHeight = Util.MmToDrawingUnits(Settings.GetDouble("TakeoffTextHeightMm", 125));
+            MeasureState.DedupTolerance = Math.Max(Util.MmToDrawingUnits(Settings.GetDouble("DeductionToleranceMm", 10)), 1e-9);
+            return true;
+        }
+
+        private static string UnitSentence()
+        {
+            switch (Util.Db.Insunits)
+            {
+                case UnitsValue.Millimeters: return "millimetres, lengths to 1 cm";
+                case UnitsValue.Centimeters: return "centimetres, lengths to 1 cm";
+                case UnitsValue.Inches: return "inches, lengths to 1/8 in";
+                case UnitsValue.Feet: return "feet, lengths to 1/8 in";
+                default: return "metres, lengths to 1 cm";
+            }
         }
 
         [CommandMethod("MSHOW")]
@@ -243,6 +330,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         private void RunTypedLinear((string layer, string code, string name)[] types, string dedLayer,
             string selPrompt, string csvName, bool singleTypeNoPrefix = false)
         {
+            if (!Prepare()) return;
             var ed = Util.Ed; var db = Util.Db;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
@@ -256,8 +344,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                         BuildFilter("LINE,LWPOLYLINE,POLYLINE,ARC,SPLINE", isolateLayers));
                     if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
 
-                    double th = AskTextHeight(ed);
-                    double tol = AskTolerance(ed);
+                    double th = MeasureState.TextHeight;
+                    double tol = MeasureState.DedupTolerance;
 
                     var grp = new List<(Curve ent, string type)>();
                     var deds = new List<Curve>();
@@ -406,6 +494,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private void RunRectangles(string layer, string code, string csvName, string prompt, bool useSchedule)
         {
+            if (!Prepare()) return;
             var ed = Util.Ed; var db = Util.Db;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
@@ -417,7 +506,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var psr = ed.GetSelection(new PromptSelectionOptions(), BuildFilter("LWPOLYLINE", new[] { layer }));
                     if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
 
-                    double th = AskTextHeight(ed);
+                    double th = MeasureState.TextHeight;
                     var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                     var found = new List<(Point3d cen, int len, int brd, double area, int perim)>();
                     int skipped = 0;
@@ -472,6 +561,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("MSCHEDTABLE")]
         public void MSchedTable()
         {
+            if (!Prepare()) return;
             var ed = Util.Ed; var db = Util.Db;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
@@ -516,6 +606,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("MSCHED")]
         public void MSched()
         {
+            if (!Prepare()) return;
             var ed = Util.Ed; var db = Util.Db;
             MeasureBook book;
             var labels = new List<KeyValuePair<string, int>>();
@@ -613,6 +704,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private void RunPaint(string[] wallLayers, string dedLayer, string csvName, string title)
         {
+            if (!Prepare()) return;
             var ed = Util.Ed; var db = Util.Db;
             MeasureBook book;
             using (var tr = db.TransactionManager.StartTransaction())
@@ -633,7 +725,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 {
                     var psr = ed.GetSelection(new PromptSelectionOptions(), BuildFilter("LINE,LWPOLYLINE,POLYLINE,ARC,SPLINE", layers));
                     if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
-                    double th = AskTextHeight(ed);
+                    double th = MeasureState.TextHeight;
                     var walls = new List<Curve>();
                     var deds = new List<Curve>();
                     foreach (SelectedObject so in psr.Value)
@@ -700,6 +792,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private void RunAreas(string layer, string code, string csvName, string prompt)
         {
+            if (!Prepare()) return;
             var ed = Util.Ed; var db = Util.Db;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
@@ -710,7 +803,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 {
                     var psr = ed.GetSelection(new PromptSelectionOptions(), BuildFilter("LWPOLYLINE,POLYLINE,CIRCLE,ELLIPSE,SPLINE", new[] { layer }));
                     if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
-                    double th = AskTextHeight(ed);
+                    double th = MeasureState.TextHeight;
                     var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                     var found = new List<(Point3d cen, double area)>();
                     foreach (SelectedObject so in psr.Value)
@@ -748,6 +841,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("MARE")]
         public void MAre()
         {
+            if (!Prepare()) return;
             var ed = Util.Ed; var db = Util.Db;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
@@ -758,7 +852,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var psr = ed.GetSelection(new PromptSelectionOptions(), BuildFilter("LWPOLYLINE,POLYLINE,CIRCLE,ELLIPSE,SPLINE", new[] { LayAre }));
                     if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
 
-                    double th = AskTextHeight(ed);
+                    double th = MeasureState.TextHeight;
                     var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                     var rows = new List<string[]>();
                     int n = 1, skipped = 0; double totA = 0; int totP = 0;
@@ -797,6 +891,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("MSLB")]
         public void MSlb()
         {
+            if (!Prepare()) return;
             var ed = Util.Ed; var db = Util.Db;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
@@ -807,7 +902,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var psr = ed.GetSelection(new PromptSelectionOptions(), BuildFilter("LWPOLYLINE,POLYLINE", new[] { LaySlb, LaySdd }));
                     if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
 
-                    double th = AskTextHeight(ed);
+                    double th = MeasureState.TextHeight;
                     var slabs = new List<Polyline>();
                     var deds = new List<Polyline>();
                     foreach (SelectedObject so in psr.Value)
@@ -877,24 +972,6 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         // ---- shared helpers ----
-
-        private static double AskTextHeight(Editor ed)
-        {
-            var opt = new PromptDoubleOptions($"\nLabel text height <{MeasureState.TextHeight:F2}>: ")
-            { AllowZero = false, AllowNegative = false, DefaultValue = MeasureState.TextHeight, UseDefaultValue = true };
-            var r = ed.GetDouble(opt);
-            if (r.Status == PromptStatus.OK) MeasureState.TextHeight = r.Value;
-            return MeasureState.TextHeight;
-        }
-
-        private static double AskTolerance(Editor ed)
-        {
-            var opt = new PromptDoubleOptions($"\nDeduction overlap tolerance (m) <{MeasureState.DedupTolerance:F3}>: ")
-            { AllowZero = false, AllowNegative = false, DefaultValue = MeasureState.DedupTolerance, UseDefaultValue = true };
-            var r = ed.GetDouble(opt);
-            if (r.Status == PromptStatus.OK) MeasureState.DedupTolerance = r.Value;
-            return MeasureState.DedupTolerance;
-        }
 
         private static SelectionFilter BuildFilter(string dxfTypes, string[] layers)
         {
