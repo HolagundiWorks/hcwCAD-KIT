@@ -23,8 +23,51 @@ namespace HCW.AutoCAD.Plugin
 
         public string MarkFor(string rawLabel)
         {
-            var map = Maps.FirstOrDefault(m => string.Equals(m.Label, rawLabel, StringComparison.OrdinalIgnoreCase));
+            string key = NormKey(rawLabel);
+            var map = Maps.FirstOrDefault(m => NormKey(m.Label) == key);
             return map == null ? null : map.Mark;
+        }
+
+        /// <summary>
+        /// Compares deduction names loosely: case, spaces, hyphens and leading zeros are ignored,
+        /// so "FB D-01", "fb d-1" and "FB-D1" are the same deduction.
+        /// </summary>
+        public static string NormKey(string label)
+        {
+            var sb = new System.Text.StringBuilder();
+            bool inDigits = false;
+            foreach (char ch in label ?? "")
+            {
+                if (!char.IsLetterOrDigit(ch)) { inDigits = false; continue; }
+                if (char.IsDigit(ch))
+                {
+                    if (ch == '0' && !inDigits) { inDigits = true; continue; }
+                    inDigits = true;
+                }
+                else inDigits = false;
+                sb.Append(char.ToLowerInvariant(ch));
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// The schedule entry whose length equals a measured deduction length, when exactly one does.
+        /// Used to pre-fill the deduction map.
+        /// </summary>
+        public OpeningSpec SuggestOpening(int measuredLength)
+        {
+            var hits = Openings.Where(o => o.WidthRounded == measuredLength).ToList();
+            return hits.Count == 1 ? hits[0] : null;
+        }
+
+        /// <summary>Sets each mapped opening's count to the number of deductions mapped to it.</summary>
+        public void CountFromMaps()
+        {
+            foreach (var o in Openings)
+            {
+                int n = Maps.Count(m => string.Equals(m.Mark, o.Mark, StringComparison.OrdinalIgnoreCase));
+                if (n > 0) o.Count = n;
+            }
         }
 
         public OpeningSpec Opening(string mark)
@@ -91,7 +134,7 @@ namespace HCW.AutoCAD.Plugin
 
         public void GroupSameSizes()
         {
-            Openings = Collapse(Openings, o => o.Kind + "|" + o.WidthRounded + "|" + o.HeightRounded);
+            Openings = Collapse(Openings, o => o.Kind + "|" + (o.Type ?? "").Trim().ToLowerInvariant() + "|" + o.WidthRounded + "|" + o.HeightRounded);
             Columns = CollapseColumns(Columns);
         }
 
@@ -124,7 +167,7 @@ namespace HCW.AutoCAD.Plugin
             foreach (var f in Floors)
                 yield return "F|" + Esc(f.Name) + "|" + Num(f.Height);
             foreach (var o in Openings)
-                yield return "O|" + Esc(o.Mark) + "|" + Esc(o.Kind) + "|" + Num(o.Width) + "|" + Num(o.Height) + "|" + Esc(o.Name) + "|" + o.Count.ToString(CultureInfo.InvariantCulture);
+                yield return "O|" + Esc(o.Mark) + "|" + Esc(o.Kind) + "|" + Num(o.Width) + "|" + Num(o.Height) + "|" + Esc(o.Type) + "|" + o.Count.ToString(CultureInfo.InvariantCulture);
             foreach (var c in Columns)
                 yield return "C|" + Esc(c.Mark) + "|" + Num(c.Width) + "|" + Num(c.Depth) + "|" + Esc(c.Name) + "|" + c.Count.ToString(CultureInfo.InvariantCulture);
             foreach (var m in Maps)
@@ -139,7 +182,7 @@ namespace HCW.AutoCAD.Plugin
             if (p[0] == "F" && p.Length >= 3)
                 book.Floors.Add(new FloorSpec { Name = p[1], Height = D(p[2]) });
             else if (p[0] == "O" && p.Length >= 7)
-                book.Openings.Add(new OpeningSpec { Mark = p[1], Kind = p[2], Width = D(p[3]), Height = D(p[4]), Name = p[5], Count = I(p[6]) });
+                book.Openings.Add(new OpeningSpec { Mark = p[1], Kind = p[2], Width = D(p[3]), Height = D(p[4]), Type = p[5], Count = I(p[6]) });
             else if (p[0] == "C" && p.Length >= 6)
                 book.Columns.Add(new ColumnSpec { Mark = p[1], Width = D(p[2]), Depth = D(p[3]), Name = p[4], Count = I(p[5]) });
             else if (p[0] == "M" && p.Length >= 3)
@@ -189,11 +232,14 @@ namespace HCW.AutoCAD.Plugin
 
         public class OpeningSpec
         {
+            /// <summary>Schedule name, for example D1 or W1.</summary>
             public string Mark = "D1";
             public string Kind = "Door";
+            /// <summary>Length of the opening along the wall (the deduction length).</summary>
             public double Width = 0.9;
             public double Height = 2.1;
-            public string Name = "Door 01";
+            /// <summary>Material or type, for example UPVC, Timber, Aluminium.</summary>
+            public string Type = "";
             public int Count = 1;
             public int WidthRounded => MeasureCommands.RndSchedule(Width);
             public int HeightRounded => MeasureCommands.RndSchedule(Height);

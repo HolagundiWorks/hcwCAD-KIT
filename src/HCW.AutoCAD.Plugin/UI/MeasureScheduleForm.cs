@@ -17,7 +17,7 @@ namespace HCW.AutoCAD.Plugin.UI
 
         public bool DrawTable => _draw.Checked;
 
-        public MeasureScheduleForm(MeasureBook book, IList<string> deductionLabels, string heightUnit)
+        public MeasureScheduleForm(MeasureBook book, IList<KeyValuePair<string, int>> deductionLabels, string heightUnit)
         {
             Text = "hcwCAD-KIT — Measure schedule";
             FormBorderStyle = FormBorderStyle.Sizable;
@@ -28,18 +28,19 @@ namespace HCW.AutoCAD.Plugin.UI
 
             var tabs = new TabControl { Dock = DockStyle.Fill };
             _floors = Grid("Floor", "Ceiling height (" + heightUnit + ")");
-            _openings = Grid("Mark", "Door or window", "Width (" + heightUnit + ")", "Height (" + heightUnit + ")", "Name", "Count");
+            _openings = Grid("Name", "Type", "Door or window", "Length (" + heightUnit + ")", "Height (" + heightUnit + ")", "Count");
             _columns = Grid("Mark", "Width (" + heightUnit + ")", "Depth (" + heightUnit + ")", "Name", "Count");
-            _maps = Grid("Deduction", "Schedule mark");
+            _maps = Grid("Deduction", "Measured length", "Schedule name");
+            _maps.Columns[1].ReadOnly = true;
             FillFloors(book);
             FillOpenings(book);
             FillColumns(book);
             FillMaps(book, deductionLabels);
 
             tabs.TabPages.Add(Page("Floors", _floors, "Each row is one floor. Wall paint uses these ceiling heights."));
-            tabs.TabPages.Add(Page("Doors and windows", _openings, "Same width and height can be grouped onto one mark."));
+            tabs.TabPages.Add(Page("Doors and windows", _openings, "Name (W1), type (UPVC), length and height. Length is the size along the wall that is deducted."));
             tabs.TabPages.Add(Page("Columns", _columns, "Concrete columns of the same size share one mark."));
-            tabs.TabPages.Add(Page("Deduction map", _maps, "Example: FB D-01 maps to D1. Apply writes that name onto the measured label."));
+            tabs.TabPages.Add(Page("Deduction map", _maps, "Each measured deduction (FB D-01) maps to one schedule name (W1). A name is pre-filled when exactly one entry has the same length."));
             Controls.Add(tabs);
 
             var bar = new Panel { Dock = DockStyle.Bottom, Height = 46 };
@@ -75,10 +76,11 @@ namespace HCW.AutoCAD.Plugin.UI
                 book.Openings.Add(new MeasureBook.OpeningSpec
                 {
                     Mark = mark,
-                    Kind = Cell(row, 1).Length == 0 ? "Door" : Cell(row, 1),
-                    Width = Num(row, 2),
-                    Height = Num(row, 3),
-                    Name = Cell(row, 4),
+                    Type = Cell(row, 1),
+                    Kind = Cell(row, 2).Length > 0 ? Cell(row, 2)
+                        : mark.StartsWith("W", StringComparison.OrdinalIgnoreCase) ? "Window" : "Door",
+                    Width = Num(row, 3),
+                    Height = Num(row, 4),
                     Count = Math.Max(1, (int)Num(row, 5))
                 });
             }
@@ -100,7 +102,7 @@ namespace HCW.AutoCAD.Plugin.UI
             {
                 if (row.IsNewRow) continue;
                 string label = Cell(row, 0);
-                string mark = Cell(row, 1);
+                string mark = Cell(row, 2);
                 if (label.Length == 0 || mark.Length == 0) continue;
                 book.Maps.Add(new MeasureBook.DeductionMap { Label = label, Mark = mark });
             }
@@ -152,7 +154,7 @@ namespace HCW.AutoCAD.Plugin.UI
         private void FillOpenings(MeasureBook book)
         {
             foreach (var o in book.Openings)
-                _openings.Rows.Add(o.Mark, o.Kind, o.Width.ToString("0.###"), o.Height.ToString("0.###"), o.Name, o.Count.ToString());
+                _openings.Rows.Add(o.Mark, o.Type, o.Kind, o.Width.ToString("0.###"), o.Height.ToString("0.###"), o.Count.ToString());
         }
 
         private void FillColumns(MeasureBook book)
@@ -161,19 +163,24 @@ namespace HCW.AutoCAD.Plugin.UI
                 _columns.Rows.Add(c.Mark, c.Width.ToString("0.###"), c.Depth.ToString("0.###"), c.Name, c.Count.ToString());
         }
 
-        private void FillMaps(MeasureBook book, IList<string> labels)
+        private void FillMaps(MeasureBook book, IList<KeyValuePair<string, int>> labels)
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var lengths = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            if (labels != null)
+                foreach (var l in labels) lengths[l.Key] = l.Value;
             foreach (var map in book.Maps)
             {
-                _maps.Rows.Add(map.Label, map.Mark);
+                int len;
+                _maps.Rows.Add(map.Label, lengths.TryGetValue(map.Label, out len) && len >= 0 ? MeasureCommands.M(len) : "", map.Mark);
                 seen.Add(map.Label);
             }
             if (labels == null) return;
-            foreach (var label in labels)
+            foreach (var l in labels)
             {
-                if (seen.Contains(label)) continue;
-                _maps.Rows.Add(label, "");
+                if (seen.Contains(l.Key)) continue;
+                var hit = l.Value >= 0 ? book.SuggestOpening(l.Value) : null;
+                _maps.Rows.Add(l.Key, l.Value >= 0 ? MeasureCommands.M(l.Value) : "", hit == null ? "" : hit.Mark);
             }
         }
 

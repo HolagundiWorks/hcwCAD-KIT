@@ -131,7 +131,31 @@ The Measure panel has one dropdown (Linear, Brickwork, Beams and lintels) and on
 
 Walls, beams, and lintels of the same rounded length share one name (`FB-A`, `HB-A`, `BM-A`, `LT-A`, `L-A`). Openings on a wall are numbered per element, for example `FB D-01`. Columns, doors, and windows of the same size share one schedule mark. Ceiling and floor outlines of the same area share one name.
 
-`MSCHED` stores the schedule in the drawing: floors and ceiling heights, door and window sizes, concrete columns, and a map from a measured deduction to a schedule mark. Mapping `FB D-01` to `D1` (name `Door 01`) rewrites that label to `D1 Door 01`. **Group same size** collapses equal doors, windows, and columns onto one row before you apply. Schedule sizes are metres, or feet when Imperial is set.
+`MSCHED` stores the schedule in the drawing: floors and ceiling heights, doors and windows, concrete columns, and a map from each measured deduction to a schedule name.
+
+#### Door and window schedule
+
+Each row on the **Doors and windows** tab is one schedule entry:
+
+| Column | Example | Meaning |
+|---|---|---|
+| Name | `W1` | The schedule name. Must be unique. |
+| Type | `UPVC` | Material or type. Free text. |
+| Door or window | `Window` | Left blank, it is taken from the name (`W…` is a window, otherwise a door). |
+| Length | `1.2` | Size along the wall, in metres (feet when Imperial). This is the deducted length. |
+| Height | `1.2` | Opening height, in metres (feet when Imperial). |
+| Count | `3` | Set automatically from the map when you apply. |
+
+Deduction map logic:
+
+1. `MLIN`, `MBRK` and `MBML` label every deduction line as `<type> D-<nn>` (for example `FB D-01`) and store its measured length on the label.
+2. On the **Deduction map** tab, each deduction is one row with its measured length. If exactly one schedule entry has the same length, its name is pre-filled (a `1.20` m deduction suggests the only entry with length `1.2`). If several entries share that length, the cell stays empty and you choose. Type or change any name yourself.
+3. Deduction names are matched loosely, so case, spaces, hyphens and leading zeros do not matter: `FB D-01`, `fb d-1` and `FB-D1` are the same deduction.
+4. On **Apply**, each mapped label is rewritten to `<name> <type>` (`FB D-01` becomes `W1 UPVC`). The count of each entry becomes the number of deductions mapped to it.
+5. `MPAINT` then deducts the entry's length × height for every mapped opening. An unmapped deduction falls back to its measured length × the wall height.
+6. Apply prints a warning when a name is used twice, when a map points to a name that is not in the schedule, or when the measured deduction length differs from the entry’s length.
+
+**Group same size** merges entries with the same kind, type, length and height onto one row before you apply. Schedule sizes are metres, or feet when Imperial is set.
 
 Draw the geometry on the layers below before you run the command. Deduction geometry must be close to the line it belongs to (you are asked for a match tolerance; default 0.01 drawing units).
 

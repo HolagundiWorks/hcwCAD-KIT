@@ -306,7 +306,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                                     dsum += dv;
                                     string raw = (singleTypeNoPrefix ? "L" : ty.code) + " D-" + dedSerial.ToString("00");
                                     var dmp = CurveMid(deds[j]);
-                                    PlaceLabel(tr, db, btr, new Point3d(dmp.X, dmp.Y - 0.8 * th, 0), raw, book, th);
+                                    PlaceLabel(tr, db, btr, new Point3d(dmp.X, dmp.Y - 0.8 * th, 0), raw, book, th, measured: dv);
                                     string shown = DisplayName(book, raw);
                                     rows.Add(singleTypeNoPrefix
                                         ? new[] { shown, "", M(dv), "" }
@@ -428,7 +428,8 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed; var db = Util.Db;
             MeasureBook book;
-            var labels = new List<string>();
+            var labels = new List<KeyValuePair<string, int>>();
+            var lengths = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 book = MeasureBook.Load(tr, db);
@@ -438,8 +439,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var text = tr.GetObject(id, OpenMode.ForRead) as DBText;
                     if (text == null || !string.Equals(text.Layer, LayLbl, StringComparison.OrdinalIgnoreCase)) continue;
                     string raw = RawLabel(text);
-                    if (raw.IndexOf(" D-", StringComparison.OrdinalIgnoreCase) >= 0 && !labels.Contains(raw, StringComparer.OrdinalIgnoreCase))
-                        labels.Add(raw);
+                    if (raw.IndexOf(" D-", StringComparison.OrdinalIgnoreCase) >= 0 && !lengths.ContainsKey(raw))
+                    {
+                        int len = LabelLength(text);
+                        lengths[raw] = len;
+                        labels.Add(new KeyValuePair<string, int>(raw, len));
+                    }
                 }
                 tr.Commit();
             }
@@ -448,6 +453,21 @@ namespace HCW.AutoCAD.Plugin.Commands
             {
                 if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
                 book = dlg.Read();
+                book.CountFromMaps();
+                foreach (var dup in book.Openings.GroupBy(o => o.Mark, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
+                    ed.WriteMessage("\nWARNING: schedule name " + dup.Key + " is used more than once.");
+                foreach (var map in book.Maps)
+                {
+                    var opening = book.Opening(map.Mark);
+                    if (opening == null)
+                    {
+                        ed.WriteMessage("\nWARNING: " + map.Label + " maps to " + map.Mark + ", which is not in the schedule.");
+                        continue;
+                    }
+                    int len;
+                    if (lengths.TryGetValue(map.Label, out len) && len >= 0 && len != opening.WidthRounded)
+                        ed.WriteMessage("\nWARNING: " + map.Label + " measures " + M(len) + " but " + opening.Mark + " is " + M(opening.WidthRounded) + ".");
+                }
                 using (Util.Doc.LockDocument())
                 using (var tr = db.TransactionManager.StartTransaction())
                 {
@@ -845,7 +865,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             return letters;
         }
 
-        private static void PlaceLabel(Transaction tr, Database db, BlockTableRecord btr, Point3d pt, string raw, MeasureBook book, double h, string force = null)
+        private static void PlaceLabel(Transaction tr, Database db, BlockTableRecord btr, Point3d pt, string raw, MeasureBook book, double h, string force = null, int measured = -1)
         {
             var t = new DBText
             {
@@ -856,7 +876,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             };
             btr.AppendEntity(t);
             tr.AddNewlyCreatedDBObject(t, true);
-            TagLabel(tr, db, t, raw);
+            TagLabel(tr, db, t, raw, measured);
         }
 
         private static string DisplayName(MeasureBook book, string raw)
@@ -864,8 +884,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             string mark = book.MarkFor(raw);
             if (string.IsNullOrWhiteSpace(mark)) return raw;
             var opening = book.Opening(mark);
-            if (opening != null && !string.IsNullOrWhiteSpace(opening.Name))
-                return mark + " " + opening.Name;
+            if (opening != null && !string.IsNullOrWhiteSpace(opening.Type))
+                return mark + " " + opening.Type;
             var column = book.Columns.FirstOrDefault(c => string.Equals(c.Mark, mark, StringComparison.OrdinalIgnoreCase));
             if (column != null && !string.IsNullOrWhiteSpace(column.Name))
                 return mark + " " + column.Name;
@@ -882,13 +902,29 @@ namespace HCW.AutoCAD.Plugin.Commands
             tr.AddNewlyCreatedDBObject(rec, true);
         }
 
-        private static void TagLabel(Transaction tr, Database db, DBText text, string raw)
+        private static void TagLabel(Transaction tr, Database db, DBText text, string raw, int measured = -1)
         {
             EnsureRegApp(tr, db);
             text.XData = new ResultBuffer(
                 new TypedValue((int)DxfCode.ExtendedDataRegAppName, AppName),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, "MEASURE"),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, raw ?? ""));
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, raw ?? ""),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, "LEN"),
+                new TypedValue((int)DxfCode.ExtendedDataInteger32, measured));
+        }
+
+        /// <summary>The rounded length stored with a deduction label, or -1 when none was stored.</summary>
+        private static int LabelLength(DBText text)
+        {
+            var data = text.GetXDataForApplication(AppName);
+            if (data == null) return -1;
+            var vals = data.AsArray();
+            for (int i = 0; i < vals.Length - 1; i++)
+                if (vals[i].TypeCode == (int)DxfCode.ExtendedDataAsciiString
+                    && string.Equals(vals[i].Value as string, "LEN", StringComparison.Ordinal)
+                    && vals[i + 1].Value is int len)
+                    return len;
+            return -1;
         }
 
         private static string RawLabel(DBText text)
@@ -934,7 +970,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 rows.Add(new[]
                 {
                     opening.Mark,
-                    string.IsNullOrWhiteSpace(opening.Name) ? opening.Kind : opening.Name,
+                    string.IsNullOrWhiteSpace(opening.Type) ? opening.Kind : opening.Kind + ", " + opening.Type,
                     opening.Width.ToString("0.###") + " x " + opening.Height.ToString("0.###"),
                     Math.Max(1, opening.Count).ToString()
                 });
