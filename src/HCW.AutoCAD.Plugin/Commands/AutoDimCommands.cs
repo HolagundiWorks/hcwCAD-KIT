@@ -493,7 +493,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 foreach (ObjectId id in table)
                 {
                     var rec = (LayerTableRecord)tr.GetObject(id, OpenMode.ForRead);
-                    if (!rec.IsDependent && rec.Name != "0") names.Add(rec.Name);
+                    if (!rec.IsDependent) names.Add(rec.Name);
                 }
                 initial = LayerChoice.FromLines(DrawingStore.Read(tr, db, StoreDictionary, StoreRecord));
                 tr.Commit();
@@ -502,10 +502,22 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (!initial.Any) initial = LayerChoice.Guess(names);
 
             LayerChoice choice;
-            using (var dlg = new UI.AutoDimLayersForm(names, initial, furnitureNote))
+            while (true)
             {
-                if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return null;
-                choice = dlg.Read();
+                using (var dlg = new UI.AutoDimLayersForm(names, initial, furnitureNote))
+                {
+                    var result = dlg.ShowDialog();
+                    if (result == System.Windows.Forms.DialogResult.Retry)
+                    {
+                        // "Pick from drawing": keep what is ticked, add the layers of the objects picked, show the dialog again
+                        initial = dlg.Read();
+                        PickLayers(ed, db, dlg.PickTarget, initial);
+                        continue;
+                    }
+                    if (result != System.Windows.Forms.DialogResult.OK) return null;
+                    choice = dlg.Read();
+                    break;
+                }
             }
             if (choice.Walls.Count == 0)
             {
@@ -519,6 +531,43 @@ namespace HCW.AutoCAD.Plugin.Commands
                 tr.Commit();
             }
             return choice;
+        }
+
+        /// <summary>
+        /// Asks for objects in the drawing and ticks their layers for one role (W walls, O windows and doors, C columns,
+        /// F furniture). A layer belongs to one role, so it is taken off the others. Layers from external references
+        /// cannot be chosen and are skipped.
+        /// </summary>
+        private static void PickLayers(Editor ed, Database db, string role, LayerChoice into)
+        {
+            string label = role == "W" ? "wall" : role == "O" ? "window and door" : role == "C" ? "column" : "furniture";
+            var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect objects on the " + label + " layer(s): " });
+            if (psr.Status != PromptStatus.OK) return;
+
+            var picked = new List<string>();
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var table = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+                foreach (SelectedObject so in psr.Value)
+                {
+                    var ent = tr.GetObject(so.ObjectId, OpenMode.ForRead) as Entity;
+                    if (ent == null || !table.Has(ent.Layer)) continue;
+                    if (!picked.Contains(ent.Layer, StringComparer.OrdinalIgnoreCase)) picked.Add(ent.Layer);
+                }
+                tr.Commit();
+            }
+            if (picked.Count == 0) return;
+
+            var roles = new Dictionary<string, List<string>>
+            {
+                { "W", into.Walls }, { "O", into.Windows }, { "C", into.Columns }, { "F", into.Furniture }
+            };
+            foreach (var layer in picked)
+            {
+                foreach (var list in roles.Values) list.RemoveAll(l => string.Equals(l, layer, StringComparison.OrdinalIgnoreCase));
+                roles[role].Add(layer);
+            }
+            ed.WriteMessage("\nAdded to " + label + ": " + string.Join(", ", picked) + ".");
         }
 
         /// <summary>

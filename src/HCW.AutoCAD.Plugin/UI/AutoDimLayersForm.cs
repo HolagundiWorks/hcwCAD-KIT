@@ -13,6 +13,9 @@ namespace HCW.AutoCAD.Plugin.UI
         private readonly CheckedListBox _walls, _windows, _columns, _furniture;
         private readonly CheckBox _isolate;
 
+        /// <summary>Set when the dialog closes with Retry: which column asked to pick layers from the drawing (W, O, C or F).</summary>
+        public string PickTarget = "";
+
         public AutoDimLayersForm(IList<string> layers, LayerChoice initial, string furnitureNote)
         {
             Text = "hcwCAD-KIT — Dimension layers";
@@ -22,10 +25,11 @@ namespace HCW.AutoCAD.Plugin.UI
             ClientSize = new Size(820, 520);
             MinimumSize = new Size(640, 380);
 
-            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 3, Padding = new Padding(8) };
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 4, Padding = new Padding(8) };
             for (int i = 0; i < 4; i++) grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
 
             _walls = List(layers, initial.Walls);
@@ -33,14 +37,14 @@ namespace HCW.AutoCAD.Plugin.UI
             _columns = List(layers, initial.Columns);
             _furniture = List(layers, initial.Furniture);
 
-            AddColumn(grid, 0, "Walls", _walls);
-            AddColumn(grid, 1, "Windows and doors", _windows);
-            AddColumn(grid, 2, "Columns", _columns);
-            AddColumn(grid, 3, "Furniture", _furniture);
+            AddColumn(grid, 0, "Walls", _walls, "W");
+            AddColumn(grid, 1, "Windows and doors", _windows, "O");
+            AddColumn(grid, 2, "Columns", _columns, "C");
+            AddColumn(grid, 3, "Furniture", _furniture, "F");
 
             grid.Controls.Add(new Label { Text = "Walls: lines and polylines. Windows and doors: blocks (with a line on MEASURE-DEDUCT), lines or polylines. Columns: closed polylines or blocks. " + furnitureNote,
-                Dock = DockStyle.Fill, AutoSize = false }, 0, 2);
-            grid.SetColumnSpan(grid.GetControlFromPosition(0, 2), 4);
+                Dock = DockStyle.Fill, AutoSize = false }, 0, 3);
+            grid.SetColumnSpan(grid.GetControlFromPosition(0, 3), 4);
 
             Controls.Add(grid);
 
@@ -84,10 +88,14 @@ namespace HCW.AutoCAD.Plugin.UI
             return box;
         }
 
-        private static void AddColumn(TableLayoutPanel grid, int column, string title, CheckedListBox box)
+        private void AddColumn(TableLayoutPanel grid, int column, string title, CheckedListBox box, string role)
         {
             grid.Controls.Add(new Label { Text = title, Dock = DockStyle.Fill, Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold) }, column, 0);
             grid.Controls.Add(box, column, 1);
+            var pick = new Button { Text = "Pick from drawing…", Dock = DockStyle.Fill };
+            // Picking needs the drawing, so the dialog closes with Retry and the command reopens it afterwards.
+            pick.Click += (s, e) => { PickTarget = role; DialogResult = DialogResult.Retry; Close(); };
+            grid.Controls.Add(pick, column, 2);
         }
     }
 }
