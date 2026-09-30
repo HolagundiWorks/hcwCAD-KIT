@@ -160,28 +160,23 @@ namespace HCW.AutoCAD.Plugin.UI
 
         private RibbonPanel BuildMeasurePanel()
         {
-            var src = NewSource("Measure");
-            AddSetButton(src, "HCW_MEASURE_KIND", "Measure", "ruler",
-                "Linear take-off for the kind selected in the dropdown",
-                new (string label, string command)[]
-                {
-                    ("Linear", "MLIN"),
-                    ("Brickwork", "MBRK"),
-                    ("Beams and lintels", "MBML")
-                });
-            AddLarge(src, "MCOL", "Columns", "column", "Group concrete columns of the same size. MREC still numbers plain rectangles.");
-            AddLarge(src, "MSCHED", "Schedule", "report", "Floors, doors, windows, columns, and deduction name map");
-            AddLarge(src, "MSCHEDTABLE", "Insert\nSchedule", "table-of-contents", "Draw the saved schedule as a table in the drawing");
-            AddLarge(src, "MAREA", "Area", "area", "Closed-shape area and perimeter. MARE still works.");
-            AddLarge(src, "MSLAB", "Slab", "floorplan", "Slab area with opening deductions. MSLB still works.");
+            var src = NewSource("TakeOff");
+            AddLarge(src, "TOSTART", "Start", "flag", "Read the drawing units and create the take-off layers");
             AddSmallGroup(src,
-                ("MPAINT", "Wall paint", "area--custom", "Wall length times ceiling height, less openings"),
-                ("MCEIL", "Ceiling", "floorplan", "Ceiling paint area, grouped by equal area"),
+                ("MLIN", "Linear", "ruler", "Length of lines on MEASURE-LINEAR, less openings on MEASURE-DEDUCT"),
+                ("MBRK", "Brickwork", "box", "Full brick and half brick, grouped by equal length"),
+                ("MBML", "Beams", "column", "Concrete beams and lintels, grouped by equal length"),
+                ("MCOL", "Columns", "column", "Concrete columns of the same size share one mark"),
+                ("MPAINT", "Wall paint", "area--custom", "Wall length times the floor height, less openings"),
+                ("MCEIL", "Ceiling", "floorplan", "Ceiling paint, grouped by equal area"),
                 ("MFLOOR", "Floor", "area", "Floor area, grouped by equal area"),
-                ("MSETUP", "Units", "settings", "Metric (metres) or Imperial (feet and inches) for this session"),
-                ("MSHOW", "Restore Layers", "view", "Turn back on only the layers Measure hid"),
+                ("MSCHED", "Schedule", "report", "Floors, doors, windows, columns, and the deduction name map"),
+                ("MSCHEDTABLE", "Insert\nSchedule", "table-of-contents", "Draw the saved schedule as a table in the drawing"),
+                ("MAREA", "Area", "area", "Closed-shape area and perimeter"),
+                ("MSLAB", "Slab", "floorplan", "Slab area with opening deductions"),
+                ("MSHOW", "Restore Layers", "view", "Turn back on only the layers a take-off command hid"),
                 ("MEXPORT", "Export CSV", "document--export", "Save the last take-off as a CSV file beside the drawing"),
-                ("MCLEAR", "Clear Labels", "clean", "Erase Measure label and table objects"));
+                ("MCLEAR", "Clear Labels", "clean", "Erase take-off label and table objects"));
             return Wrap(src);
         }
 

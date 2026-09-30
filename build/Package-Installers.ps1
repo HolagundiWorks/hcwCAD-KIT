@@ -1,6 +1,7 @@
 # Builds hcwCAD-KIT for AutoCAD, BricsCAD, and ZWCAD, then compiles
 # a separate per-user setup program for each host.
 param(
+    [string]$Only = "",
     [string]$Configuration = "Release",
     [string]$AutoCADInstallDir = "C:\Program Files\Autodesk\AutoCAD 2022\",
     [string]$BricscadInstallDir = "C:\Program Files\Bricsys\BricsCAD V26 en_US\",
@@ -34,7 +35,6 @@ $iscc = @(
 ) | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $iscc) { throw "Inno Setup 6 is not installed. Install JRSoftware.InnoSetup, then run this script again." }
 
-if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
 
 $targets = @(
@@ -64,10 +64,16 @@ $targets = @(
     }
 )
 
+if ($Only) {
+    $targets = @($targets | Where-Object { $_.Name -eq $Only })
+    if ($targets.Count -eq 0) { throw "Unknown host '$Only'. Use AutoCAD, BricsCAD, or ZWCAD." }
+}
+
 Push-Location $root
 try {
     foreach ($target in $targets) {
         $out = Join-Path $stage $target.Name
+        if (Test-Path $out) { Remove-Item $out -Recurse -Force }
         $contents = Join-Path $out "Contents"
         New-Item -ItemType Directory -Path $contents -Force | Out-Null
         Write-Host "Building $($target.Name)..."
