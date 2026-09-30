@@ -140,8 +140,8 @@ Each row on the **Doors and windows** tab is one schedule entry:
 | Column | Example | Meaning |
 |---|---|---|
 | Name | `W1` | The schedule name. Must be unique. |
-| Type | `UPVC` | Material or type. Free text. |
-| Door or window | `Window` | Left blank, it is taken from the name (`W…` is a window, otherwise a door). |
+| Door or window | `Window` | Drop-down. Filled from the name when you type it (`W…` is a window, otherwise a door). |
+| Type | `UPVC` | Drop-down; the list follows the kind. Doors: Wood, Flush door, UPVC, Aluminium, WPC, Fabricated. Windows: Wood, UPVC, Aluminium, System aluminium. Changing the kind reloads the list. A type saved by an earlier version stays selectable. |
 | Length | `1.2` | Size along the wall, in metres (feet when Imperial). This is the deducted length. |
 | Height | `1.2` | Opening height, in metres (feet when Imperial). |
 | Count | `3` | Set automatically from the map when you apply. |

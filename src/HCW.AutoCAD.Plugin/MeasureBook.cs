@@ -230,6 +230,12 @@ namespace HCW.AutoCAD.Plugin
             public double Height = 3.0;
         }
 
+        /// <summary>Choices offered in the schedule for each kind of opening.</summary>
+        public static readonly string[] DoorTypes = { "Wood", "Flush door", "UPVC", "Aluminium", "WPC", "Fabricated" };
+        public static readonly string[] WindowTypes = { "Wood", "UPVC", "Aluminium", "System aluminium" };
+        public static string[] TypesFor(string kind) =>
+            string.Equals(kind, "Window", StringComparison.OrdinalIgnoreCase) ? WindowTypes : DoorTypes;
+
         public class OpeningSpec
         {
             /// <summary>Schedule name, for example D1 or W1.</summary>

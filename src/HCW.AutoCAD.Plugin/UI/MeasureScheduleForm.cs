@@ -28,7 +28,8 @@ namespace HCW.AutoCAD.Plugin.UI
 
             var tabs = new TabControl { Dock = DockStyle.Fill };
             _floors = Grid("Floor", "Ceiling height (" + heightUnit + ")");
-            _openings = Grid("Name", "Type", "Door or window", "Length (" + heightUnit + ")", "Height (" + heightUnit + ")", "Count");
+            _openings = Grid("Name", "Door or window", "Type", "Length (" + heightUnit + ")", "Height (" + heightUnit + ")", "Count");
+            SetupOpeningGrid();
             _columns = Grid("Mark", "Width (" + heightUnit + ")", "Depth (" + heightUnit + ")", "Name", "Count");
             _maps = Grid("Deduction", "Measured length", "Schedule name");
             _maps.Columns[1].ReadOnly = true;
@@ -38,7 +39,7 @@ namespace HCW.AutoCAD.Plugin.UI
             FillMaps(book, deductionLabels);
 
             tabs.TabPages.Add(Page("Floors", _floors, "Each row is one floor. Wall paint uses these ceiling heights."));
-            tabs.TabPages.Add(Page("Doors and windows", _openings, "Name (W1), type (UPVC), length and height. Length is the size along the wall that is deducted."));
+            tabs.TabPages.Add(Page("Doors and windows", _openings, "Name (W1), door or window, type (pick from the list), length and height. Length is the size along the wall that is deducted."));
             tabs.TabPages.Add(Page("Columns", _columns, "Concrete columns of the same size share one mark."));
             tabs.TabPages.Add(Page("Deduction map", _maps, "Each measured deduction (FB01-D1) maps to one schedule name (W1). A name is pre-filled when exactly one entry has the same length."));
             Controls.Add(tabs);
@@ -76,8 +77,8 @@ namespace HCW.AutoCAD.Plugin.UI
                 book.Openings.Add(new MeasureBook.OpeningSpec
                 {
                     Mark = mark,
-                    Type = Cell(row, 1),
-                    Kind = Cell(row, 2).Length > 0 ? Cell(row, 2)
+                    Type = Cell(row, 2),
+                    Kind = Cell(row, 1).Length > 0 ? Cell(row, 1)
                         : mark.StartsWith("W", StringComparison.OrdinalIgnoreCase) ? "Window" : "Door",
                     Width = Num(row, 3),
                     Height = Num(row, 4),
@@ -143,6 +144,49 @@ namespace HCW.AutoCAD.Plugin.UI
             return grid;
         }
 
+        /// <summary>Kind and type are drop-downs; the type list follows the kind of the row.</summary>
+        private void SetupOpeningGrid()
+        {
+            var kind = new DataGridViewComboBoxColumn { HeaderText = _openings.Columns[1].HeaderText, Name = "Kind" };
+            kind.Items.AddRange("Door", "Window");
+            var type = new DataGridViewComboBoxColumn { HeaderText = _openings.Columns[2].HeaderText, Name = "Type" };
+            // Until a row has a kind, offer every type.
+            type.Items.AddRange(MeasureBook.DoorTypes.Concat(MeasureBook.WindowTypes).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+            _openings.Columns.RemoveAt(2);
+            _openings.Columns.RemoveAt(1);
+            _openings.Columns.Insert(1, kind);
+            _openings.Columns.Insert(2, type);
+            _openings.DataError += (s, e) => e.ThrowException = false;
+            _openings.CellValueChanged += (s, e) =>
+            {
+                if (e.RowIndex < 0 || e.RowIndex >= _openings.Rows.Count) return;
+                var row = _openings.Rows[e.RowIndex];
+                if (row.IsNewRow) return;
+                if (e.ColumnIndex == 0 && Cell(row, 1).Length == 0)
+                    row.Cells[1].Value = Cell(row, 0).StartsWith("W", StringComparison.OrdinalIgnoreCase) ? "Window" : "Door";
+                if (e.ColumnIndex == 1)
+                    FillTypes(row, Cell(row, 2));
+            };
+            _openings.CurrentCellDirtyStateChanged += (s, e) =>
+            {
+                if (_openings.IsCurrentCellDirty && _openings.CurrentCell is DataGridViewComboBoxCell)
+                    _openings.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            };
+        }
+
+        private static void FillTypes(DataGridViewRow row, string current)
+        {
+            string kind = (row.Cells[1].Value ?? "").ToString();
+            var list = new List<string>(MeasureBook.TypesFor(kind));
+            // A type typed in an older drawing stays selectable.
+            if (!string.IsNullOrWhiteSpace(current) && !list.Contains(current, StringComparer.OrdinalIgnoreCase))
+                list.Add(current);
+            var cell = new DataGridViewComboBoxCell { DataSource = list };
+            row.Cells[2] = cell;
+            var match = list.FirstOrDefault(t => string.Equals(t, current, StringComparison.OrdinalIgnoreCase));
+            cell.Value = match;
+        }
+
         private void FillFloors(MeasureBook book)
         {
             if (book.Floors.Count == 0)
@@ -154,7 +198,16 @@ namespace HCW.AutoCAD.Plugin.UI
         private void FillOpenings(MeasureBook book)
         {
             foreach (var o in book.Openings)
-                _openings.Rows.Add(o.Mark, o.Type, o.Kind, o.Width.ToString("0.###"), o.Height.ToString("0.###"), o.Count.ToString());
+                {
+                    int i = _openings.Rows.Add();
+                    var row = _openings.Rows[i];
+                    row.Cells[0].Value = o.Mark;
+                    row.Cells[1].Value = o.Kind;
+                    FillTypes(row, o.Type);
+                    row.Cells[3].Value = o.Width.ToString("0.###");
+                    row.Cells[4].Value = o.Height.ToString("0.###");
+                    row.Cells[5].Value = o.Count.ToString();
+                }
         }
 
         private void FillColumns(MeasureBook book)
