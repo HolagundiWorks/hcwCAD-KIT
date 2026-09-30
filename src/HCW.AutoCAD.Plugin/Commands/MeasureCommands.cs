@@ -76,6 +76,9 @@ namespace HCW.AutoCAD.Plugin.Commands
             return Rnd(drawing);
         }
 
+        /// <summary>How far a deduction may differ from a schedule length and still be suggested: 50 mm, or 2 in (16 eighths).</summary>
+        public static int SuggestTolerance => MeasureState.Units == UnitSys.Imperial ? 16 : 5;
+
         private static string ScheduleUnit => MeasureState.Units == UnitSys.Imperial ? "ft" : "m";
 
         private static int Rnd(double v) => MeasureState.Units == UnitSys.Imperial
@@ -474,7 +477,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                         continue;
                     }
                     int len;
-                    if (lengths.TryGetValue(map.Label, out len) && len >= 0 && len != opening.WidthRounded)
+                    if (lengths.TryGetValue(map.Label, out len) && len >= 0 && Math.Abs(len - opening.WidthRounded) > SuggestTolerance)
                         ed.WriteMessage("\nWARNING: " + map.Label + " measures " + M(len) + " but " + opening.Mark + " is " + M(opening.WidthRounded) + ".");
                 }
                 using (Util.Doc.LockDocument())

@@ -51,13 +51,21 @@ namespace HCW.AutoCAD.Plugin
         }
 
         /// <summary>
-        /// The schedule entry whose length equals a measured deduction length, when exactly one does.
+        /// The schedule entry closest in length to a measured deduction, within the tolerance
+        /// (50 mm, or 2 in when Imperial). Null when nothing is in range or two entries are equally close.
         /// Used to pre-fill the deduction map.
         /// </summary>
         public OpeningSpec SuggestOpening(int measuredLength)
         {
-            var hits = Openings.Where(o => o.WidthRounded == measuredLength).ToList();
-            return hits.Count == 1 ? hits[0] : null;
+            int tol = MeasureCommands.SuggestTolerance;
+            var ranked = Openings
+                .Select(o => new { Opening = o, Gap = Math.Abs(o.WidthRounded - measuredLength) })
+                .Where(x => x.Gap <= tol)
+                .OrderBy(x => x.Gap)
+                .ToList();
+            if (ranked.Count == 0) return null;
+            if (ranked.Count > 1 && ranked[1].Gap == ranked[0].Gap) return null;
+            return ranked[0].Opening;
         }
 
         /// <summary>Sets each mapped opening's count to the number of deductions mapped to it.</summary>
