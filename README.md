@@ -135,7 +135,7 @@ Walls, beams, and lintels of the same rounded length share one name (`FB-A`, `HB
 
 #### Floors
 
-Each row on the **Floors** tab records one floor: **FFL to FFL height** (finished floor level to the next), **ceiling height** (wall paint uses it) and **lintel bottom height** (the underside of the lintel, measured up from the FFL). Apply warns when a ceiling is taller than its FFL to FFL height, when the lintel bottom is above the ceiling, and when a door or window is taller than the lintel bottom.
+Each row on the **Floors** tab records one floor: **FFL to FFL height** (finished floor level to the next), **ceiling height** (wall paint uses it) and **lintel bottom height** (the underside of the lintel, measured up from the FFL). Apply warns when a ceiling is taller than its FFL to FFL height, when the lintel bottom is above the ceiling, and when a door or window is taller than its lintel bottom. The floor's lintel bottom applies to every opening unless the opening has its own value on the Doors and windows tab.
 
 #### Schedule table
 
@@ -152,6 +152,7 @@ Each row on the **Doors and windows** tab is one schedule entry:
 | Type | `UPVC` | Drop-down; the list follows the kind. Doors: Wood, Flush door, UPVC, Aluminium, WPC, Fabricated. Windows: Wood, UPVC, Aluminium, System aluminium. Changing the kind reloads the list. A type saved by an earlier version stays selectable. |
 | Length | `1.2` | Size along the wall, in metres (feet when Imperial). This is the deducted length. |
 | Height | `1.2` | Opening height, in metres (feet when Imperial). |
+| Lintel bottom | `2.4` | Optional. Blank uses the floor's lintel bottom height; a value applies to this opening only and is shown in the schedule table. |
 | Count | `3` | Set automatically from the map when you apply. |
 
 Deduction map logic:

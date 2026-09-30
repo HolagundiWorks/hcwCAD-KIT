@@ -495,13 +495,15 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
                 book = dlg.Read();
                 book.CountFromMaps();
+                foreach (var o in book.Openings.Where(x => x.LintelBottom > 0 && x.Height > x.LintelBottom))
+                    ed.WriteMessage("\nWARNING: " + o.Mark + " is " + o.Height + " high, above its own lintel bottom " + o.LintelBottom + ".");
                 foreach (var floor in book.Floors)
                 {
                     if (floor.FflHeight > 0 && floor.Height > floor.FflHeight)
                         ed.WriteMessage("\nWARNING: " + floor.Name + " ceiling height " + floor.Height + " is more than its FFL to FFL height " + floor.FflHeight + ".");
                     if (floor.Height > 0 && floor.LintelBottom > floor.Height)
                         ed.WriteMessage("\nWARNING: " + floor.Name + " lintel bottom " + floor.LintelBottom + " is above its ceiling height " + floor.Height + ".");
-                    foreach (var o in book.Openings.Where(x => x.Height > floor.LintelBottom && floor.LintelBottom > 0))
+                    foreach (var o in book.Openings.Where(x => x.LintelBottom <= 0 && floor.LintelBottom > 0 && x.Height > floor.LintelBottom))
                         ed.WriteMessage("\nWARNING: " + o.Mark + " is " + o.Height + " high, above the " + floor.Name + " lintel bottom " + floor.LintelBottom + ".");
                 }
                 foreach (var dup in book.Openings.GroupBy(o => o.Mark, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
@@ -1024,7 +1026,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                 rows.Add(new[]
                 {
                     opening.Mark,
-                    string.IsNullOrWhiteSpace(opening.Type) ? opening.Kind : opening.Kind + ", " + opening.Type,
+                    (string.IsNullOrWhiteSpace(opening.Type) ? opening.Kind : opening.Kind + ", " + opening.Type)
+                        + (opening.LintelBottom > 0 ? ", lintel bottom " + opening.LintelBottom.ToString("0.###") + " " + ScheduleUnit : ""),
                     opening.Width.ToString("0.###") + " x " + opening.Height.ToString("0.###"),
                     Math.Max(1, opening.Count).ToString()
                 });

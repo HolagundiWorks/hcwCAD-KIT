@@ -175,7 +175,7 @@ namespace HCW.AutoCAD.Plugin
             foreach (var f in Floors)
                 yield return "F|" + Esc(f.Name) + "|" + Num(f.Height) + "|" + Num(f.FflHeight) + "|" + Num(f.LintelBottom);
             foreach (var o in Openings)
-                yield return "O|" + Esc(o.Mark) + "|" + Esc(o.Kind) + "|" + Num(o.Width) + "|" + Num(o.Height) + "|" + Esc(o.Type) + "|" + o.Count.ToString(CultureInfo.InvariantCulture);
+                yield return "O|" + Esc(o.Mark) + "|" + Esc(o.Kind) + "|" + Num(o.Width) + "|" + Num(o.Height) + "|" + Esc(o.Type) + "|" + o.Count.ToString(CultureInfo.InvariantCulture) + "|" + Num(o.LintelBottom);
             foreach (var c in Columns)
                 yield return "C|" + Esc(c.Mark) + "|" + Num(c.Width) + "|" + Num(c.Depth) + "|" + Esc(c.Name) + "|" + c.Count.ToString(CultureInfo.InvariantCulture);
             foreach (var m in Maps)
@@ -190,7 +190,7 @@ namespace HCW.AutoCAD.Plugin
             if (p[0] == "F" && p.Length >= 3)
                 book.Floors.Add(new FloorSpec { Name = p[1], Height = D(p[2]), FflHeight = p.Length > 3 ? D(p[3]) : 0, LintelBottom = p.Length > 4 ? D(p[4]) : 0 });
             else if (p[0] == "O" && p.Length >= 7)
-                book.Openings.Add(new OpeningSpec { Mark = p[1], Kind = p[2], Width = D(p[3]), Height = D(p[4]), Type = p[5], Count = I(p[6]) });
+                book.Openings.Add(new OpeningSpec { Mark = p[1], Kind = p[2], Width = D(p[3]), Height = D(p[4]), Type = p[5], Count = I(p[6]), LintelBottom = p.Length > 7 ? D(p[7]) : 0 });
             else if (p[0] == "C" && p.Length >= 6)
                 book.Columns.Add(new ColumnSpec { Mark = p[1], Width = D(p[2]), Depth = D(p[3]), Name = p[4], Count = I(p[5]) });
             else if (p[0] == "M" && p.Length >= 3)
@@ -260,6 +260,8 @@ namespace HCW.AutoCAD.Plugin
             /// <summary>Material or type, for example UPVC, Timber, Aluminium.</summary>
             public string Type = "";
             public int Count = 1;
+            /// <summary>Lintel bottom height for this opening only. 0 means use the floor's lintel bottom height.</summary>
+            public double LintelBottom = 0;
             public int WidthRounded => MeasureCommands.RndSchedule(Width);
             public int HeightRounded => MeasureCommands.RndSchedule(Height);
         }

@@ -28,7 +28,7 @@ namespace HCW.AutoCAD.Plugin.UI
 
             var tabs = new TabControl { Dock = DockStyle.Fill };
             _floors = Grid("Floor", "FFL to FFL height (" + heightUnit + ")", "Ceiling height (" + heightUnit + ")", "Lintel bottom height (" + heightUnit + ")");
-            _openings = Grid("Name", "Door or window", "Type", "Length (" + heightUnit + ")", "Height (" + heightUnit + ")", "Count");
+            _openings = Grid("Name", "Door or window", "Type", "Length (" + heightUnit + ")", "Height (" + heightUnit + ")", "Lintel bottom (" + heightUnit + ")", "Count");
             SetupOpeningGrid();
             _columns = Grid("Mark", "Width (" + heightUnit + ")", "Depth (" + heightUnit + ")", "Name", "Count");
             _maps = Grid("Deduction", "Measured length", "Schedule name");
@@ -39,7 +39,7 @@ namespace HCW.AutoCAD.Plugin.UI
             FillMaps(book, deductionLabels);
 
             tabs.TabPages.Add(Page("Floors", _floors, "Each row is one floor. FFL to FFL is finished floor level to the next; lintel bottom is measured up from the FFL. Wall paint uses the ceiling height."));
-            tabs.TabPages.Add(Page("Doors and windows", _openings, "Name (W1), door or window, type (pick from the list), length and height. Length is the size along the wall that is deducted."));
+            tabs.TabPages.Add(Page("Doors and windows", _openings, "Name (W1), door or window, type (pick from the list), length and height. Length is the size along the wall that is deducted. Lintel bottom is optional: leave it blank to use the floor's value, or type a height for this opening only."));
             tabs.TabPages.Add(Page("Columns", _columns, "Concrete columns of the same size share one mark."));
             tabs.TabPages.Add(Page("Deduction map", _maps, "Each measured deduction (FB01-D1) maps to one schedule name (W1). The closest schedule length within 50 mm (2 in) is pre-filled."));
             Controls.Add(tabs);
@@ -82,7 +82,8 @@ namespace HCW.AutoCAD.Plugin.UI
                         : mark.StartsWith("W", StringComparison.OrdinalIgnoreCase) ? "Window" : "Door",
                     Width = Num(row, 3),
                     Height = Num(row, 4),
-                    Count = Math.Max(1, (int)Num(row, 5))
+                    LintelBottom = Num(row, 5),
+                    Count = Math.Max(1, (int)Num(row, 6))
                 });
             }
             foreach (DataGridViewRow row in _columns.Rows)
@@ -206,7 +207,8 @@ namespace HCW.AutoCAD.Plugin.UI
                     FillTypes(row, o.Type);
                     row.Cells[3].Value = o.Width.ToString("0.###");
                     row.Cells[4].Value = o.Height.ToString("0.###");
-                    row.Cells[5].Value = o.Count.ToString();
+                    row.Cells[5].Value = o.LintelBottom > 0 ? o.LintelBottom.ToString("0.###") : "";
+                    row.Cells[6].Value = o.Count.ToString();
                 }
         }
 
