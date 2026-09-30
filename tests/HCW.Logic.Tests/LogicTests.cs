@@ -1208,3 +1208,88 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class ElectricalMatrixTests
+    {
+        private static ElLink L(string board, string point, string code) => new ElLink { Board = board, Point = point, Code = code };
+
+        [Fact]
+        public void DefaultColumnsParse()
+        {
+            var cols = ElectricalMatrix.ParseColumns(ElectricalMatrix.DefaultColumns);
+            Assert.Equal("5 Amp", cols[0].Heading);
+            Assert.Equal(new[] { "LP", "FP", "P5" }, cols[0].Codes.ToArray());
+            Assert.Equal("15 Amp", cols[1].Heading);
+            Assert.Equal(12, cols.Count);
+            Assert.Equal("TV", cols.Last().Heading);
+        }
+
+        [Fact]
+        public void UnknownCodesAndEmptyItemsAreIgnored()
+        {
+            var cols = ElectricalMatrix.ParseColumns("A=LP,XX;;B=SB;C=GY");
+            Assert.Equal(2, cols.Count);            // B lists only a board, so it has no kinds
+            Assert.Equal(new[] { "LP" }, cols[0].Codes.ToArray());
+            Assert.Equal("C", cols[1].Heading);
+        }
+
+        [Fact]
+        public void EveryCatalogCodeIsUnique()
+        {
+            Assert.Equal(ElectricalKinds.All.Length, ElectricalKinds.All.Select(k => k.Code).Distinct().Count());
+            Assert.Single(ElectricalKinds.All.Where(k => k.IsBoard));
+        }
+
+        [Fact]
+        public void RowsListThePointNumbersPerBoard()
+        {
+            var cols = ElectricalMatrix.ParseColumns("5 Amp=LP,FP;15 Amp=P15;One way switches=SW1;2 way switches=SW2;Geyser=GY");
+            var links = new[]
+            {
+                L("SB-01", "LP-01", "LP"), L("SB-01", "LP-02", "LP"), L("SB-01", "FP-01", "FP"), L("SB-01", "SW1-01", "SW1"),
+                L("SB-02", "LP-03", "LP"), L("SB-01", "LP-03", "LP"), L("SB-02", "SW2-01", "SW2"), L("SB-02", "GY-01", "GY"), L("SB-02", "P15-01", "P15")
+            };
+            var rows = ElectricalMatrix.Build(new[] { "SB-02", "SB-01", "SB-03" }, links, cols, false);
+            Assert.Equal(new[] { "SB no", "5 Amp", "15 Amp", "One way switches", "2 way switches", "Geyser" }, rows[0]);
+            Assert.Equal(new[] { "SB-01", "FP-01, LP-01, LP-02, LP-03", "", "SW1-01", "", "" }, rows[1]);
+            Assert.Equal(new[] { "SB-02", "LP-03", "P15-01", "", "SW2-01", "GY-01" }, rows[2]);
+            Assert.Equal(new[] { "SB-03", "", "", "", "", "" }, rows[3]);   // a board with nothing wired is still listed
+        }
+
+        [Fact]
+        public void TotalsCountEachPointOnce()
+        {
+            var cols = ElectricalMatrix.ParseColumns("5 Amp=LP,FP;Geyser=GY");
+            var links = new[] { L("SB-01", "LP-03", "LP"), L("SB-02", "LP-03", "LP"), L("SB-01", "LP-01", "LP") };
+            var rows = ElectricalMatrix.Build(new[] { "SB-01", "SB-02" }, links, cols, false);
+            Assert.Equal(new[] { "TOTAL", "2", "" }, rows.Last());
+        }
+
+        [Fact]
+        public void CountsInsteadOfNumbers()
+        {
+            var cols = ElectricalMatrix.ParseColumns("5 Amp=LP,FP");
+            var links = new[] { L("SB-01", "LP-01", "LP"), L("SB-01", "FP-01", "FP") };
+            var rows = ElectricalMatrix.Build(new[] { "SB-01" }, links, cols, true);
+            Assert.Equal("2", rows[1][1]);
+        }
+
+        [Fact]
+        public void LinksComeFromTheNets()
+        {
+            var nodes = new[]
+            {
+                new ElNode { Id = "SB-01", Code = "SB", IsBoard = true, Box = new Box(-0.1, -0.1, 0.1, 0.1) },
+                new ElNode { Id = "GY-01", Code = "GY", Box = new Box(4.9, -0.1, 5.1, 0.1) }
+            };
+            var wires = new[] { new ElWire { Points = { new PlanPoint(0.1, 0), new PlanPoint(4.9, 0) } } };
+            var links = ElectricalSchedule.Links(nodes, ElectricalNet.Build(nodes, wires, 0.05));
+            Assert.Single(links);
+            Assert.Equal("GY", links[0].Code);
+            var rows = ElectricalSchedule.ByBoard(nodes, ElectricalNet.Build(nodes, wires, 0.05));
+            Assert.Equal("Geyser", rows[0].Type);
+        }
+    }
+}

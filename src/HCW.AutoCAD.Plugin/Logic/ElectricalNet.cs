@@ -8,6 +8,8 @@ namespace HCW.AutoCAD.Plugin.Logic
     public class ElNode
     {
         public string Id = "";
+        /// <summary>The kind code (SB, LP, GY ...).</summary>
+        public string Code = "";
         public bool IsBoard;
         /// <summary>The block's extents (or a small box around its insertion point).</summary>
         public Box Box;

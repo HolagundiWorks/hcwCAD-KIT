@@ -18,7 +18,8 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 
 `SBNUM`, `LPNUM`, `FPNUM`, `ELCONNECT`, `ELSCHEDULE` and `ELUPDATE` are built (see the README). Still to do:
 
-- **Other points:** switches, sockets and fittings on the same pattern, with each switch tied to the lights it controls.
+- **Switch control:** tie each switch to the lights it controls (today a switch is counted on the board its wiring reaches).
+- **More items:** exhaust fans, inverters, geyser points with their own rating, and any other item as a new kind in `ElectricalKinds`.
 - **Circuits and loads:** number the circuits per board, give each point a wattage, and total the load per board and circuit.
 - **Cable lengths:** the length of each run from the wiring polylines, for a cable schedule.
 - **Live labels:** ID text follows a moved block only when a command runs; a reactor would move it at once.

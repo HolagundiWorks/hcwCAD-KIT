@@ -9,6 +9,8 @@ namespace HCW.AutoCAD.Plugin.Logic
     {
         public string Board = "";
         public string Point = "";
+        /// <summary>The kind of the point (Light point, Geyser ...).</summary>
+        public string Type = "";
         /// <summary>Direct, or "2 Way", "3 Way" when the point is wired to that many boards.</summary>
         public string Connection = "";
     }
@@ -51,7 +53,7 @@ namespace HCW.AutoCAD.Plugin.Logic
                 int count = entry.Value.Count;
                 string connection = count == 1 ? "Direct" : count + " Way";
                 foreach (int b in entry.Value)
-                    rows.Add(new ElRow { Board = nodes[b].Id, Point = nodes[entry.Key].Id, Connection = connection });
+                    rows.Add(new ElRow { Board = nodes[b].Id, Point = nodes[entry.Key].Id, Type = ElectricalKinds.LabelOf(nodes[entry.Key].Code), Connection = connection });
             }
             return rows.OrderBy(r => r.Board, Comparer<string>.Create(NaturalCompare))
                        .ThenBy(r => r.Point, Comparer<string>.Create(NaturalCompare)).ToList();
@@ -77,6 +79,16 @@ namespace HCW.AutoCAD.Plugin.Logic
                 foreach (int i in net.Boards.Concat(net.Points)) linked.Add(i);
             }
             return Enumerable.Range(0, nodes.Count).Where(i => !linked.Contains(i)).ToList();
+        }
+
+        /// <summary>The links (board, point, kind) of every point that is wired to a board.</summary>
+        public static List<ElLink> Links(IList<ElNode> nodes, IList<ElNet> nets)
+        {
+            var links = new List<ElLink>();
+            foreach (var entry in BoardsOfPoints(nets))
+                foreach (int b in entry.Value)
+                    links.Add(new ElLink { Board = nodes[b].Id, Point = nodes[entry.Key].Id, Code = nodes[entry.Key].Code });
+            return links;
         }
     }
 }
