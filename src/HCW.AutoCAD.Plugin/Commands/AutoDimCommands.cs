@@ -33,8 +33,6 @@ namespace HCW.AutoCAD.Plugin.Commands
         private static string _levels = "All";
         private static string _wallSide = "Outward";
 
-        private enum Side { Bottom, Top, Left, Right }
-
         /// <summary>The geometry AUTODIM reads: wall points, opening jamb points, grid lines and columns.</summary>
         private class Plan
         {
@@ -61,13 +59,6 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (!AskKeyword(ed, "Chains", new[] { "All", "Overall", "Grid", "Structure", "Openings" }, ref _levels)) return;
             if (!AskScale(ed)) return;
 
-            double mm = Util.MmToDrawingUnits(1.0);
-            double step = Settings.GetDouble("AutoDimStepMm", 10) * _scale * mm;
-            double gap = Settings.GetDouble("AutoDimGapMm", 12) * _scale * mm;
-            double minLen = Settings.GetDouble("AutoDimMinMm", 3) * _scale * mm;
-            double merge = 5 * mm;                                                // 5 mm of real size
-            double band = Settings.GetDouble("AutoDimBandM", 0.6) * 1000 * mm;    // outer band, real size
-
             var plan = new Plan();
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -83,60 +74,60 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
             if (plan.Structural.Count == 0)
             {
-                ed.WriteMessage("\nAUTODIM: no axis-aligned wall geometry was selected.");
+                ed.WriteMessage("\nAUTODIM: no horizontal or vertical wall lines were found in the selection"
+                    + (plan.Skipped > 0 ? " (" + plan.Skipped + " angled or curved segment(s) skipped; use AUTODIMWALL for those)" : "") + ".");
+                return;
+            }
+
+            double spanX = plan.Structural.Max(p => p.X) - plan.Structural.Min(p => p.X);
+            double spanY = plan.Structural.Max(p => p.Y) - plan.Structural.Min(p => p.Y);
+            double mm = ResolveUnitsPerMm(ed, Math.Max(spanX, spanY));
+            if (mm <= 0) return;
+
+            double step = Settings.GetDouble("AutoDimStepMm", 10) * _scale * mm;
+            double gap = Settings.GetDouble("AutoDimGapMm", 12) * _scale * mm;
+            var input = new PlanInput
+            {
+                Band = Settings.GetDouble("AutoDimBandM", 0.6) * 1000 * mm,      // outer band, real size
+                Merge = 5 * mm,                                                   // 5 mm of real size
+                MinLength = Settings.GetDouble("AutoDimMinMm", 3) * _scale * mm,
+                Levels = _levels
+            };
+            input.Structural.AddRange(plan.Structural.Select(p => new PlanPoint(p.X, p.Y)));
+            input.Jambs.AddRange(plan.Jambs.Select(p => new PlanPoint(p.X, p.Y)));
+            input.GridX.AddRange(plan.GridX);
+            input.GridY.AddRange(plan.GridY);
+
+            var sides = _sides == "All"
+                ? new[] { PlanSide.Bottom, PlanSide.Top, PlanSide.Left, PlanSide.Right }
+                : new[] { (PlanSide)Enum.Parse(typeof(PlanSide), _sides) };
+            int repeated;
+            var chains = DimPlanner.Chains(input, sides, out repeated);
+
+            ed.WriteMessage("\nAUTODIM: read " + plan.Structural.Count + " wall point(s), " + plan.Jambs.Count + " opening point(s), "
+                + (plan.GridX.Count + plan.GridY.Count) + " grid line(s); plan " + spanX.ToString("0.##", CultureInfo.InvariantCulture)
+                + " x " + spanY.ToString("0.##", CultureInfo.InvariantCulture) + " drawing units.");
+            if (chains.Count == 0)
+            {
+                ed.WriteMessage("\nAUTODIM: nothing to dimension. Every chain was shorter than " + input.MinLength.ToString("0.###", CultureInfo.InvariantCulture)
+                    + " drawing units (" + Settings.GetDouble("AutoDimMinMm", 3) + " mm plotted at 1:" + _scale + "), or the same as the chain inside it."
+                    + " Check the plot scale and the drawing units.");
                 return;
             }
 
             double minX = plan.Structural.Min(p => p.X), maxX = plan.Structural.Max(p => p.X);
             double minY = plan.Structural.Min(p => p.Y), maxY = plan.Structural.Max(p => p.Y);
-            var sides = _sides == "All"
-                ? new[] { Side.Bottom, Side.Top, Side.Left, Side.Right }
-                : new[] { (Side)Enum.Parse(typeof(Side), _sides) };
-
-            int dropped = 0, staggered = 0;
-            int made;
+            int made, staggered = 0;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 var sink = new Sink(tr, db);
-                foreach (var side in sides)
+                foreach (var chain in chains)
                 {
-                    bool horizontal = side == Side.Bottom || side == Side.Top;
-                    Func<Point3d, double> along = p => horizontal ? p.X : p.Y;
-                    Func<Point3d, bool> inBand = p =>
-                        side == Side.Bottom ? p.Y <= minY + band :
-                        side == Side.Top ? p.Y >= maxY - band :
-                        side == Side.Left ? p.X <= minX + band : p.X >= maxX - band;
-
-                    double lo = horizontal ? minX : minY, hi = horizontal ? maxX : maxY;
-                    var wall = DimChains.Merge(plan.Structural.Where(inBand).Select(along), merge);
-                    var all = DimChains.Merge(plan.Structural.Where(inBand).Concat(plan.Jambs.Where(inBand)).Select(along), merge);
-                    var overall = DimChains.Merge(plan.Structural.Select(along), merge);
-                    var grid = DimChains.Merge((horizontal ? plan.GridX : plan.GridY).Where(v => v >= lo - band && v <= hi + band), merge);
-
-                    // nearest the plan first: openings, structure, grid, overall
-                    var chains = new List<List<KeyValuePair<double, double>>>();
-                    if (_levels == "All" || _levels == "Openings")
-                        if (all.Count > wall.Count) chains.Add(DimChains.Segments(all, minLen));
-                    if (_levels == "All" || _levels == "Structure")
-                        chains.Add(DimChains.Segments(wall, minLen));
-                    if ((_levels == "All" || _levels == "Grid") && grid.Count >= 2)
-                        chains.Add(DimChains.Segments(grid, minLen));
-                    if (_levels == "All" || _levels == "Overall")
-                        chains.Add(DimChains.Overall(overall, minLen));
-
-                    // a chain that repeats the one inside it adds nothing
-                    for (int i = chains.Count - 1; i > 0; i--)
-                        if (DimChains.Same(chains[i], chains[i - 1], merge)) { dropped += chains[i].Count; chains.RemoveAt(i); }
-                    chains.RemoveAll(c => c.Count == 0);
-
-                    for (int level = 0; level < chains.Count; level++)
-                    {
-                        double offset = gap + level * step;
-                        double edge = side == Side.Bottom ? minY : side == Side.Top ? maxY : side == Side.Left ? minX : maxX;
-                        double outward = side == Side.Bottom || side == Side.Left ? -1 : 1;
-                        staggered += DrawChain(sink, chains[level], horizontal, edge, outward * offset, step);
-                    }
+                    bool horizontal = chain.Side == PlanSide.Bottom || chain.Side == PlanSide.Top;
+                    double edge = chain.Side == PlanSide.Bottom ? minY : chain.Side == PlanSide.Top ? maxY : chain.Side == PlanSide.Left ? minX : maxX;
+                    double outward = chain.Side == PlanSide.Bottom || chain.Side == PlanSide.Left ? -1 : 1;
+                    staggered += DrawChain(sink, chain.Segments, horizontal, edge, outward * (gap + chain.Level * step), step);
                 }
                 made = sink.Count;
                 tr.Commit();
@@ -144,7 +135,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
             ed.WriteMessage("\nAUTODIM: " + made + " dimension(s) on " + DimLayer + " at 1:" + _scale
                 + (staggered > 0 ? "; " + staggered + " short one(s) moved to a second row" : "")
-                + (dropped > 0 ? "; " + dropped + " repeated dimension(s) left out" : "")
+                + (repeated > 0 ? "; " + repeated + " repeated dimension(s) left out" : "")
                 + (plan.Skipped > 0 ? "; " + plan.Skipped + " angled or curved segment(s) skipped (use AUTODIMWALL)" : "") + ".");
         }
 
@@ -160,13 +151,6 @@ namespace HCW.AutoCAD.Plugin.Commands
             var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect the room outlines (closed polylines, such as ROOM-RECT or MEASURE-FLOOR): " }, filter);
             if (psr.Status != PromptStatus.OK) return;
             if (!AskScale(ed)) return;
-
-            double mm = Util.MmToDrawingUnits(1.0);
-            double step = Settings.GetDouble("AutoDimStepMm", 10) * _scale * mm;
-            double inset = Settings.GetDouble("AutoDimRoomInsetMm", 8) * _scale * mm;
-            double minLen = Settings.GetDouble("AutoDimMinMm", 3) * _scale * mm;
-            double merge = 5 * mm;
-            double band = Settings.GetDouble("AutoDimBandM", 0.6) * 1000 * mm;
 
             var plan = new Plan();
             var rooms = new List<List<Point3d>>();
@@ -189,6 +173,15 @@ namespace HCW.AutoCAD.Plugin.Commands
                 return;
             }
 
+            double roomSpan = rooms.Max(r => Math.Max(r.Max(p => p.X) - r.Min(p => p.X), r.Max(p => p.Y) - r.Min(p => p.Y)));
+            double mm = ResolveUnitsPerMm(ed, roomSpan, 1000.0);
+            if (mm <= 0) return;
+            double step = Settings.GetDouble("AutoDimStepMm", 10) * _scale * mm;
+            double inset = Settings.GetDouble("AutoDimRoomInsetMm", 8) * _scale * mm;
+            double minLen = Settings.GetDouble("AutoDimMinMm", 3) * _scale * mm;
+            double merge = 5 * mm;
+            double band = Settings.GetDouble("AutoDimBandM", 0.6) * 1000 * mm;
+
             int made, staggered = 0, skipped = 0;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
@@ -205,12 +198,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                     {
                         // openings along each wall, nearest the wall; then the clear width and depth beyond them
                         int bottomLevels = 0, leftLevels = 0;
-                        foreach (var e in new[] { Side.Bottom, Side.Top, Side.Left, Side.Right })
+                        foreach (var e in new[] { PlanSide.Bottom, PlanSide.Top, PlanSide.Left, PlanSide.Right })
                         {
-                            bool horizontal = e == Side.Bottom || e == Side.Top;
-                            double edge = e == Side.Bottom ? minY : e == Side.Top ? maxY : e == Side.Left ? minX : maxX;
+                            bool horizontal = e == PlanSide.Bottom || e == PlanSide.Top;
+                            double edge = e == PlanSide.Bottom ? minY : e == PlanSide.Top ? maxY : e == PlanSide.Left ? minX : maxX;
                             double lo = horizontal ? minX : minY, hi = horizontal ? maxX : maxY;
-                            double inward = (e == Side.Bottom || e == Side.Left) ? 1 : -1;
+                            double inward = (e == PlanSide.Bottom || e == PlanSide.Left) ? 1 : -1;
 
                             var onEdge = plan.Jambs.Where(p => Math.Abs((horizontal ? p.Y : p.X) - edge) <= band
                                 && (horizontal ? p.X : p.Y) >= lo - merge && (horizontal ? p.X : p.Y) <= hi + merge)
@@ -220,8 +213,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                             var segs = DimChains.Segments(pts, minLen);
                             if (segs.Count == 0) continue;
                             staggered += DrawChain(sink, segs, horizontal, edge, inward * inset, step);
-                            if (e == Side.Bottom) bottomLevels = 1;
-                            if (e == Side.Left) leftLevels = 1;
+                            if (e == PlanSide.Bottom) bottomLevels = 1;
+                            if (e == PlanSide.Left) leftLevels = 1;
                         }
                         var width = DimChains.Overall(new[] { minX, maxX }, minLen);
                         var depth = DimChains.Overall(new[] { minY, maxY }, minLen);
@@ -270,10 +263,6 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (!AskKeyword(ed, "Offset side", new[] { "Outward", "Inward" }, ref _wallSide)) return;
             if (!AskScale(ed)) return;
 
-            double mm = Util.MmToDrawingUnits(1.0);
-            double offset = Settings.GetDouble("AutoDimGapMm", 12) * _scale * mm;
-            double minLen = Settings.GetDouble("AutoDimMinMm", 3) * _scale * mm;
-
             var segments = new List<KeyValuePair<Point3d, Point3d>>();
             var arcs = new List<Arc>();
             using (var tr = db.TransactionManager.StartTransaction())
@@ -305,6 +294,14 @@ namespace HCW.AutoCAD.Plugin.Commands
                 ed.WriteMessage("\nAUTODIMWALL: nothing to dimension.");
                 return;
             }
+
+            double reach = Math.Max(
+                segments.Count == 0 ? 0 : segments.Max(g => g.Key.DistanceTo(g.Value)),
+                arcs.Count == 0 ? 0 : arcs.Max(a => a.Radius * 2));
+            double mm = ResolveUnitsPerMm(ed, reach, 200.0);
+            if (mm <= 0) return;
+            double offset = Settings.GetDouble("AutoDimGapMm", 12) * _scale * mm;
+            double minLen = Settings.GetDouble("AutoDimMinMm", 3) * _scale * mm;
 
             // "outward" is away from the middle of everything selected
             var mids = segments.Select(s => new Point3d((s.Key.X + s.Value.X) / 2, (s.Key.Y + s.Value.Y) / 2, 0))
@@ -500,6 +497,31 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
+        /// <summary>
+        /// Drawing units in one real millimetre. Normally from the drawing's units setting; when that would make the
+        /// plan an implausible size (a metre drawing marked as millimetres, or units unset), asks which unit the
+        /// drawing is really in. The drawing itself is not changed. <paramref name="minMm"/> is the smallest real
+        /// size that counts as plausible for what was selected (2 m for a plan, 1 m for a room, 20 cm for one wall).
+        /// </summary>
+        private static double ResolveUnitsPerMm(Editor ed, double span, double minMm = 2000.0)
+        {
+            double mm = Util.MmToDrawingUnits(1.0);
+            double realMm = span / mm;
+            if (realMm >= minMm && realMm <= 1000000.0) return mm;
+
+            string guess = UnitScale.Guess(span) ?? "Metres";
+            ed.WriteMessage("\nThe selection is " + span.ToString("0.##", CultureInfo.InvariantCulture) + " drawing units across, which is "
+                + (realMm / 1000.0).ToString("0.###", CultureInfo.InvariantCulture) + " m with the drawing's units setting ("
+                + Util.Db.Insunits + "). That does not look like a building, so the units setting is probably wrong.");
+            var opt = new PromptKeywordOptions("\nTreat the drawing units as [" + string.Join("/", UnitScale.Names) + "] <" + guess + ">: ") { AllowNone = true };
+            foreach (var k in UnitScale.Names) opt.Keywords.Add(k);
+            opt.Keywords.Default = guess;
+            var res = ed.GetKeywords(opt);
+            if (res.Status == PromptStatus.Cancel) return 0;
+            string unit = res.Status == PromptStatus.OK ? res.StringResult : guess;
+            return UnitScale.PerMm(unit);
+        }
+
         private static HashSet<string> Layers(string key, string fallback)
         {
             return new HashSet<string>(Settings.Get(key, fallback).Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
@@ -520,6 +542,23 @@ namespace HCW.AutoCAD.Plugin.Commands
                     int next = i + 1 < n ? i + 1 : (poly.Closed ? 0 : -1);
                     if (next >= 0 && !Orthogonal(p, poly.GetPoint3dAt(next))) skipped++;
                 }
+                return;
+            }
+            var old2d = curve as Polyline2d;
+            if (old2d != null)
+            {
+                Point3d? previous = null, first = null;
+                foreach (ObjectId vid in old2d)
+                {
+                    var vertex = old2d.Database == null ? null : old2d.Database.TransactionManager.TopTransaction.GetObject(vid, OpenMode.ForRead) as Vertex2d;
+                    if (vertex == null) continue;
+                    var p = vertex.Position;
+                    into.Add(p);
+                    if (previous.HasValue && !Orthogonal(previous.Value, p)) skipped++;
+                    previous = p;
+                    if (!first.HasValue) first = p;
+                }
+                if (old2d.Closed && previous.HasValue && first.HasValue && !Orthogonal(previous.Value, first.Value)) skipped++;
                 return;
             }
             var line = curve as Line;

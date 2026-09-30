@@ -247,6 +247,8 @@ Four commands make the dimensions for a working drawing. Walls are read as faces
 
 All distances are plotted millimetres in the settings file, so the drawing looks the same on paper at any scale. You give the plot scale each time.
 
+Each command reports what it read (wall points, opening points, grid lines, plan size) and, if it makes nothing, why. Sizes come from the drawing's units setting; when that would make the selection an implausible size (for example a drawing in metres marked as millimetres, or units unset) the command says so and asks which unit the drawing is really in, without changing the drawing. Walls may be lines, lightweight polylines or old 2D polylines.
+
 **`AUTODIM`: outside chains.** Select the walls, then the sides (All, Top, Bottom, Left, Right) and the chains. Four chains per side, nearest the plan first:
 
 | Chain | Points used |

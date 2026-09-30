@@ -1,3 +1,4 @@
+using System.Linq;
 using HCW.AutoCAD.Plugin.Logic;
 using Xunit;
 
@@ -354,6 +355,167 @@ namespace HCW.Logic.Tests
         {
             var rows = DimChains.Rows(Chain(0, 0.4, 5, 5.4), 1.0, 2);
             Assert.Equal(new[] { 1, 0, 1 }, rows);
+        }
+    }
+}
+
+namespace HCW.Logic.Tests
+{
+    public class DimPlannerTests
+    {
+        private static readonly PlanSide[] All = { PlanSide.Bottom, PlanSide.Top, PlanSide.Left, PlanSide.Right };
+
+        // A 10 x 8 building with 0.23 thick walls drawn as faces (metres), scale 1:100 distances.
+        private static PlanInput Building(double unit)
+        {
+            var plan = new PlanInput { Band = 0.6 * unit, Merge = 0.005 * unit, MinLength = 0.3 * unit };
+            double w = 10 * unit, h = 8 * unit, t = 0.23 * unit;
+            // outer and inner face corners of the four walls
+            foreach (var p in new[] { new PlanPoint(0, 0), new PlanPoint(w, 0), new PlanPoint(w, h), new PlanPoint(0, h),
+                                      new PlanPoint(t, t), new PlanPoint(w - t, t), new PlanPoint(w - t, h - t), new PlanPoint(t, h - t) })
+                plan.Structural.Add(p);
+            return plan;
+        }
+
+        [Fact]
+        public void PlainBuildingGetsStructureAndOverallOnEverySide()
+        {
+            int repeated;
+            var chains = DimPlanner.Chains(Building(1), All, out repeated);
+            Assert.Equal(8, chains.Count); // structure + overall on four sides
+            var bottom = chains.Where(c => c.Side == PlanSide.Bottom).ToList();
+            Assert.Equal("Structure", bottom[0].Kind);
+            Assert.Equal("Overall", bottom[1].Kind);
+            Assert.Equal(0, bottom[0].Level);
+            Assert.Equal(1, bottom[1].Level);
+            // 0.23 wall pieces are below the 0.3 minimum, so structure is the clear span only
+            Assert.Single(bottom[0].Segments);
+            Assert.Equal(0.23, bottom[0].Segments[0].Key, 6);
+            Assert.Equal(9.77, bottom[0].Segments[0].Value, 6);
+            Assert.Equal(10.0, bottom[1].Segments[0].Value, 6);
+        }
+
+        [Fact]
+        public void OpeningsChainIsNearestAndFollowsTheJambs()
+        {
+            var plan = Building(1);
+            plan.Jambs.Add(new PlanPoint(2.0, 0.1));
+            plan.Jambs.Add(new PlanPoint(3.0, 0.1));
+            int repeated;
+            var bottom = DimPlanner.Chains(plan, new[] { PlanSide.Bottom }, out repeated);
+            Assert.Equal(new[] { "Openings", "Structure", "Overall" }, bottom.Select(c => c.Kind).ToArray());
+            // 0.23 .. 2 .. 3 .. 9.77
+            Assert.Equal(3, bottom[0].Segments.Count);
+            Assert.Equal(1.0, bottom[0].Segments[1].Value - bottom[0].Segments[1].Key, 6);
+        }
+
+        [Fact]
+        public void JambsOutsideTheBandAreIgnored()
+        {
+            var plan = Building(1);
+            plan.Jambs.Add(new PlanPoint(4.0, 4.0)); // interior partition
+            int repeated;
+            var bottom = DimPlanner.Chains(plan, new[] { PlanSide.Bottom }, out repeated);
+            Assert.DoesNotContain(bottom, c => c.Kind == "Openings");
+        }
+
+        [Fact]
+        public void GridBecomesItsOwnChain()
+        {
+            var plan = Building(1);
+            plan.GridX.AddRange(new[] { 0.115, 5.0, 9.885 });
+            int repeated;
+            var bottom = DimPlanner.Chains(plan, new[] { PlanSide.Bottom }, out repeated);
+            var grid = bottom.Single(c => c.Kind == "Grid");
+            Assert.Equal(2, grid.Segments.Count);
+        }
+
+        [Fact]
+        public void ChainThatRepeatsTheOneInsideIsDropped()
+        {
+            // a single wall face pair with nothing between: structure equals overall
+            var plan = new PlanInput { Band = 0.6, Merge = 0.005, MinLength = 0.3 };
+            plan.Structural.Add(new PlanPoint(0, 0));
+            plan.Structural.Add(new PlanPoint(5, 0));
+            plan.Structural.Add(new PlanPoint(5, 4));
+            plan.Structural.Add(new PlanPoint(0, 4));
+            int repeated;
+            var chains = DimPlanner.Chains(plan, new[] { PlanSide.Bottom }, out repeated);
+            Assert.Single(chains);
+            Assert.Equal(1, repeated);
+        }
+
+        [Fact]
+        public void WorksInMillimetreUnits()
+        {
+            int repeated;
+            var chains = DimPlanner.Chains(Building(1000), All, out repeated);
+            Assert.Equal(8, chains.Count);
+        }
+
+        [Fact]
+        public void LevelsCanBeLimited()
+        {
+            var plan = Building(1);
+            plan.Levels = "Overall";
+            int repeated;
+            var chains = DimPlanner.Chains(plan, All, out repeated);
+            Assert.Equal(4, chains.Count);
+            Assert.All(chains, c => Assert.Equal("Overall", c.Kind));
+        }
+
+        [Fact]
+        public void NoGeometryGivesNoChains()
+        {
+            int repeated;
+            Assert.Empty(DimPlanner.Chains(new PlanInput(), All, out repeated));
+        }
+
+        [Fact]
+        public void TinyPlanInWrongUnitsGivesNothing()
+        {
+            // a metre-sized minimum length (0.3) against a plan only 0.2 across
+            var plan = new PlanInput { Band = 0.6, Merge = 0.005, MinLength = 0.3 };
+            plan.Structural.Add(new PlanPoint(0, 0));
+            plan.Structural.Add(new PlanPoint(0.2, 0));
+            plan.Structural.Add(new PlanPoint(0.2, 0.2));
+            plan.Structural.Add(new PlanPoint(0, 0.2));
+            int repeated;
+            Assert.Empty(DimPlanner.Chains(plan, All, out repeated));
+        }
+    }
+}
+
+namespace HCW.Logic.Tests
+{
+    public class UnitScaleTests
+    {
+        [Theory]
+        [InlineData("Millimetres", 1.0)]
+        [InlineData("Centimetres", 0.1)]
+        [InlineData("Metres", 0.001)]
+        public void UnitsPerMillimetre(string unit, double expected)
+        {
+            Assert.Equal(expected, UnitScale.PerMm(unit), 9);
+            Assert.Equal(0.0, UnitScale.PerMm("Parsecs"), 9);
+        }
+
+        [Theory]
+        [InlineData(10.0, "Metres")]
+        [InlineData(12000.0, "Millimetres")]
+        [InlineData(1200.0, "Centimetres")]
+        [InlineData(0.5, null)]
+        public void GuessesTheUnitFromThePlanSize(double span, string expected)
+        {
+            Assert.Equal(expected, UnitScale.Guess(span));
+        }
+
+        [Fact]
+        public void PlausibleBuildingSizes()
+        {
+            Assert.True(UnitScale.Plausible(10000));   // 10 m
+            Assert.False(UnitScale.Plausible(10));     // 1 cm
+            Assert.False(UnitScale.Plausible(5e7));    // 50 km
         }
     }
 }
