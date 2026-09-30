@@ -43,6 +43,13 @@ powershell -File build\Package-Installers.ps1
 
 The setup programs are written to `dist\`. Uninstall one host from Windows Settings; the other hosts are separate programs and stay installed.
 
+**Security software warnings.** The setup programs and `hcwCAD-KIT.dll` are not code-signed, and the plugin loads into the host when it starts and writes files (settings, exports) under your user folder. Some antivirus products flag that pattern as a generic "Trojan" or "ML" detection even though nothing in the source does anything of the kind. The code is all in this repository (no network calls, no registry writes, no launching of other programs), and every file the build script produces is listed with its SHA-256 in `dist\SHA256SUMS.txt`. If a scanner flags a build:
+
+1. Check the file against `SHA256SUMS.txt` (`Get-FileHash <file> -Algorithm SHA256`).
+2. Use the `hcwCAD-KIT-<host>-1.0.0-bundle.zip` that the build script also makes: unzip it into the host's ApplicationPlugins folder as `hcwCAD-KIT.bundle`. No installer is involved.
+3. Report the file as a false positive to the vendor. For Microsoft Defender: https://www.microsoft.com/wdsi/filesubmission.
+4. For a release you hand to others, sign `hcwCAD-KIT.dll` and the setup programs with a code-signing certificate. That is the fix that lasts; unsigned new files start with no reputation.
+
 **Load it every time the host starts**, without the setup program:
 
 1. Copy `hcwCAD-KIT.dll` into the bundle’s `Contents` folder.
@@ -226,7 +233,7 @@ Walls are numbered `FB01`, `FB02` … left to right (then bottom to top) by defa
 
 ### Settings file
 
-`HCWSETTINGS` creates and opens `%APPDATA%\hcwCAD-KIT\settings.ini`. It holds the take-off label height (`TakeoffTextHeightMm`, default 125) and deduction tolerance (`DeductionToleranceMm`, default 10), the deduction-map suggestion tolerance, wall numbering, default floor and opening heights, and the `AUTODIM` distances, layers and text-fit factor. Each key has a comment. Restart the host after editing.
+`HCWSETTINGS` creates `%APPDATA%\hcwCAD-KIT\settings.ini` if it is missing and prints its path; open it in any text editor. It holds the take-off label height (`TakeoffTextHeightMm`, default 125) and deduction tolerance (`DeductionToleranceMm`, default 10), the deduction-map suggestion tolerance, wall numbering, default floor and opening heights, and the `AUTODIM` distances, layers and text-fit factor. Each key has a comment. Restart the host after editing.
 
 ### Sheet set
 

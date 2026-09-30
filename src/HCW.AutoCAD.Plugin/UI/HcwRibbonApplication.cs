@@ -255,7 +255,7 @@ namespace HCW.AutoCAD.Plugin.UI
         private RibbonPanel BuildPluginPanel()
         {
             var src = NewSource("Plugin");
-            AddLarge(src, "HCWSETTINGS", "Settings\nFile", "settings", "Open settings.ini: text heights, tolerances, numbering order and defaults");
+            AddLarge(src, "HCWSETTINGS", "Settings\nFile", "settings", "Create settings.ini if needed and show its path: text heights, tolerances, numbering order and defaults");
             return Wrap(src);
         }
 

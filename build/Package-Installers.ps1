@@ -91,13 +91,23 @@ try {
             $iss
         )
         if ((Invoke-Native $iscc $packArgs) -ne 0) { throw "$($target.Name) installer compile failed." }
+
+        # The same bundle as a plain zip, for anyone whose security software blocks the setup program:
+        # unzip it into the host's ApplicationPlugins folder as hcwCAD-KIT.bundle.
+        $zip = Join-Path $dist "hcwCAD-KIT-$($target.Name)-1.0.0-bundle.zip"
+        if (Test-Path $zip) { Remove-Item $zip -Force }
+        Compress-Archive -Path (Join-Path $out "*") -DestinationPath $zip
     }
 }
 finally {
     Pop-Location
 }
 
+# SHA-256 of every file that was built, so a download can be checked against the build.
+$files = @(Get-ChildItem (Join-Path $dist "hcwCAD-KIT-*") -File | Where-Object { $_.Extension -in ".exe", ".zip" })
+$lines = $files | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
+Set-Content -Path (Join-Path $dist "SHA256SUMS.txt") -Value $lines -Encoding ASCII
+
 Write-Host ""
-Get-ChildItem $dist -Filter "hcwCAD-KIT-*-Setup.exe" | ForEach-Object {
-    Write-Host $_.FullName
-}
+$files | ForEach-Object { Write-Host $_.FullName }
+Write-Host (Join-Path $dist "SHA256SUMS.txt")

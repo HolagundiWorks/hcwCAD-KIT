@@ -1360,15 +1360,13 @@ namespace HCW.AutoCAD.Plugin.Commands
         private static string[] _lastHeaders;
         private static List<string[]> _lastRows;
 
-        /// <summary>Creates the settings file if needed and opens it for editing.</summary>
+        /// <summary>Creates the settings file if needed and shows where it is.</summary>
         [CommandMethod("HCWSETTINGS")]
         public void OpenSettings()
         {
             var ed = Util.Ed;
             string path = Settings.EnsureFile();
-            ed.WriteMessage("\nSettings file: " + path + "\nRestart the host after editing it.");
-            try { System.Diagnostics.Process.Start(path); }
-            catch { ed.WriteMessage("\nCould not open it; open the file in any text editor."); }
+            ed.WriteMessage("\nSettings file: " + path + "\nOpen it in any text editor, then restart the host.");
         }
 
         /// <summary>Saves take-offs: the latest as CSV, or every saved take-off as one Excel workbook.</summary>
