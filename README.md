@@ -235,7 +235,7 @@ Walls are numbered `FB01`, `FB02` … left to right (then bottom to top) by defa
 
 ### Settings file
 
-`HCWSETTINGS` creates `%APPDATA%\hcwCAD-KIT\settings.ini` if it is missing and prints its path; open it in any text editor. It holds the take-off label height (`TakeoffTextHeightMm`, default 125) and deduction tolerance (`DeductionToleranceMm`, default 10), the deduction-map suggestion tolerance, wall numbering, default floor and opening heights, and the `AUTODIM` distances, layers and text-fit factor. Each key has a comment. Restart the host after editing.
+`HCWSETTINGS` creates `%APPDATA%\hcwCAD-KIT\settings.ini` if it is missing and prints its path; open it in any text editor. It holds the take-off label height (`TakeoffTextHeightMm`, default 125) and deduction tolerance (`DeductionToleranceMm`, default 10), the deduction-map suggestion tolerance, wall numbering, default floor and opening heights, and the `AUTODIM` distances, grid layers and text-fit factor. Each key has a comment. Restart the host after editing.
 
 ### Sheet set
 
@@ -243,24 +243,33 @@ Walls are numbered `FB01`, `FB02` … left to right (then bottom to top) by defa
 
 ### Auto dimension (working drawings)
 
-Four commands make the dimensions for a working drawing. Walls are read as faces: every vertex of a selected line or polyline is a point, so double-line walls give the wall thickness as well as the lengths. Openings come from the deduction lines: lines on `MEASURE-DEDUCT`, and the line inside each door or window block. Dimensions are created on `AN-DIMS` in the `HCW-WORKING` style (or the current style) and tagged. **Clear Auto Dims** (`AUTODIMCLEAR`) removes only those.
+Four commands make the dimensions for a working drawing. **`AUTODIM`** and **`AUTODIMROOM`** open a layer dialog first; you tick the layers that hold each part of the plan:
 
-All distances are plotted millimetres in the settings file, so the drawing looks the same on paper at any scale. You give the plot scale each time.
+| Column | What goes on these layers |
+|---|---|
+| Walls | Lines and polylines. Walls are read as faces: every vertex is a point, so double-line walls give the wall thickness as well as the lengths. |
+| Windows and doors | Blocks (dynamic blocks work) with a line on `MEASURE-DEDUCT` inside them: that line is the opening. A block with no such line uses its own extents (its longer side). Lines and polylines on these layers give jamb points directly. |
+| Columns | Closed polylines, or blocks (their extents). |
+| Furniture | Blocks. Switched off with the other layers; **`AUTODIMROOM`** dimensions their width and depth. |
 
-Each command reports what it read (wall points, opening points, grid lines, plan size) and, if it makes nothing, why. Sizes come from the drawing's units setting; when that would make the selection an implausible size (for example a drawing in metres marked as millimetres, or units unset) the command says so and asks which unit the drawing is really in, without changing the drawing. Walls may be lines, lightweight polylines or old 2D polylines.
+The first time, layers are guessed from their names (`WALL`, `WIND`/`DOOR`/`OPEN`, `COL`, `FURN`); after that the last choice for the drawing is remembered in the drawing. The tick box at the bottom leaves only the wall, window, column and dimension layers on, so you see just the plan and its dimensions; **Restore Layers** (`MSHOW`) brings the rest back. Standalone lines on `MEASURE-DEDUCT` and lines on the grid layers (`AutoDimGridLayers`, default `AN-GRID;A-GRID`) are read whatever you choose.
 
-**`AUTODIM`: outside chains.** Select the walls, then the sides (All, Top, Bottom, Left, Right) and the chains. Four chains per side, nearest the plan first:
+Dimensions are created on `AN-DIMS` in the `HCW-WORKING` style (or the current style) and tagged. **Clear Auto Dims** (`AUTODIMCLEAR`) removes only those. All distances are plotted millimetres in the settings file, so the drawing looks the same on paper at any scale. You give the plot scale each time.
+
+Each command reports what it read (wall points, opening points, grid lines, plan size) and, if it makes nothing, why. Sizes come from the drawing's units setting; when that would make the plan an implausible size (for example a drawing in metres marked as millimetres, or units unset) the command says so and asks which unit the drawing is really in, without changing the drawing. Walls may be lines, lightweight polylines or old 2D polylines.
+
+**`AUTODIM`: outside chains.** Choose the layers, then the sides (All, Top, Bottom, Left, Right), the chains, and the plot scale. Four chains per side, nearest the plan first:
 
 | Chain | Points used |
 |---|---|
 | Openings | Door and window jambs in the side's outer band, with the wall pieces between them |
 | Structure | Wall faces and ends, and column faces, in the outer band |
-| Grid | Lines on the grid layers (`AN-GRID`, `A-GRID`) |
+| Grid | Lines on the grid layers |
 | Overall | First to last point on that side |
 
-Points within 5 mm merge, dimensions shorter than `AutoDimMinMm` plotted are skipped, and a chain that repeats the one inside it is left out. Columns are closed polylines on `MEASURE-COLUMN` or `S-COLUMN`.
+Points within 5 mm merge, dimensions shorter than `AutoDimMinMm` plotted are skipped, and a chain that repeats the one inside it is left out.
 
-**`AUTODIMROOM`: inside each room.** Select the room outlines (closed polylines, such as `ROOM-RECT` or `MEASURE-FLOOR` outlines). For a rectangular room it draws, nearest each wall first, the wall's openings (corner, jamb, jamb, corner) where the wall has any, then the clear width along the bottom and the clear depth along the left. Other orthogonal outlines get one dimension per edge, inside the room. Angled edges are skipped and counted.
+**`AUTODIMROOM`: inside each room.** Choose the layers, then select the room outlines (closed polylines, such as `ROOM-RECT` or `MEASURE-FLOOR` outlines). For a rectangular room it draws, nearest each wall first, the wall's openings (corner, jamb, jamb, corner) where the wall has any, then the clear width along the bottom and the clear depth along the left. Other orthogonal outlines get one dimension per edge, inside the room. Angled edges are skipped and counted. Furniture blocks inside the room get their width (under the block) and depth (beside it).
 
 **`AUTODIMWALL`: any angle.** Select wall segments (lines, polyline segments, arcs). Each straight segment gets an aligned dimension offset outward (away from the middle of the selection) or inward; each arc gets a radius dimension.
 

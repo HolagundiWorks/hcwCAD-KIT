@@ -14,12 +14,13 @@ namespace HCW.AutoCAD.Plugin.Commands
     /// The auto dimension tool set for working drawings.
     ///
     /// AUTODIM      dimension chains around the outside of a plan: openings, structure, grid and overall.
-    /// AUTODIMROOM  inside each room: clear width and depth, and door and window positions along each wall.
+    /// AUTODIMROOM  inside each room: clear width and depth, door and window positions along each wall, and furniture sizes.
     /// AUTODIMWALL  one aligned dimension on each selected wall segment at any angle, and radius on arcs.
     /// AUTODIMCLEAR removes what these made (every dimension is tagged), and nothing drawn by hand.
     ///
-    /// Walls are read as faces: every vertex of a selected line or polyline is a point. Openings come from
-    /// deduction lines: the lines on MEASURE-DEDUCT and the line inside every door or window block.
+    /// Layers are chosen in a dialog (walls, windows and doors, columns, furniture). Walls are read as faces: every
+    /// vertex of a wall line or polyline is a point. Openings come from the window layers: the deduction line inside a
+    /// door or window block (or the block's extents), and lines or polylines on those layers.
     /// Distances are set in plotted millimetres (settings.ini), so the result is the same on paper at any scale.
     /// A dimension too short for its text is moved onto a second or third row instead of overprinting its neighbours.
     /// </summary>
@@ -51,10 +52,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             var ed = Util.Ed;
             var db = Util.Db;
 
-            var filter = new SelectionFilter(new[] { new TypedValue(0, "LINE,LWPOLYLINE,POLYLINE") });
-            var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect the plan walls (lines and polylines): " }, filter);
-            if (psr.Status != PromptStatus.OK) return;
-
+            var choice = AskLayers(ed, db, "Furniture is switched off with the other layers; Room Dimensions dimensions it.");
+            if (choice == null) return;
             if (!AskKeyword(ed, "Sides", new[] { "All", "Top", "Bottom", "Left", "Right" }, ref _sides)) return;
             if (!AskKeyword(ed, "Chains", new[] { "All", "Overall", "Grid", "Structure", "Openings" }, ref _levels)) return;
             if (!AskScale(ed)) return;
@@ -62,19 +61,12 @@ namespace HCW.AutoCAD.Plugin.Commands
             var plan = new Plan();
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                foreach (SelectedObject so in psr.Value)
-                {
-                    var curve = tr.GetObject(so.ObjectId, OpenMode.ForRead) as Curve;
-                    if (curve == null) continue;
-                    bool deduction = string.Equals(curve.Layer, MeasureCommands.LayDed, StringComparison.OrdinalIgnoreCase);
-                    Collect(curve, deduction ? plan.Jambs : plan.Structural, ref plan.Skipped);
-                }
-                GatherFromDrawing(tr, db, plan);
+                ReadPlan(tr, db, choice, plan, null);
                 tr.Commit();
             }
             if (plan.Structural.Count == 0)
             {
-                ed.WriteMessage("\nAUTODIM: no horizontal or vertical wall lines were found in the selection"
+                ed.WriteMessage("\nAUTODIM: no horizontal or vertical wall lines were found on the wall layers (" + string.Join(", ", choice.Walls) + ")"
                     + (plan.Skipped > 0 ? " (" + plan.Skipped + " angled or curved segment(s) skipped; use AUTODIMWALL for those)" : "") + ".");
                 return;
             }
@@ -132,6 +124,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 made = sink.Count;
                 tr.Commit();
             }
+            Isolate(db, choice);
 
             ed.WriteMessage("\nAUTODIM: " + made + " dimension(s) on " + DimLayer + " at 1:" + _scale
                 + (staggered > 0 ? "; " + staggered + " short one(s) moved to a second row" : "")
@@ -147,12 +140,15 @@ namespace HCW.AutoCAD.Plugin.Commands
             var ed = Util.Ed;
             var db = Util.Db;
 
+            var choice = AskLayers(ed, db, "Furniture blocks inside each room get their width and depth dimensioned.");
+            if (choice == null) return;
             var filter = new SelectionFilter(new[] { new TypedValue(0, "LWPOLYLINE") });
             var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect the room outlines (closed polylines, such as ROOM-RECT or MEASURE-FLOOR): " }, filter);
             if (psr.Status != PromptStatus.OK) return;
             if (!AskScale(ed)) return;
 
             var plan = new Plan();
+            var furniture = new List<Extents3d>();
             var rooms = new List<List<Point3d>>();
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -164,7 +160,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     for (int i = 0; i < poly.NumberOfVertices; i++) pts.Add(poly.GetPoint3dAt(i));
                     rooms.Add(pts);
                 }
-                GatherFromDrawing(tr, db, plan);
+                ReadPlan(tr, db, choice, plan, furniture);
                 tr.Commit();
             }
             if (rooms.Count == 0)
@@ -182,7 +178,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             double merge = 5 * mm;
             double band = Settings.GetDouble("AutoDimBandM", 0.6) * 1000 * mm;
 
-            int made, staggered = 0, skipped = 0;
+            int made, staggered = 0, skipped = 0, furnished = 0;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -240,11 +236,25 @@ namespace HCW.AutoCAD.Plugin.Commands
                             staggered += DrawChain(sink, seg, horizontal, edge, inward * inset, step);
                         }
                     }
+
+                    // furniture inside this room: width under it, depth beside it
+                    double clear = Settings.GetDouble("AutoDimFurnitureOffsetMm", 6) * _scale * mm;
+                    foreach (var box in furniture)
+                    {
+                        var c = new Point3d((box.MinPoint.X + box.MaxPoint.X) / 2, (box.MinPoint.Y + box.MaxPoint.Y) / 2, 0);
+                        if (c.X < minX || c.X > maxX || c.Y < minY || c.Y > maxY) continue;
+                        var w = DimChains.Overall(new[] { box.MinPoint.X, box.MaxPoint.X }, minLen);
+                        var d = DimChains.Overall(new[] { box.MinPoint.Y, box.MaxPoint.Y }, minLen);
+                        furnished += DrawChain(sink, w, true, box.MinPoint.Y, -clear, step);
+                        furnished += DrawChain(sink, d, false, box.MinPoint.X, -clear, step);
+                    }
                 }
                 made = sink.Count;
                 tr.Commit();
             }
+            Isolate(db, choice);
             ed.WriteMessage("\nAUTODIMROOM: " + made + " dimension(s) in " + rooms.Count + " room(s) at 1:" + _scale
+                + (furnished > 0 ? "; " + furnished / 2 + " furniture item(s) dimensioned" : "")
                 + (staggered > 0 ? "; " + staggered + " short one(s) moved to a second row" : "")
                 + (skipped > 0 ? "; " + skipped + " angled edge(s) skipped" : "") + ".");
         }
@@ -466,15 +476,136 @@ namespace HCW.AutoCAD.Plugin.Commands
             return moved;
         }
 
-        /// <summary>Everything AUTODIM and AUTODIMROOM read without being asked: block and layer deduction lines, grid lines, columns.</summary>
+        private const string StoreDictionary = "HCW_AUTODIM";
+        private const string StoreRecord = "LAYERS";
+
+        /// <summary>
+        /// Shows the layer dialog: walls, windows and doors, columns, furniture. The last choice for this drawing is
+        /// remembered in the drawing; the first time, layers are guessed from their names. Returns null on Cancel.
+        /// </summary>
+        private static LayerChoice AskLayers(Editor ed, Database db, string furnitureNote)
+        {
+            var names = new List<string>();
+            LayerChoice initial;
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var table = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+                foreach (ObjectId id in table)
+                {
+                    var rec = (LayerTableRecord)tr.GetObject(id, OpenMode.ForRead);
+                    if (!rec.IsDependent && rec.Name != "0") names.Add(rec.Name);
+                }
+                initial = LayerChoice.FromLines(DrawingStore.Read(tr, db, StoreDictionary, StoreRecord));
+                tr.Commit();
+            }
+            initial.KeepOnly(names);
+            if (!initial.Any) initial = LayerChoice.Guess(names);
+
+            LayerChoice choice;
+            using (var dlg = new UI.AutoDimLayersForm(names, initial, furnitureNote))
+            {
+                if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return null;
+                choice = dlg.Read();
+            }
+            if (choice.Walls.Count == 0)
+            {
+                ed.WriteMessage("\nChoose at least one wall layer.");
+                return null;
+            }
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                DrawingStore.Write(tr, db, StoreDictionary, StoreRecord, choice.ToLines());
+                tr.Commit();
+            }
+            return choice;
+        }
+
+        /// <summary>
+        /// Reads the plan from the chosen layers of the current space: wall lines and polylines, window and door blocks
+        /// (their deduction line, or their extents) and lines, column polylines and blocks, and furniture blocks.
+        /// </summary>
+        private static void ReadPlan(Transaction tr, Database db, LayerChoice choice, Plan plan, List<Extents3d> furniture)
+        {
+            var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+            var walls = new HashSet<string>(choice.Walls, StringComparer.OrdinalIgnoreCase);
+            var windows = new HashSet<string>(choice.Windows, StringComparer.OrdinalIgnoreCase);
+            var columns = new HashSet<string>(choice.Columns, StringComparer.OrdinalIgnoreCase);
+            var fitments = new HashSet<string>(choice.Furniture, StringComparer.OrdinalIgnoreCase);
+
+            foreach (ObjectId id in space)
+            {
+                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null) continue;
+                string layer = ent.Layer;
+                if (walls.Contains(layer))
+                {
+                    var curve = ent as Curve;
+                    if (curve != null) Collect(curve, plan.Structural, ref plan.Skipped);
+                }
+                else if (windows.Contains(layer))
+                {
+                    var curve = ent as Curve;
+                    if (curve != null) Collect(curve, plan.Jambs, ref plan.Skipped);
+                }
+                else if (columns.Contains(layer))
+                {
+                    var poly = ent as Polyline;
+                    var block = ent as BlockReference;
+                    if (poly != null && poly.Closed)
+                    {
+                        for (int i = 0; i < poly.NumberOfVertices; i++) plan.Structural.Add(poly.GetPoint3dAt(i));
+                    }
+                    else if (block != null) AddCorners(block, plan.Structural);
+                }
+                else if (fitments.Contains(layer) && furniture != null && ent is BlockReference)
+                {
+                    try { furniture.Add(ent.GeometricExtents); } catch { }
+                }
+            }
+
+            // windows and doors that are blocks: the line inside them is the opening
+            foreach (var found in BlockOpenings.Collect(tr, space, choice.Windows.Count > 0 ? choice.Windows : null))
+                Collect(found.Curve, plan.Jambs, ref plan.Skipped);
+
+            GatherFromDrawing(tr, db, plan);
+        }
+
+        private static void AddCorners(BlockReference block, List<Point3d> into)
+        {
+            try
+            {
+                var e = block.GeometricExtents;
+                into.Add(new Point3d(e.MinPoint.X, e.MinPoint.Y, 0));
+                into.Add(new Point3d(e.MaxPoint.X, e.MinPoint.Y, 0));
+                into.Add(new Point3d(e.MaxPoint.X, e.MaxPoint.Y, 0));
+                into.Add(new Point3d(e.MinPoint.X, e.MaxPoint.Y, 0));
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Leaves only the wall, window, column and dimension layers on, when the dialog said so. The layers turned off are
+        /// added to the take-off list, so Restore Layers (MSHOW) switches them back on.
+        /// </summary>
+        private static void Isolate(Database db, LayerChoice choice)
+        {
+            if (!choice.LeaveIsolated) return;
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var state = Util.IsolateLayers(tr, db, choice.Shown().Concat(new[] { DimLayer }));
+                foreach (var name in state.Hidden) MeasureCommands.MeasureState.HiddenByMeasure.Add(name);
+                tr.Commit();
+            }
+        }
+
+        /// <summary>Grid lines and the standalone deduction lines: read whatever the layer choice.</summary>
         private static void GatherFromDrawing(Transaction tr, Database db, Plan plan)
         {
             var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
-            foreach (var found in BlockOpenings.Collect(tr, space))
-                Collect(found.Curve, plan.Jambs, ref plan.Skipped);
 
             var gridLayers = Layers("AutoDimGridLayers", "AN-GRID;A-GRID");
-            var columnLayers = Layers("AutoDimColumnLayers", "MEASURE-COLUMN;S-COLUMN");
             double tol = Util.MmToDrawingUnits(1.0);
             foreach (ObjectId id in space)
             {
@@ -487,12 +618,6 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var line = (Line)ent;
                     if (Math.Abs(line.StartPoint.X - line.EndPoint.X) <= tol) plan.GridX.Add(line.StartPoint.X);
                     else if (Math.Abs(line.StartPoint.Y - line.EndPoint.Y) <= tol) plan.GridY.Add(line.StartPoint.Y);
-                }
-                else if (ent is Polyline && columnLayers.Contains(ent.Layer))
-                {
-                    var poly = (Polyline)ent;
-                    if (!poly.Closed) continue;
-                    for (int i = 0; i < poly.NumberOfVertices; i++) plan.Structural.Add(poly.GetPoint3dAt(i));
                 }
             }
         }

@@ -519,3 +519,68 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class LayerChoiceTests
+    {
+        [Fact]
+        public void GuessesRolesFromNames()
+        {
+            var c = LayerChoice.Guess(new[] { "0", "A-WALL", "A-WALL-EXT", "A-DOOR", "A-WINDOW", "S-COLUMN", "FURNITURE", "AN-TEXT" });
+            Assert.Equal(new[] { "A-WALL", "A-WALL-EXT" }, c.Walls.ToArray());
+            Assert.Equal(new[] { "A-DOOR", "A-WINDOW" }, c.Windows.ToArray());
+            Assert.Equal(new[] { "S-COLUMN" }, c.Columns.ToArray());
+            Assert.Equal(new[] { "FURNITURE" }, c.Furniture.ToArray());
+        }
+
+        [Fact]
+        public void ALayerHasOneRole()
+        {
+            var c = LayerChoice.Guess(new[] { "WALL-DOOR-COLUMN" });
+            Assert.Single(c.Walls);
+            Assert.Empty(c.Windows);
+            Assert.Empty(c.Columns);
+        }
+
+        [Fact]
+        public void RoundTripsThroughLines()
+        {
+            var c = new LayerChoice { LeaveIsolated = false };
+            c.Walls.AddRange(new[] { "A|WALL", "B" });
+            c.Windows.Add("WIN");
+            c.Furniture.Add("FURN");
+            var back = LayerChoice.FromLines(c.ToLines());
+            Assert.Equal(new[] { "A|WALL", "B" }, back.Walls.ToArray());
+            Assert.Equal(new[] { "WIN" }, back.Windows.ToArray());
+            Assert.Empty(back.Columns);
+            Assert.Equal(new[] { "FURN" }, back.Furniture.ToArray());
+            Assert.False(back.LeaveIsolated);
+        }
+
+        [Fact]
+        public void ShownExcludesFurniture()
+        {
+            var c = new LayerChoice();
+            c.Walls.Add("W"); c.Windows.Add("O"); c.Columns.Add("C"); c.Furniture.Add("F");
+            Assert.Equal(new[] { "W", "O", "C" }, c.Shown().ToArray());
+        }
+
+        [Fact]
+        public void KeepOnlyDropsMissingLayers()
+        {
+            var c = new LayerChoice();
+            c.Walls.AddRange(new[] { "A", "gone" });
+            c.KeepOnly(new[] { "a", "B" });
+            Assert.Equal(new[] { "A" }, c.Walls.ToArray());
+        }
+
+        [Fact]
+        public void EmptyLinesGiveDefaults()
+        {
+            var c = LayerChoice.FromLines(new[] { "EMPTY" });
+            Assert.False(c.Any);
+            Assert.True(c.LeaveIsolated);
+        }
+    }
+}
