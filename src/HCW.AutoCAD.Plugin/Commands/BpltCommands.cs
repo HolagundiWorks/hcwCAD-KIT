@@ -13,8 +13,11 @@ namespace HCW.AutoCAD.Plugin.Commands
     /// </summary>
     public class BpltCommands
     {
-        private static void CreateAllLayers(Transaction tr, Database db)
+        /// <summary>Creates the HCW standard layers plus the BP-/AP- permit layers in one pass.</summary>
+        internal static void CreateAllLayers(Transaction tr, Database db)
         {
+            foreach (var ld in LayerData.Hcw)
+                Util.EnsureLayer(tr, db, ld.Name, (short)ld.Aci, ld.Linetype, Util.MmToLineWeight(ld.LwMm));
             foreach (var ld in LayerData.Bplt)
             {
                 Util.EnsureLayer(tr, db, ld.Name, (short)ld.Aci, ld.Linetype,
@@ -45,7 +48,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
                     tr.Commit();
                     ed.WriteMessage("\nBPLTSTART: drawing set up for Building Permission submission " +
-                                    "(units=Meters, " + LayerData.Bplt.Length + " layers ready).");
+                                    "(units=Meters, " + (LayerData.Hcw.Length + LayerData.Bplt.Length) + " layers ready).");
                 }
                 catch (System.Exception ex)
                 {
@@ -65,8 +68,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                 tr.Commit();
                 int ap = LayerData.Bplt.Count(l => l.Name.StartsWith("AP-"));
                 int bp = LayerData.Bplt.Length - ap;
-                ed.WriteMessage($"\nBPLTLAYERS: {bp} BP- drafting layers and {ap} AP- AutoPlan " +
-                                 "marking layers (non-plotting) created/verified.");
+                ed.WriteMessage($"\nBPLTLAYERS: {LayerData.Hcw.Length} HCW layers, {bp} BP- drafting layers and {ap} AP- AutoPlan " +
+                                 "marking layers created/verified.");
             }
         }
 
@@ -91,7 +94,9 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var ent = (Entity)tr.GetObject(so.ObjectId, OpenMode.ForRead);
                     string layName = ent.Layer;
                     if (!layName.StartsWith("BP-", StringComparison.OrdinalIgnoreCase)) { skipped++; continue; }
-                    string apName = "AP-" + layName.Substring(3);
+                    string apName = LayerData.BpToAp
+                        .Where(m => string.Equals(m.Bp, layName, StringComparison.OrdinalIgnoreCase))
+                        .Select(m => m.Ap).FirstOrDefault() ?? "AP-" + layName.Substring(3);
                     if (!lt.Has(apName)) { skipped++; continue; }
 
                     var clone = (Entity)ent.Clone();

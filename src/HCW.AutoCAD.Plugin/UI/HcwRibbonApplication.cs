@@ -80,8 +80,8 @@ namespace HCW.AutoCAD.Plugin.UI
                 new (string label, string command)[]
                 {
                     ("HCW Standard", "HCWLAYERS"),
-                    ("VH Layers", "VHLAYERS"),
-                    ("BPLT Layers", "BPLTLAYERS")
+                    ("HCW + Building Permit", "BPLTLAYERS"),
+                    ("VH Layers", "VHLAYERS")
                 });
             AddSmallGroup(src,
                 ("HCWRESET", "Reset Layers", "reset", "Reset HCW standard layers to their colour, linetype and lineweight"),
