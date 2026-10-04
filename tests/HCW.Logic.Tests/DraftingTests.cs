@@ -496,3 +496,53 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class RailLayoutTests
+    {
+        [Fact]
+        public void ExactMultipleGivesPostsAtTheSpacing()
+        {
+            var posts = RailLayout.PostPoints(new[] { new P2(0, 0), new P2(2.4, 0) }, false, 1.2);
+            Assert.Equal(new[] { 0.0, 1.2, 2.4 }, posts.Select(p => p.X).ToArray());
+        }
+
+        [Fact]
+        public void AnInexactRunIsDividedEqually()
+        {
+            // 2.5 m with posts no further than 1.2 m: three equal bays of 0.8333 m
+            var posts = RailLayout.PostPoints(new[] { new P2(0, 0), new P2(2.5, 0) }, false, 1.2);
+            Assert.Equal(4, posts.Count);
+            for (int i = 1; i < posts.Count; i++)
+                Assert.Equal(2.5 / 3, posts[i].DistanceTo(posts[i - 1]), 9);
+            Assert.Equal(2.5, posts[3].X, 9);
+        }
+
+        [Fact]
+        public void CornersAlwaysGetAPost()
+        {
+            var posts = RailLayout.PostPoints(new[] { new P2(0, 0), new P2(1, 0), new P2(1, 1) }, false, 5);
+            Assert.Equal(3, posts.Count);
+            Assert.Contains(posts, p => p.DistanceTo(new P2(1, 0)) < 1e-9);
+        }
+
+        [Fact]
+        public void AClosedRunHasNoEndPost()
+        {
+            var sq = new[] { new P2(0, 0), new P2(4, 0), new P2(4, 4), new P2(0, 4) };
+            var posts = RailLayout.PostPoints(sq, true, 2);
+            Assert.Equal(8, posts.Count);                    // 2 per side
+            Assert.Equal(8, posts.Select(p => Math.Round(p.X, 6) + "," + Math.Round(p.Y, 6)).Distinct().Count());
+        }
+
+        [Fact]
+        public void EdgeCases()
+        {
+            Assert.Empty(RailLayout.PostPoints(new P2[0], false, 1));
+            Assert.Single(RailLayout.PostPoints(new[] { new P2(1, 1) }, false, 1));
+            Assert.Equal(2, RailLayout.PostPoints(new[] { new P2(0, 0), new P2(3, 0) }, false, 0).Count);   // no spacing: ends only
+            Assert.Equal(2, RailLayout.PostPoints(new[] { new P2(0, 0), new P2(0, 0), new P2(3, 0) }, false, 5).Count);  // repeated point ignored
+        }
+    }
+}

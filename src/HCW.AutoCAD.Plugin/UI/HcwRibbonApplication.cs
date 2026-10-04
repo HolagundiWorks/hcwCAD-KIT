@@ -218,6 +218,7 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWWINDOW", "Window", "view", "Cut a window in a wall: pick the position");
             AddLarge(src, "HCWOPENMOVE", "Move\nOpening", "move", "Move a door or window to another place on the wall; the wall is closed where it was and cut where it goes");
             AddLarge(src, "HCWOPENREPLACE", "Replace\nOpening", "reset", "Swap a door for a window or the other way, or change its width, in the same place");
+            AddLarge(src, "HCWRAIL", "Handrail", "rule--data-quality", "Draw a handrail in plan along a line or polyline, with posts at the corners and along each run");
             AddLarge(src, "HCWAXIS", "Axis\nGrid", "grid", "Draw a column grid from bay widths, with numbered and lettered bubbles");
             AddLarge(src, "HCWCOLUMN", "Place\nColumns", "column", "Put a column of one size on every grid intersection, or those in a window");
             AddLarge(src, "HCWCOLSCHED", "Column\nSchedule", "table-of-contents", "Mark every column C1, C2 ... by size and draw the column schedule");
