@@ -70,15 +70,16 @@ namespace HCW.AutoCAD.Plugin.Commands
             Extents3d? box;
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                var ids = new List<ObjectId>();
-                if (psr.Status == PromptStatus.OK) ids.AddRange(psr.Value.GetObjectIds());
+                IEnumerable<Entity> ents;
+                if (psr.Status == PromptStatus.OK)
+                    ents = psr.Value.GetObjectIds().Select(id => tr.GetObject(id, OpenMode.ForRead) as Entity);
                 else if (psr.Status == PromptStatus.None)
                 {
                     var ms = (BlockTableRecord)tr.GetObject(SymbolUtilityServices.GetBlockModelSpaceId(db), OpenMode.ForRead);
-                    foreach (ObjectId id in ms) ids.Add(id);
+                    ents = WholeDrawing(tr, ms);
                 }
                 else { lm.CurrentLayout = original; return; }
-                box = Union(tr, ids);
+                box = Union(ents);
                 tr.Commit();
             }
             if (!box.HasValue)
@@ -202,12 +203,29 @@ namespace HCW.AutoCAD.Plugin.Commands
             return note + "scale 1:" + ratio.ToString("0.##") + (exact ? " (exact fit)." : ".");
         }
 
-        private static Extents3d? Union(Transaction tr, IEnumerable<ObjectId> ids)
+        /// <summary>Model-space entities that are shown: leaves out switched-off and frozen layers and hidden objects.</summary>
+        private static IEnumerable<Entity> WholeDrawing(Transaction tr, BlockTableRecord ms)
         {
-            Extents3d? box = null;
-            foreach (var id in ids)
+            var shown = new Dictionary<ObjectId, bool>();
+            foreach (ObjectId id in ms)
             {
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null || !ent.Visible) continue;
+                bool on;
+                if (!shown.TryGetValue(ent.LayerId, out on))
+                {
+                    var ltr = (LayerTableRecord)tr.GetObject(ent.LayerId, OpenMode.ForRead);
+                    shown[ent.LayerId] = on = !ltr.IsOff && !ltr.IsFrozen;
+                }
+                if (on) yield return ent;
+            }
+        }
+
+        private static Extents3d? Union(IEnumerable<Entity> ents)
+        {
+            Extents3d? box = null;
+            foreach (var ent in ents)
+            {
                 if (ent == null) continue;
                 try
                 {
