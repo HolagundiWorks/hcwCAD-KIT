@@ -629,3 +629,96 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class LiftLayoutTests
+    {
+        private static double Area(IList<P2> p)
+        {
+            double a = 0;
+            for (int i = 0; i < p.Count; i++) { var q = p[(i + 1) % p.Count]; a += p[i].X * q.Y - q.X * p[i].Y; }
+            return Math.Abs(a) / 2;
+        }
+
+        private static LiftLayout Ok()
+        {
+            string err;
+            var l = LiftLayout.Build(1800, 2000, 230, 1100, 1400, 800, 30, out err);
+            Assert.Null(err);
+            Assert.NotNull(l);
+            return l;
+        }
+
+        [Fact]
+        public void WallRingAreaIsTheRingLessTheDoorGap()
+        {
+            var l = Ok();
+            double outer = (1800 + 460.0) * (2000 + 460.0);
+            double inner = 1800.0 * 2000;
+            double gap = 800 * 230;
+            Assert.Equal(12, l.WallRing.Count);
+            Assert.Equal(outer - inner - gap, Area(l.WallRing), 6);
+        }
+
+        [Fact]
+        public void ClearShaftAndCarGeometry()
+        {
+            var l = Ok();
+            Assert.Equal(1800.0 * 2000, Area(l.Clear), 6);
+            Assert.Equal(1100.0 * 1400, Area(l.Car), 6);
+            Assert.Equal(-1000 + 30, l.Car.Min(p => p.Y), 9);          // car front sits 30 mm back from the front wall's inner face
+            Assert.Equal(0.0, l.Car.Average(p => p.X), 9);              // centred
+            Assert.Equal(800.0, l.LandingDoorA.DistanceTo(l.LandingDoorB), 9);
+            Assert.Equal(l.Car.Min(p => p.Y), l.CarDoorA.Y, 9);
+        }
+
+        [Fact]
+        public void DoorOpeningIsCentredInTheFrontWall()
+        {
+            var l = Ok();
+            Assert.Contains(l.WallRing, p => Math.Abs(p.X + 400) < 1e-9 && Math.Abs(p.Y + 1230) < 1e-9);
+            Assert.Contains(l.WallRing, p => Math.Abs(p.X - 400) < 1e-9 && Math.Abs(p.Y + 1000) < 1e-9);
+        }
+
+        [Theory]
+        [InlineData(1800, 2000, 230, 1800, 1400, 800, "narrower")]
+        [InlineData(1800, 2000, 230, 1100, 1980, 800, "depth")]
+        [InlineData(1800, 2000, 230, 1100, 1400, 1200, "wider than the car")]
+        [InlineData(1800, 2000, 0, 1100, 1400, 800, "wall thickness")]
+        [InlineData(1300, 2000, 230, 1250, 1400, 1150, "100 mm")]
+        [InlineData(1800, 0, 230, 1100, 1400, 800, "more than 0")]
+        public void RefusesSizesThatDoNotWork(double cw, double cd, double wall, double carW, double carD, double door, string reason)
+        {
+            string err;
+            Assert.Null(LiftLayout.Build(cw, cd, wall, carW, carD, door, 30, out err));
+            Assert.Contains(reason, err);
+        }
+
+        [Theory]
+        [InlineData("1800x2000", 1800, 2000)]
+        [InlineData("1800 X 2000", 1800, 2000)]
+        [InlineData("1800*2000", 1800, 2000)]
+        [InlineData("1550.5x1900", 1550.5, 1900)]
+        public void ParsesSizes(string text, double w, double d)
+        {
+            double ww, dd; string err;
+            Assert.True(LiftLayout.ParseSize(text, out ww, out dd, out err));
+            Assert.Equal(w, ww); Assert.Equal(d, dd);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("1800")]
+        [InlineData("x2000")]
+        [InlineData("1800x")]
+        [InlineData("0x2000")]
+        [InlineData("axb")]
+        public void RejectsBadSizes(string text)
+        {
+            double w, d; string err;
+            Assert.False(LiftLayout.ParseSize(text, out w, out d, out err));
+            Assert.False(string.IsNullOrEmpty(err));
+        }
+    }
+}
