@@ -892,15 +892,18 @@ namespace HCW.AutoCAD.Plugin.Commands
                     if (slabs.Count == 0) { ed.WriteMessage("\nNo slab boundary polygons selected - deductions need a slab boundary."); return; }
 
                     // match each deduction to the slab boundary whose outline contains its centroid
+                    var slabVerts = slabs.Select(Verts).ToList();
                     var pidx = new int?[deds.Count];
                     for (int di = 0; di < deds.Count; di++)
                     {
                         var dcen = Centroid(deds[di]);
                         int? best = null;
                         for (int k = 0; k < slabs.Count; k++)
-                            if (PtInPoly(dcen, Verts(slabs[k]))) best = k;
+                            if (PtInPoly(dcen, slabVerts[k])) best = k;
                         pidx[di] = best;
                     }
+                    var dedsBySlab = Enumerable.Range(0, deds.Count)
+                        .Where(j => pidx[j].HasValue).ToLookup(j => pidx[j].Value);
 
                     var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                     var rows = new List<string[]>();
@@ -914,14 +917,11 @@ namespace HCW.AutoCAD.Plugin.Commands
                         n++;
                         double gross = R2(v), dsum = 0; int dn = 0;
                         var dl = new List<(string lbl, double val, Polyline ent)>();
-                        for (int j = 0; j < deds.Count; j++)
+                        foreach (int j in dedsBySlab[k])
                         {
-                            if (pidx[j] == k)
-                            {
-                                double dv = R2(Math.Abs(deds[j].Area));
-                                dn++; dsum += dv;
-                                dl.Add(($"S{n}-D{dn}", dv, deds[j]));
-                            }
+                            double dv = R2(Math.Abs(deds[j].Area));
+                            dn++; dsum += dv;
+                            dl.Add(($"S{n}-D{dn}", dv, deds[j]));
                         }
                         double net = gross - dsum;
                         totG += gross; totD += dsum; totN += net;
