@@ -1076,9 +1076,9 @@ namespace HCW.Logic.Tests
         [Fact]
         public void CellsAreFormatted()
         {
-            var r = new LoadRow { Board = "SB-01", LightingPoints = 3, LightingWatts = 90, PowerPoints = 2, PowerWatts = 3500, LightingCircuits = 1, PowerCircuits = 2 };
+            var r = new LoadRow { Board = "SB-01", LightingPoints = 3, LightingWatts = 90, PowerPoints = 2, PowerWatts = 3500, LightingCircuits = 1, PowerCircuits = 2, DemandWatts = 2300 };
             var c = ElectricalLoad.ToCells(r);
-            Assert.Equal(new[] { "SB-01", "3", "90", "2", "3500", "3590", "3.59", "1+2 = 3" }, c);
+            Assert.Equal(new[] { "SB-01", "3", "90", "2", "3500", "3590", "3.59", "2.30", "1+2 = 3" }, c);
         }
     }
 }
@@ -1239,6 +1239,98 @@ namespace HCW.Logic.Tests
             Assert.Contains(rows, r => r[0] == "CONCRETE TOTAL" && r[2] == "m3");
             Assert.Contains(rows, r => r[0] == "Skirting" && r[2] == "m");
             Assert.Equal("0.000", rows.First(r => r[0] == "Concrete - landing")[1]);
+        }
+    }
+}
+
+namespace HCW.Logic.Tests
+{
+    public class ElectricalCircuitTests
+    {
+        private static ElLink Link(string board, string point, string code) => new ElLink { Board = board, Point = point, Code = code };
+        private static readonly Dictionary<string, double> Watts = ElectricalLoad.ParseWatts(ElectricalLoad.DefaultWatts);
+        private static readonly HashSet<string> Dedicated = ElectricalLoad.ParseCodes(ElectricalLoad.DefaultDedicated);
+
+        [Fact]
+        public void LightingIsPackedInPointOrder()
+        {
+            // 25 fans of 60 W: a circuit takes 16 (960 W) at a 1000 W limit
+            var links = Enumerable.Range(1, 25).Select(i => Link("SB-01", "FP-" + i.ToString("00"), "FP")).ToList();
+            var c = ElectricalLoad.CircuitsOf("SB-01", links, Watts, 1000, 3000, Dedicated);
+            Assert.Equal(2, c.Count);
+            Assert.Equal("L1", c[0].Name); Assert.Equal(16, c[0].Points.Count); Assert.Equal(960, c[0].Watts);
+            Assert.Equal("L2", c[1].Name); Assert.Equal(9, c[1].Points.Count);
+            Assert.Equal("FP-01", c[0].Points[0]);
+            Assert.Equal("FP-17", c[1].Points[0]);
+            Assert.Equal("SB-01/L2", c[1].FullName);
+        }
+
+        [Fact]
+        public void DedicatedPowerFirstThenSharedAndSwitchesOnNone()
+        {
+            var links = new List<ElLink>
+            {
+                Link("SB-01", "P5-01", "P5"), Link("SB-01", "P5-02", "P5"), Link("SB-01", "AC-01", "AC"), Link("SB-01", "AC-02", "AC"),
+                Link("SB-01", "SW1-01", "SW1"), Link("SB-01", "LP-01", "LP"),
+            };
+            var c = ElectricalLoad.CircuitsOf("SB-01", links, Watts, 1000, 3000, Dedicated);
+            Assert.Equal(new[] { "L1", "P1", "P2", "P3" }, c.Select(x => x.Name).ToArray());
+            Assert.Equal("Air conditioner", c[1].Kind);
+            Assert.Equal(new[] { "AC-01" }, c[1].Points.ToArray());
+            Assert.Equal("Power", c[3].Kind);
+            Assert.Equal(new[] { "P5-01", "P5-02" }, c[3].Points.ToArray());
+            Assert.DoesNotContain(c, x => x.Points.Contains("SW1-01"));
+        }
+
+        [Fact]
+        public void APointBiggerThanTheLimitHasItsOwnCircuitAndZeroLimitMeansOne()
+        {
+            var big = new Dictionary<string, double> { { "LP", 1500 } };
+            var links = new List<ElLink> { Link("SB-01", "LP-01", "LP"), Link("SB-01", "LP-02", "LP") };
+            Assert.Equal(2, ElectricalLoad.CircuitsOf("SB-01", links, big, 1000, 3000, null).Count);
+            Assert.Single(ElectricalLoad.CircuitsOf("SB-01", links, big, 0, 3000, null));
+        }
+
+        [Fact]
+        public void CircuitCountsInTheLoadScheduleMatchTheCircuitList()
+        {
+            var links = new List<ElLink>
+            {
+                Link("SB-02", "LP-03", "LP"), Link("SB-01", "LP-01", "LP"), Link("SB-01", "GY-01", "GY"), Link("SB-01", "P5-01", "P5"),
+            };
+            LoadRow total;
+            var rows = ElectricalLoad.Build(new[] { "SB-01", "SB-02" }, links, Watts, 1000, 3000, Dedicated, out total);
+            var list = ElectricalLoad.Circuits(new[] { "SB-01", "SB-02" }, links, Watts, 1000, 3000, Dedicated);
+            Assert.Equal(list.Count(c => c.Board == "SB-01"), rows[0].Circuits);
+            Assert.Equal(list.Count, total.Circuits);
+            Assert.Equal(new[] { "SB-01/L1", "SB-01/P1", "SB-01/P2", "SB-02/L1" }, list.Select(c => c.FullName).ToArray());
+            var cells = ElectricalLoad.ToCells(list[1]);
+            Assert.Equal(new[] { "SB-01/P1", "Geyser", "1: GY-01", "2000" }, cells);
+        }
+
+        [Fact]
+        public void DiversityAppliesPerGroup()
+        {
+            double lt, pw;
+            ElectricalLoad.ParseDiversity("LT=0.8; PW=0.5", out lt, out pw);
+            Assert.Equal(0.8, lt); Assert.Equal(0.5, pw);
+            ElectricalLoad.ParseDiversity("LT=2;PW=-1;XX=0.3;PW=abc", out lt, out pw);
+            Assert.Equal(1, lt); Assert.Equal(1, pw);
+
+            var links = new List<ElLink> { Link("SB-01", "LP-01", "LP"), Link("SB-01", "AC-01", "AC") };       // 15 W + 1500 W
+            LoadRow total;
+            var rows = ElectricalLoad.Build(new[] { "SB-01" }, links, Watts, 1000, 3000, Dedicated, out total, 0.8, 0.5);
+            Assert.Equal(15 * 0.8 + 1500 * 0.5, rows[0].DemandWatts, 9);
+            Assert.Equal(1515, rows[0].TotalWatts);
+        }
+
+        [Fact]
+        public void NewKindsAreKnown()
+        {
+            Assert.Equal("LT", ElectricalKinds.Find("EF").Group);
+            Assert.Equal("PW", ElectricalKinds.Find("INV").Group);
+            Assert.Equal(40, Watts["EF"]);
+            Assert.Equal(0, Watts["INV"]);
         }
     }
 }

@@ -1222,8 +1222,9 @@ namespace HCW.Logic.Tests
             Assert.Equal("5 Amp", cols[0].Heading);
             Assert.Equal(new[] { "LP", "FP", "P5" }, cols[0].Codes.ToArray());
             Assert.Equal("15 Amp", cols[1].Heading);
-            Assert.Equal(12, cols.Count);
-            Assert.Equal("TV", cols.Last().Heading);
+            Assert.Equal(14, cols.Count);
+            Assert.Equal("TV", cols[11].Heading);
+            Assert.Equal("Inverter", cols.Last().Heading);
         }
 
         [Fact]

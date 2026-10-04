@@ -594,8 +594,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             var db = Util.Db;
             if (!EnsureBlocks(ed, db)) return;
 
-            var layoutOpt = new PromptKeywordOptions("\nSchedule [Matrix/Board/Point/Load/Cable] <" + _layout + ">: ") { AllowNone = true };
-            foreach (var k in new[] { "Matrix", "Board", "Point", "Load", "Cable" }) layoutOpt.Keywords.Add(k);
+            var layoutOpt = new PromptKeywordOptions("\nSchedule [Matrix/Board/Point/Load/Circuit/Cable] <" + _layout + ">: ") { AllowNone = true };
+            foreach (var k in new[] { "Matrix", "Board", "Point", "Load", "Circuit", "Cable" }) layoutOpt.Keywords.Add(k);
             var layout = ed.GetKeywords(layoutOpt);
             if (layout.Status == PromptStatus.OK) _layout = layout.StringResult;
             else if (layout.Status != PromptStatus.None) return;
@@ -735,12 +735,24 @@ namespace HCW.AutoCAD.Plugin.Commands
                 var watts = ElectricalLoad.ParseWatts(Settings.Get("ElectricalWatts", ElectricalLoad.DefaultWatts));
                 var dedicated = ElectricalLoad.ParseCodes(Settings.Get("ElectricalDedicated", ElectricalLoad.DefaultDedicated));
                 LoadRow total;
+                double ltDiv, pwDiv;
+                ElectricalLoad.ParseDiversity(Settings.Get("ElectricalDiversity", ElectricalLoad.DefaultDiversity), out ltDiv, out pwDiv);
                 var loadRows = ElectricalLoad.Build(blocks.Where(b => b.Kind.IsBoard).Select(b => b.CurrentId), links, watts,
-                    Settings.GetDouble("ElectricalLightingCircuitW", 1000), Settings.GetDouble("ElectricalPowerCircuitW", 3000), dedicated, out total);
+                    Settings.GetDouble("ElectricalLightingCircuitW", 1000), Settings.GetDouble("ElectricalPowerCircuitW", 3000), dedicated, out total, ltDiv, pwDiv);
                 headers = ElectricalLoad.Header;
                 rows.AddRange(loadRows.Select(ElectricalLoad.ToCells));
                 rows.Add(ElectricalLoad.ToCells(total));
                 title = "ELECTRICAL LOAD SCHEDULE";
+            }
+            else if (layout == "Circuit")
+            {
+                var watts = ElectricalLoad.ParseWatts(Settings.Get("ElectricalWatts", ElectricalLoad.DefaultWatts));
+                var dedicated = ElectricalLoad.ParseCodes(Settings.Get("ElectricalDedicated", ElectricalLoad.DefaultDedicated));
+                var circuits = ElectricalLoad.Circuits(blocks.Where(b => b.Kind.IsBoard).Select(b => b.CurrentId), links, watts,
+                    Settings.GetDouble("ElectricalLightingCircuitW", 1000), Settings.GetDouble("ElectricalPowerCircuitW", 3000), dedicated);
+                headers = ElectricalLoad.CircuitHeader;
+                rows.AddRange(circuits.Select(ElectricalLoad.ToCells));
+                title = "ELECTRICAL CIRCUIT SCHEDULE";
             }
             else if (layout == "Cable")
             {

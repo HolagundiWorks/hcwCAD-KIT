@@ -25,6 +25,7 @@ namespace HCW.AutoCAD.Plugin.Logic
             new ElKind { Code = "SB",  Label = "Switchboard",          IsBoard = true, Group = "LT", Setting = "ElectricalBoardBlocks" },
             new ElKind { Code = "LP",  Label = "Light point",          Group = "LT", Setting = "ElectricalLightBlocks" },
             new ElKind { Code = "FP",  Label = "Fan point",            Group = "LT", Setting = "ElectricalFanBlocks" },
+            new ElKind { Code = "EF",  Label = "Exhaust fan",          Group = "LT", Setting = "ElectricalBlocks_EF" },
             new ElKind { Code = "SW1", Label = "One way switch",       Group = "LT", Setting = "ElectricalBlocks_SW1" },
             new ElKind { Code = "SW2", Label = "Two way switch",       Group = "LT", Setting = "ElectricalBlocks_SW2" },
             new ElKind { Code = "CB",  Label = "Calling bell",         Group = "LT", Setting = "ElectricalBlocks_CB" },
@@ -36,7 +37,8 @@ namespace HCW.AutoCAD.Plugin.Logic
             new ElKind { Code = "FR",  Label = "Fridge",               Group = "PW", Setting = "ElectricalBlocks_FR" },
             new ElKind { Code = "OV",  Label = "Oven",                 Group = "PW", Setting = "ElectricalBlocks_OV" },
             new ElKind { Code = "WF",  Label = "WiFi router",          Group = "PW", Setting = "ElectricalBlocks_WF" },
-            new ElKind { Code = "TV",  Label = "TV",                   Group = "PW", Setting = "ElectricalBlocks_TV" }
+            new ElKind { Code = "TV",  Label = "TV",                   Group = "PW", Setting = "ElectricalBlocks_TV" },
+            new ElKind { Code = "INV", Label = "Inverter",             Group = "PW", Setting = "ElectricalBlocks_INV" }
         };
 
         public static ElKind Find(string code)
@@ -75,7 +77,7 @@ namespace HCW.AutoCAD.Plugin.Logic
         /// heading, then "=", then the kinds (codes) it lists. Unknown codes and empty items are ignored.
         /// </summary>
         public const string DefaultColumns =
-            "5 Amp=LP,FP,P5;15 Amp=P15;One way switches=SW1;2 way switches=SW2;AC=AC;Water purifier=WP;Geyser=GY;Fridge=FR;Oven=OV;WiFi router=WF;Calling bell=CB;TV=TV";
+            "5 Amp=LP,FP,P5;15 Amp=P15;One way switches=SW1;2 way switches=SW2;AC=AC;Water purifier=WP;Geyser=GY;Fridge=FR;Oven=OV;WiFi router=WF;Calling bell=CB;TV=TV;Exhaust fan=EF;Inverter=INV";
 
         public static List<ColumnSpec> ParseColumns(string text)
         {
