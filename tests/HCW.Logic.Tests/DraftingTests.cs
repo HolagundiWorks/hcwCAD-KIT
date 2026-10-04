@@ -985,3 +985,100 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class ElectricalLoadTests
+    {
+        private static ElLink Link(string board, string point, string code) => new ElLink { Board = board, Point = point, Code = code };
+        private static readonly Dictionary<string, double> Watts = ElectricalLoad.ParseWatts(ElectricalLoad.DefaultWatts);
+        private static readonly HashSet<string> Dedicated = ElectricalLoad.ParseCodes(ElectricalLoad.DefaultDedicated);
+
+        [Fact]
+        public void ParsesWattsAndCodes()
+        {
+            var w = ElectricalLoad.ParseWatts("LP=20; fp=75 , XX=5 ; P5=abc; P15=-3; AC=1800");
+            Assert.Equal(20, w["LP"]);
+            Assert.Equal(75, w["FP"]);
+            Assert.Equal(1800, w["AC"]);
+            Assert.False(w.ContainsKey("XX"));
+            Assert.False(w.ContainsKey("P5"));
+            Assert.False(w.ContainsKey("P15"));
+            Assert.Equal(3, ElectricalLoad.ParseCodes("ac; GY ,oven,SB,OV").Count);     // AC, GY, OV; "oven" and the board are ignored
+        }
+
+        [Fact]
+        public void LoadAndCircuitsPerBoard()
+        {
+            var links = new List<ElLink>
+            {
+                Link("SB-01", "LP-01", "LP"), Link("SB-01", "LP-02", "LP"), Link("SB-01", "FP-01", "FP"), Link("SB-01", "SW1-01", "SW1"),
+                Link("SB-01", "P5-01", "P5"), Link("SB-01", "AC-01", "AC"), Link("SB-01", "GY-01", "GY"),
+                Link("SB-02", "LP-03", "LP"),
+            };
+            LoadRow total;
+            var rows = ElectricalLoad.Build(new[] { "SB-02", "SB-01" }, links, Watts, 1000, 3000, Dedicated, out total);
+            Assert.Equal(new[] { "SB-01", "SB-02" }, rows.Select(r => r.Board).ToArray());
+
+            var a = rows[0];
+            Assert.Equal(3, a.LightingPoints);                    // 2 lights + 1 fan; the switch has no load
+            Assert.Equal(15 + 15 + 60, a.LightingWatts);
+            Assert.Equal(3, a.PowerPoints);
+            Assert.Equal(100 + 1500 + 2000, a.PowerWatts);
+            Assert.Equal(1, a.LightingCircuits);
+            Assert.Equal(2 + 1, a.PowerCircuits);                 // AC and geyser dedicated, the socket on a shared circuit
+            Assert.Equal(90 + 3600, a.TotalWatts);
+
+            Assert.Equal(1, rows[1].LightingPoints);
+            Assert.Equal(0, rows[1].PowerCircuits);
+            Assert.Equal(4, total.LightingPoints);
+            Assert.Equal(105 + 3600, total.TotalWatts);
+            Assert.Equal(1 + 1, total.LightingCircuits);
+            Assert.Equal(3, total.PowerCircuits);
+        }
+
+        [Fact]
+        public void APointOnTwoBoardsCountsOnEachButOnceInTheTotal()
+        {
+            var links = new List<ElLink> { Link("SB-01", "LP-01", "LP"), Link("SB-02", "LP-01", "LP") };
+            LoadRow total;
+            var rows = ElectricalLoad.Build(new[] { "SB-01", "SB-02" }, links, Watts, 1000, 3000, Dedicated, out total);
+            Assert.Equal(15, rows[0].LightingWatts);
+            Assert.Equal(15, rows[1].LightingWatts);
+            Assert.Equal(15, total.LightingWatts);
+            Assert.Equal(1, total.LightingPoints);
+        }
+
+        [Fact]
+        public void CircuitsRoundUpAndZeroLimitMeansOnePerGroup()
+        {
+            var many = Enumerable.Range(1, 30).Select(i => Link("SB-01", "FP-" + i, "FP")).ToList();   // 30 x 60 W = 1800 W
+            LoadRow total;
+            Assert.Equal(2, ElectricalLoad.Build(new[] { "SB-01" }, many, Watts, 1000, 3000, Dedicated, out total)[0].LightingCircuits);
+            Assert.Equal(1, ElectricalLoad.Build(new[] { "SB-01" }, many, Watts, 0, 3000, Dedicated, out total)[0].LightingCircuits);
+            // exactly on the limit is one circuit
+            var ten = Enumerable.Range(1, 10).Select(i => Link("SB-01", "x" + i, "FP")).ToList();
+            Assert.Equal(1, ElectricalLoad.Build(new[] { "SB-01" }, ten, new Dictionary<string, double> { { "FP", 100 } }, 1000, 3000, null, out total)[0].LightingCircuits);
+        }
+
+        [Fact]
+        public void BoardsWithNothingWiredAreStillListed()
+        {
+            LoadRow total;
+            var rows = ElectricalLoad.Build(new[] { "SB-01" }, new ElLink[0], Watts, 1000, 3000, Dedicated, out total);
+            Assert.Single(rows);
+            var cells = ElectricalLoad.ToCells(rows[0]);
+            Assert.Equal("SB-01", cells[0]);
+            Assert.All(cells.Skip(1), c => Assert.Equal("", c));
+            Assert.Equal(ElectricalLoad.Header.Length, cells.Length);
+        }
+
+        [Fact]
+        public void CellsAreFormatted()
+        {
+            var r = new LoadRow { Board = "SB-01", LightingPoints = 3, LightingWatts = 90, PowerPoints = 2, PowerWatts = 3500, LightingCircuits = 1, PowerCircuits = 2 };
+            var c = ElectricalLoad.ToCells(r);
+            Assert.Equal(new[] { "SB-01", "3", "90", "2", "3500", "3590", "3.59", "1+2 = 3" }, c);
+        }
+    }
+}

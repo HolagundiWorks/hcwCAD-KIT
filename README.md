@@ -398,7 +398,7 @@ A block has one role. The choice is saved in the drawing, so the blocks can have
 | `ELNUM` (and `SBNUM`, `LPNUM`, `FPNUM` for one item) | Give every block an ID and write it beside the block as text: `SB-01`, `LP-01`, `GY-01`. `ELNUM` numbers every item that has blocks. Choose **Keep** (blocks keep the ID they have, new blocks get the next numbers) or **All** (start again from 1, left to right then bottom to top). |
 | `ELLAYERS` | Choose the layers the wiring is drawn on: one list for lighting wires (lights, fans, switches, calling bell), one for power wires (sockets and appliances). **Pick from drawing…** takes the layers of objects you select. Saved in the drawing. Asked automatically the first time it is needed. |
 | `ELCONNECT` | Works out the connections and prints them: per wiring group, the items, boards and circuits; items wired to more than one board; items not wired to any board; boards with nothing wired to them. Circles on `EL-CHECK` flag what is not wired. |
-| `ELSCHEDULE` | Draws the schedule as a table. Choose the layout (**Matrix**, **Board** or **Point**), for the matrix whether cells show **Numbers** or **Counts**, the plot scale, and pick the top-left corner. |
+| `ELSCHEDULE` | Draws the schedule as a table. Choose the layout (**Matrix**, **Board**, **Point** or **Load**), for the matrix whether cells show **Numbers** or **Counts**, the plot scale, and pick the top-left corner. |
 | `ELUPDATE` | After you change the drawing: numbers new blocks, moves the ID text, re-checks the wiring and redraws every schedule already in the drawing, in place and at the same text size. |
 
 **The ID stays with the block.** It is stored on the block itself (extended data), not only as text, so it follows the block when it is moved or the wiring is redrawn. If the block has attributes `ID`, `NUMBER` and `TAG`, they are filled in too (`LP-01`, `01`, `LP`). The ID is also written as text beside every block on `EL-LABELS`, so each one can be identified on the drawing (unless the block already shows a visible `ID` attribute); the text follows the block when you run any of the commands above. A **copied block carries its old ID with it**, so a repeated ID is renumbered (the one first in reading order keeps it).
@@ -422,7 +422,14 @@ So `LP-01 ── LP-02 ── SB-01` gives both lights on `SB-01`, and a light w
 
 The **5 Amp** column lists the light points, fan points and 5 amp sockets. The columns are the setting `ElectricalColumns` (`Heading=codes;…`), so you can reorder, rename, or add a column such as `Light points=LP`. A board with nothing wired to it is still listed. **Board** layout: one row per board and point (`SB no`, `Point`, `Type`, `Connection`), where the connection is `Direct` for a point wired to one board and `2 Way`, `3 Way` … for more. **Point** layout: one row per point with its type and its boards. A point, switch or appliance is a junction and a board a terminal, so a switch wired to a light that is wired to a board is counted on that board. Lighting and power wiring are read from their own layers. Tables are drawn on `EL-TABLE`.
 
-Settings (see `HCWSETTINGS`): the default block names, `ElectricalColumns`, `ElectricalSnapMm`, `ElectricalLabels` (0 turns the ID text off), `ElectricalLabelLayer`, `ElectricalLabelHeightMm` (0 sizes the text from the block, at least 150 mm real size), `ElectricalTableTextMm`.
+**The load schedule.** Choosing **Load** in `ELSCHEDULE` draws the connected load per switchboard from the wiring: lighting points and watts, power points and watts, total watts and kilowatts, and the number of circuits (lighting + power). `ELUPDATE` redraws it like the other schedules.
+
+- The watts per point come from `ElectricalWatts` (`LP=15;FP=60;P5=100;P15=1000;AC=1500;…`). The figures it starts with are typical; set the ones for your job. A kind at 0 (the switches) is not counted as a load point.
+- **Lighting circuits** are the lighting load divided by `ElectricalLightingCircuitW` (1000 W to start with), rounded up. **Power circuits** are one for each point of a kind listed in `ElectricalDedicated` (`AC;GY;OV` to start with) plus the rest of the power load divided by `ElectricalPowerCircuitW` (3000 W). Both limits are only starting values: use your own design rules. A limit of 0 gives one circuit per group.
+- A point wired to two boards counts in the load of both (as in the matrix); the TOTAL row counts each point once.
+- This gives the load and the number of circuits. It does not yet say which point is on which circuit.
+
+Settings (see `HCWSETTINGS`): the default block names, `ElectricalColumns`, the load schedule settings (`ElectricalWatts`, `ElectricalDedicated`, `ElectricalLightingCircuitW`, `ElectricalPowerCircuitW`), `ElectricalSnapMm`, `ElectricalLabels` (0 turns the ID text off), `ElectricalLabelLayer`, `ElectricalLabelHeightMm` (0 sizes the text from the block, at least 150 mm real size), `ElectricalTableTextMm`.
 
 ### Area and text
 

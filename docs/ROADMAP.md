@@ -20,7 +20,7 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 
 - **Switch control:** tie each switch to the lights it controls (today a switch is counted on the board its wiring reaches).
 - **More items:** exhaust fans, inverters, geyser points with their own rating, and any other item as a new kind in `ElectricalKinds`.
-- **Circuits and loads:** number the circuits per board, give each point a wattage, and total the load per board and circuit.
+- **Circuits and loads:** the load schedule gives each point a wattage and totals the load and the number of circuits per board (`ELSCHEDULE`, **Load**). Still to do: number the circuits (C1, C2 …) and say which point is on which one, the load per circuit, diversity factors, and cable and breaker sizes.
 - **Cable lengths:** the length of each run from the wiring polylines, for a cable schedule.
 - **Live labels:** ID text follows a moved block only when a command runs; a reactor would move it at once.
 - **Pass-through wires:** a wire that runs straight through a symbol does not connect to it today (only vertices do).

@@ -590,8 +590,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             var db = Util.Db;
             if (!EnsureBlocks(ed, db)) return;
 
-            var layoutOpt = new PromptKeywordOptions("\nSchedule [Matrix/Board/Point] <" + _layout + ">: ") { AllowNone = true };
-            foreach (var k in new[] { "Matrix", "Board", "Point" }) layoutOpt.Keywords.Add(k);
+            var layoutOpt = new PromptKeywordOptions("\nSchedule [Matrix/Board/Point/Load] <" + _layout + ">: ") { AllowNone = true };
+            foreach (var k in new[] { "Matrix", "Board", "Point", "Load" }) layoutOpt.Keywords.Add(k);
             var layout = ed.GetKeywords(layoutOpt);
             if (layout.Status == PromptStatus.OK) _layout = layout.StringResult;
             else if (layout.Status != PromptStatus.None) return;
@@ -725,6 +725,18 @@ namespace HCW.AutoCAD.Plugin.Commands
                 var table = ElectricalMatrix.Build(blocks.Where(b => b.Kind.IsBoard).Select(b => b.CurrentId), links, columns, cells == "Counts");
                 headers = table[0];
                 rows.AddRange(table.Skip(1));
+            }
+            else if (layout == "Load")
+            {
+                var watts = ElectricalLoad.ParseWatts(Settings.Get("ElectricalWatts", ElectricalLoad.DefaultWatts));
+                var dedicated = ElectricalLoad.ParseCodes(Settings.Get("ElectricalDedicated", ElectricalLoad.DefaultDedicated));
+                LoadRow total;
+                var loadRows = ElectricalLoad.Build(blocks.Where(b => b.Kind.IsBoard).Select(b => b.CurrentId), links, watts,
+                    Settings.GetDouble("ElectricalLightingCircuitW", 1000), Settings.GetDouble("ElectricalPowerCircuitW", 3000), dedicated, out total);
+                headers = ElectricalLoad.Header;
+                rows.AddRange(loadRows.Select(ElectricalLoad.ToCells));
+                rows.Add(ElectricalLoad.ToCells(total));
+                title = "ELECTRICAL LOAD SCHEDULE";
             }
             else if (layout == "Point")
             {
