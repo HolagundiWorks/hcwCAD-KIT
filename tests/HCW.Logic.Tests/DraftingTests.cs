@@ -722,3 +722,109 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class LineCleanupTests
+    {
+        private static CleanLine L(double x1, double y1, double x2, double y2, string key = "A-WALL") =>
+            new CleanLine { Seg = new Seg(new P2(x1, y1), new P2(x2, y2)), Key = key };
+
+        [Fact]
+        public void ZeroLengthLinesGo()
+        {
+            var r = LineCleanup.Run(new[] { L(1, 1, 1, 1), L(0, 0, 5, 0) }, 1e-6, true);
+            Assert.Equal(new[] { 0 }, r.Erase.ToArray());
+            Assert.Equal(1, r.ZeroLength);
+            Assert.Empty(r.Replace);
+        }
+
+        [Fact]
+        public void DuplicatesEitherWayRoundGo()
+        {
+            var r = LineCleanup.Run(new[] { L(0, 0, 5, 0), L(5, 0, 0, 0), L(0, 0, 5, 0) }, 1e-6, true);
+            Assert.Equal(new[] { 1, 2 }, r.Erase.ToArray());
+            Assert.Equal(2, r.Duplicates);
+            Assert.Equal(0, r.Merged);
+            Assert.Empty(r.Replace);
+        }
+
+        [Fact]
+        public void TouchingCollinearLinesJoin()
+        {
+            var r = LineCleanup.Run(new[] { L(0, 0, 3, 0), L(3, 0, 8, 0), L(8, 0, 10, 0) }, 1e-6, true);
+            Assert.Equal(new[] { 1, 2 }, r.Erase.ToArray());
+            Assert.Equal(2, r.Merged);
+            var merged = r.Replace[0];
+            Assert.Equal(0.0, Math.Min(merged.A.X, merged.B.X), 9);
+            Assert.Equal(10.0, Math.Max(merged.A.X, merged.B.X), 9);
+        }
+
+        [Fact]
+        public void OverlappingLinesJoinAndAnInnerOneIsADuplicate()
+        {
+            var r = LineCleanup.Run(new[] { L(0, 0, 6, 0), L(4, 0, 9, 0), L(1, 0, 2, 0) }, 1e-6, true);
+            Assert.Equal(new[] { 1, 2 }, r.Erase.ToArray());
+            Assert.Equal(1, r.Merged);          // the 4..9 line extends the first
+            Assert.Equal(1, r.Duplicates);      // the 1..2 line lies inside it
+            Assert.Equal(9.0, Math.Max(r.Replace[0].A.X, r.Replace[0].B.X), 9);
+        }
+
+        [Fact]
+        public void LinesAGapApartStaySeparate()
+        {
+            var r = LineCleanup.Run(new[] { L(0, 0, 3, 0), L(3.5, 0, 8, 0) }, 0.1, true);
+            Assert.Empty(r.Erase);
+            Assert.Empty(r.Replace);
+            // ...unless the gap is within tolerance.
+            var r2 = LineCleanup.Run(new[] { L(0, 0, 3, 0), L(3.05, 0, 8, 0) }, 0.1, true);
+            Assert.Single(r2.Erase);
+        }
+
+        [Fact]
+        public void DifferentKeysOrOffsetsOrDirectionsDoNotJoin()
+        {
+            Assert.Empty(LineCleanup.Run(new[] { L(0, 0, 3, 0, "A"), L(3, 0, 8, 0, "B") }, 1e-6, true).Erase);
+            Assert.Empty(LineCleanup.Run(new[] { L(0, 0, 3, 0), L(3, 0.5, 8, 0.5) }, 1e-6, true).Erase);        // parallel, offset
+            Assert.Empty(LineCleanup.Run(new[] { L(0, 0, 3, 0), L(3, 0, 3, 5) }, 1e-6, true).Erase);            // at right angles
+        }
+
+        [Fact]
+        public void DiagonalLinesJoinToo()
+        {
+            var r = LineCleanup.Run(new[] { L(0, 0, 2, 2), L(2, 2, 5, 5), L(7, 7, 5, 5) }, 1e-6, true);
+            Assert.Equal(new[] { 1, 2 }, r.Erase.ToArray());
+            var m = r.Replace[0];
+            Assert.Equal(7.0, Math.Max(m.A.X, m.B.X), 9);
+            Assert.Equal(0.0, Math.Min(m.A.X, m.B.X), 9);
+        }
+
+        [Fact]
+        public void KeeperIsTheLowestNumberedLine()
+        {
+            // The line listed first is in the middle of the run; it should keep its identity.
+            var r = LineCleanup.Run(new[] { L(3, 0, 6, 0), L(0, 0, 3, 0), L(6, 0, 9, 0) }, 1e-6, true);
+            Assert.Equal(new[] { 1, 2 }, r.Erase.ToArray());
+            Assert.True(r.Replace.ContainsKey(0));
+            Assert.Equal(9.0, Math.Max(r.Replace[0].A.X, r.Replace[0].B.X), 9);
+            Assert.Equal(0.0, Math.Min(r.Replace[0].A.X, r.Replace[0].B.X), 9);
+        }
+
+        [Fact]
+        public void DuplicatesOnlyModeLeavesTouchingLinesAlone()
+        {
+            var r = LineCleanup.Run(new[] { L(0, 0, 3, 0), L(3, 0, 8, 0), L(8, 0, 3, 0) }, 1e-6, false);
+            Assert.Equal(new[] { 2 }, r.Erase.ToArray());
+            Assert.Equal(1, r.Duplicates);
+            Assert.Empty(r.Replace);
+        }
+
+        [Fact]
+        public void DirectionNearZeroAndPiAreTheSameLine()
+        {
+            // 0 and almost 180 degrees: the same straight line drawn in opposite directions with a hair of tilt.
+            var r = LineCleanup.Run(new[] { L(0, 0, 4, 0), L(8, 1e-12, 4, 0) }, 1e-6, true);
+            Assert.Single(r.Erase);
+        }
+    }
+}
