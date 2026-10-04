@@ -89,6 +89,15 @@ namespace HCW.AutoCAD.Plugin
             return ltTbl.Has(name) ? ltTbl[name] : ObjectId.Null;
         }
 
+        /// <summary>Creates a layer from the HCW Layer Standard table (colour, linetype, lineweight), or colour 7 when the name is not in it.</summary>
+        public static ObjectId EnsureHcwLayer(Transaction tr, Database db, string name)
+        {
+            foreach (var l in LayerData.Hcw)
+                if (string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase))
+                    return EnsureLayer(tr, db, l.Name, (short)l.Aci, l.Linetype, MmToLineWeight(l.LwMm));
+            return EnsureLayer(tr, db, name, 7);
+        }
+
         /// <summary>Millimetre lineweight value -> nearest AutoCAD LineWeight enum member.</summary>
         public static LineWeight MmToLineWeight(double mm)
         {

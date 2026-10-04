@@ -33,5 +33,8 @@ using Autodesk.AutoCAD.Runtime;
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.AutoDimCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.SheetSetCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.SheetFitCommands))]
+[assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.WallCommands))]
+[assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.OpeningCommands))]
+[assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.AxisGridCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.ElectricalCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.StairCommands))]

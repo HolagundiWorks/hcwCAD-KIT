@@ -243,6 +243,19 @@ Walls are numbered `FB01`, `FB02` … left to right (then bottom to top) by defa
 
 `SHEETFIT` (**Fit to Sheet**, on the **Tools** tab) readies one layout. Run it on the layout, or from the Model tab and type the layout name. It asks you to select the drawing in model space (Enter takes everything that is visible: objects on switched-off or frozen layers are left out), then **Standard** or **Exact**. If the layout has no hcwCAD-KIT title plate it places the A3 plate on the paper corner, scaled to the sheet size. The paper-space area above the plate's data panel gets a locked viewport (on layer `AN-REF`, non-plotting) centred on the selection. **Standard** picks the smallest standard scale (1:50, 1:100, 1:200 …) that shows the whole selection; **Exact** fits it to about 95% of the area. A plate or viewport already on the layout is reused, and the viewport is resized to the area. Plates on sheets turned 90° are placed at the layout origin.
 
+### Walls, doors, windows and axis grid
+
+These four tools are on the **Walls & Openings** panel of the hcwCAD-KIT tab. They draw plan geometry that the auto-dimension and take-off tools already read. Draw in a UCS whose Z axis is the world Z.
+
+| Command | What it does |
+|---|---|
+| `HCWWALL` | Asks for the thickness in mm (default 230) and where the line sits (**Centre**, **Left** or **Right** face). Then either select lines and polylines to turn into walls, or press Enter and pick points (**Close** ends a closed run, **Undo** removes the last point; Enter ends the run). Corners are mitred, and a very sharp corner is bevelled. An open run makes one closed outline; a closed run makes an outer and an inner outline. Outlines are closed polylines on `A-WALL`. Curved segments are drawn straight and reported. |
+| `HCWWALLJOIN` | Select closed wall outlines that touch or overlap. They are merged into one outline per connected group, so T and L junctions have no lines inside the wall. Collinear points are removed and the originals are erased. Undo restores them. |
+| `HCWDOOR`, `HCWWINDOW` | Type the width in mm, then pick the position on the wall (pick on a face line or between the faces). The tool finds the wall's two faces (parallel lines 60 to 600 mm apart on the same layer as the line you picked near), cuts both for the opening and closes it with jamb lines. A polyline outline is exploded to lines where it is cut. A door also asks which side it opens to and has **Flip hinge**. The opening is a block named `HCW_D_900x230` or `HCW_W_1200x230` (width x wall thickness, in mm) on `A-DOOR` or `A-WIND`, with a line on `MEASURE-DEDUCT`, so the take-off and its schedule read it like any other door or window block. A tag `D1`, `W1` … (next free number) goes on `AN-TEXT`, 250 mm high. Enter ends the command. |
+| `HCWAXIS` | Type the bay widths in mm for X (left to right) and Y (bottom to top), such as `4000 4500 3*3600` (three bays of 3600). Then the plot scale, bubbles at both ends or the start only, and the lower-left intersection. It draws the grid on `AN-GRID`, bubbles 8 mm across on `AN-SYMB` and labels 3.5 mm high on `AN-TEXT` at that scale: numbers 1, 2, 3 … along the bottom, letters A, B, C … up the left (I and O are skipped; after Z comes AA). Bay widths are always in millimetres, whatever the drawing units. |
+
+An opening is refused, with the reason, when the pick is not near a wall, there is no opposite face, or the opening would run past the end of a face. Run `HCWWALLJOIN` before cutting openings if junctions need to be clean, since a cut works on the faces as they are.
+
 ### Auto dimension (working drawings)
 
 Four commands make the dimensions for a working drawing. **`AUTODIM`** and **`AUTODIMROOM`** open a layer dialog first; you tick the layers that hold each part of the plan:

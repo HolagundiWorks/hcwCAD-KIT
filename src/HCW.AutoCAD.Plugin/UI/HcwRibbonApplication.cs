@@ -52,6 +52,7 @@ namespace HCW.AutoCAD.Plugin.UI
             toolsTab.Panels.Add(BuildMeasurePanel());
             toolsTab.Panels.Add(BuildElectricalPanel());
             toolsTab.Panels.Add(BuildStairPanel());
+            toolsTab.Panels.Add(BuildWallsPanel());
             toolsTab.Panels.Add(BuildAreaTextPanel());
 
             var settingsTab = new RibbonTab { Title = "hcwCAD-KIT Settings", Id = SettingsTabId };
@@ -204,6 +205,17 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("LPNUM", "Number LP", "tag--edit", "Number the light point blocks"),
                 ("FPNUM", "Number FP", "tag--edit", "Number the fan point blocks"),
                 ("ELLAYERS", "Wiring Layers", "layers", "Choose the layers the wiring lines are drawn on"));
+            return Wrap(src);
+        }
+
+        private RibbonPanel BuildWallsPanel()
+        {
+            var src = NewSource("Walls & Openings");
+            AddLarge(src, "HCWWALL", "Draw\nWall", "floorplan", "Draw wall faces from picked points, or from lines and polylines you select, at a thickness you give");
+            AddLarge(src, "HCWWALLJOIN", "Join\nWalls", "copy--file", "Merge overlapping wall outlines so T and L junctions are clean");
+            AddLarge(src, "HCWDOOR", "Door", "home", "Cut a door in a wall: pick the position and the side it opens to");
+            AddLarge(src, "HCWWINDOW", "Window", "view", "Cut a window in a wall: pick the position");
+            AddLarge(src, "HCWAXIS", "Axis\nGrid", "grid", "Draw a column grid from bay widths, with numbered and lettered bubbles");
             return Wrap(src);
         }
 

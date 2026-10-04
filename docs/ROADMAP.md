@@ -36,6 +36,17 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 - **Section through an L or U as cut:** today an L is a developed section and a U returns over the first flight.
 - **Quantity:** concrete volume, shuttering area and finishes per stair, into the take-off export.
 
+## Walls, openings and grid
+
+`HCWWALL`, `HCWWALLJOIN`, `HCWDOOR`, `HCWWINDOW` and `HCWAXIS` are built (see the README). Still to do:
+
+- **Curved walls:** arcs in a centre line (today they are drawn straight).
+- **Join on draw:** merge a new wall into the walls it touches as it is drawn, instead of a separate `HCWWALLJOIN`.
+- **Wall objects:** keep the centre line and thickness with the wall so a wall can be edited and the openings follow it.
+- **Opening types:** double leaf and sliding doors, door thickness and frame, sill and lintel heights as block attributes feeding the schedule.
+- **Replace and move:** swap a door for a window, and move an opening along its wall with the cut following.
+- **Grid editing:** add or remove a grid line, and columns placed on the intersections with a size schedule.
+
 ## Take-off
 
 - **Copy/array.** `INCARRAY` and `INCCOPY` deep-clone the selection once per copy. Cloning entities directly would be lighter but can lose block attributes. Measure on a large drawing before changing it.
