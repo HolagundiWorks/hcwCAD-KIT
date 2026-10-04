@@ -17,7 +17,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         private const string TitleBlockName = "HCW_TITLE_A3";
         private const string AppName = "HCWKIT";
         private const string LayerBorder = "BP-SHEET-BORDER";
-        private const string LayerTitle = "BP-TITLE-BLOCK";
+        internal const string LayerTitle = "BP-TITLE-BLOCK";
         private const string LayerNotes = "BP-NOTES";
         private const string LayerFields = "BP-FIELDS";
 
@@ -430,7 +430,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
-        private static ObjectId EnsureTitleDefinition(Transaction tr, Database db, double mm)
+        internal static ObjectId EnsureTitleDefinition(Transaction tr, Database db, double mm)
         {
             var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
             if (bt.Has(TitleBlockName)) return bt[TitleBlockName];
@@ -557,7 +557,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             tr.AddNewlyCreatedDBObject(ad, true);
         }
 
-        private static void AddAttributes(Transaction tr, BlockReference br)
+        internal static void AddAttributes(Transaction tr, BlockReference br)
         {
             var def = (BlockTableRecord)tr.GetObject(br.BlockTableRecord, OpenMode.ForRead);
             foreach (ObjectId id in def)
@@ -597,7 +597,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
-        private static void PrepareLayers(Transaction tr, Database db)
+        internal static void PrepareLayers(Transaction tr, Database db)
         {
             Util.EnsureLayer(tr, db, LayerBorder, 8, "Continuous", LineWeight.LineWeight050);
             Util.EnsureLayer(tr, db, LayerTitle, 8, "Continuous", LineWeight.LineWeight025);
@@ -605,7 +605,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             Util.EnsureLayer(tr, db, LayerFields, 8, "Continuous", LineWeight.LineWeight018);
         }
 
-        private static void EnsureRegApp(Transaction tr, Database db)
+        internal static void EnsureRegApp(Transaction tr, Database db)
         {
             var rat = (RegAppTable)tr.GetObject(db.RegAppTableId, OpenMode.ForRead);
             if (rat.Has(AppName)) return;
@@ -615,7 +615,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             tr.AddNewlyCreatedDBObject(rec, true);
         }
 
-        private static void Tag(Entity ent, string kind, string extra = null)
+        internal static void Tag(Entity ent, string kind, string extra = null)
         {
             var buffer = new ResultBuffer(
                 new TypedValue((int)DxfCode.ExtendedDataRegAppName, AppName),
@@ -625,7 +625,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             ent.XData = buffer;
         }
 
-        private static bool IsKind(Entity ent, string kind)
+        internal static bool IsKind(Entity ent, string kind)
         {
             var data = ent.GetXDataForApplication(AppName);
             if (data == null) return false;

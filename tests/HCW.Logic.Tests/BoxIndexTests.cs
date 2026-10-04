@@ -37,3 +37,35 @@ namespace HCW.Logic.Tests
             Assert.Empty(BoxIndex.Candidates(new Box2?[] { new Box2(0, 0, 1, 1) }, new Box2?[0], 1)[0]);
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class SheetFitTests
+    {
+        [Theory]
+        [InlineData(1, 1)]
+        [InlineData(73.2, 75)]
+        [InlineData(100, 100)]
+        [InlineData(100.5, 150)]
+        [InlineData(20000, 20000)]
+        public void NextStandard(double n, double want) => Assert.Equal(want, SheetFit.NextStandard(n));
+
+        [Fact]
+        public void ScaleFitsTheTighterSide()
+        {
+            // 400 x 150 area, 20 x 5 model: width limits (400*0.95/20 = 19), height allows 28.5
+            Assert.Equal(19.0, SheetFit.ScaleToFit(400, 150, 20, 5), 6);
+            Assert.Equal(1.0, SheetFit.ScaleToFit(400, 150, 0, 0));
+            Assert.Equal(28.5, SheetFit.ScaleToFit(400, 150, 0, 5), 6);
+        }
+
+        [Fact]
+        public void RatioRoundTrips()
+        {
+            // metre drawing (0.001 units per mm), mm sheet: 10 paper mm per unit is 1:100
+            Assert.Equal(100.0, SheetFit.Ratio(10, 1, 0.001), 6);
+            Assert.Equal(10.0, SheetFit.ViewportScale(100, 1, 0.001), 9);
+            Assert.Equal(100.0, SheetFit.Ratio(SheetFit.ViewportScale(100, 1 / 25.4, 0.001), 1 / 25.4, 0.001), 6);
+        }
+    }
+}

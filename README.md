@@ -241,6 +241,8 @@ Walls are numbered `FB01`, `FB02` … left to right (then bottom to top) by defa
 
 `SHEETSET` makes numbered sheets from a template layout (title block, notes and a viewport). It asks for the template, the number of sheets, a prefix and first number, and the plot scale. Started from the Model tab it also asks for a model window per sheet (Enter uses the whole drawing); started from a layout it uses the drawing extents. Each new layout gets its viewport set to the scale and centred, and the title block's `DRAWING_NO` (and `DRAWING_TITLE`, when you type one). An existing layout name is never overwritten.
 
+`SHEETFIT` (**Fit to Sheet**, on the **Tools** tab) readies one layout. Run it on the layout, or from the Model tab and type the layout name. It asks you to select the drawing in model space (Enter takes everything), then **Standard** or **Exact**. If the layout has no hcwCAD-KIT title plate it places the A3 plate on the paper corner, scaled to the sheet size. The paper-space area above the plate's data panel gets a locked viewport (on layer `AN-REF`, non-plotting) centred on the selection. **Standard** picks the smallest standard scale (1:50, 1:100, 1:200 …) that shows the whole selection; **Exact** fits it to about 95% of the area. A plate or viewport already on the layout is reused, and the viewport is resized to the area. Plates on sheets turned 90° are placed at the layout origin.
+
 ### Auto dimension (working drawings)
 
 Four commands make the dimensions for a working drawing. **`AUTODIM`** and **`AUTODIMROOM`** open a layer dialog first; you tick the layers that hold each part of the plan:
@@ -405,7 +407,7 @@ The **Layers** panel is on this tab. It has one dropdown and one **Create Layers
 |---|---|
 | `HCWLAYERS` | Creates or verifies the 36-layer HCW Layer Standard v4.0 (colour, linetype, lineweight). Existing layers are left in place; missing ones are added. |
 | `VHLAYERS` | Creates the legacy underscore layer set (`A_WALL_CUT`, `S_COLUMN`, and so on) and makes `A_WALL_CUT` current. Use one layer standard per drawing. |
-| `BPLTLAYERS` | The **HCW + Building Permit** choice in the dropdown. Creates the HCW standard layers plus the BP- drafting layers, without changing drawing units. Text, dimensions, title block, north point and revisions use the `AN-` layers. |
+| `BPLTLAYERS` | The **HCW + Building Permit** choice in the dropdown. Creates the HCW standard layers plus the BP- drafting layers, without changing drawing units. Text, dimensions, north point and revisions use the `AN-` layers. The title block commands make their own `BP-SHEET-BORDER`, `BP-TITLE-BLOCK`, `BP-NOTES` and `BP-FIELDS` layers when they run. |
 
 ### Layer maintenance
 
@@ -506,7 +508,7 @@ Labels go on `ROOM-LABELS`. Rectangles go on `ROOM-RECT`. The default text heigh
 
 **VHLAYERS** — older names with underscores (`A_WALL_CUT`, `S_COLUMN`, `E_LIGHT`, `P_WATER_SUPPLY`, `AN_TEXT`, `X_GUIDE`, …). Guide layers `X_*` are created non-plotting. Do not mix this set with HCW v4.0 in the same drawing if both are meant to be the office standard.
 
-**BPLT** — `BP-` layers for the drawing (site, building, parking, services; text, dimensions and title block use the `AN-` layers). `BPLTREPORT` lists every name and whether it exists.
+**BPLT** — `BP-` layers for the drawing (site, building, parking, services; text and dimensions use the `AN-` layers; the title block makes its own sheet layers). `BPLTREPORT` lists every name and whether it exists.
 
 ---
 

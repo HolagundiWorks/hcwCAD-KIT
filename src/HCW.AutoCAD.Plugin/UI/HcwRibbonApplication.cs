@@ -221,6 +221,7 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("AUTODIMWALL", "Wall Dimensions", "ruler", "Aligned dimension on each wall segment at any angle, and radius on arcs"),
                 ("AUTODIMCLEAR", "Clear Auto Dims", "clean", "Remove the dimensions the auto dimension tools made"),
                 ("SHEETSET", "Sheet Set", "document--horizontal", "Make numbered sheets from a template layout, with each viewport at a scale and centred on a window"),
+                ("SHEETFIT", "Fit to Sheet", "document--view", "Place the title plate on a layout and fit the selected drawing into its paper-space area"),
                 ("WinLabel", "Window Label", "tag", "Label window blocks from their WNAME property"),
                 ("WinLabelHeight", "Label Height", "text--scale", "Set the window-label text height"),
                 ("TXTALIGN", "Align Text", "text--align--left", "Align selected TEXT to a reference point"),
