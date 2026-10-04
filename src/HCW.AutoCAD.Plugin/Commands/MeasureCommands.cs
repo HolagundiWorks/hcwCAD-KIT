@@ -378,18 +378,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                     }
 
                     // match each deduction to the typed line it overlaps (nearest within tolerance)
-                    var pidx = new int?[deds.Count];
-                    for (int di = 0; di < deds.Count; di++)
-                    {
-                        int? best = null; double bd = double.MaxValue;
-                        for (int k = 0; k < grp.Count; k++)
-                        {
-                            if (!Near(deds[di], grp[k].ent, tol)) continue;
-                            double md = MaxDist(deds[di], grp[k].ent);
-                            if (md <= tol && md < bd) { bd = md; best = k; }
-                        }
-                        pidx[di] = best;
-                    }
+                    var grpCurves = grp.Select(g => g.ent).ToList();
+                    var pidx = MatchNearest(deds, grpCurves, tol);
+                    var dedsByWall = Enumerable.Range(0, deds.Count)
+                        .Where(n => pidx[n].HasValue)
+                        .OrderBy(n => CurveMid(deds[n]).X).ThenBy(n => CurveMid(deds[n]).Y)
+                        .ToLookup(n => pidx[n].Value);
 
                     var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                     var rows = new List<string[]>();
@@ -407,7 +401,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                         // Number the walls left to right, then bottom to top: FB01, FB02, ...
                         var wallNo = new Dictionary<int, int>();
                         int serial = 0;
-                        foreach (var seg in OrderWalls(segs, grp.Select(g => g.ent).ToList(), order, numberPath))
+                        foreach (var seg in OrderWalls(segs, grpCurves, order, numberPath))
                             wallNo[seg.index] = ++serial;
                         foreach (var bucket in segs.GroupBy(s => s.gross).OrderByDescending(s => s.Key))
                         {
@@ -422,9 +416,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                                 PlaceLabel(tr, db, btr, new Point3d(mp.X, mp.Y + 0.8 * th, 0), group, book, th);
                                 int openingNo = 0;
                                 string wallId = (singleTypeNoPrefix ? "L" : ty.code) + wallNo[seg.index].ToString("00");
-                                foreach (int j in Enumerable.Range(0, deds.Count)
-                                    .Where(n => pidx[n] == seg.index)
-                                    .OrderBy(n => CurveMid(deds[n]).X).ThenBy(n => CurveMid(deds[n]).Y))
+                                foreach (int j in dedsByWall[seg.index])
                                 {
                                     openingNo++;
                                     int dv = Rnd(CurveLen(deds[j]));
@@ -742,24 +734,15 @@ namespace HCW.AutoCAD.Plugin.Commands
                     }
                     var labelIndex = DeductionLabels(tr, db);
 
-                    var parent = new int?[deds.Count];
-                    for (int i = 0; i < deds.Count; i++)
-                    {
-                        int? best = null; double bd = double.MaxValue;
-                        for (int k = 0; k < walls.Count; k++)
-                        {
-                            if (!Near(deds[i], walls[k], MeasureState.DedupTolerance)) continue;
-                            double md = MaxDist(deds[i], walls[k]);
-                            if (md <= MeasureState.DedupTolerance && md < bd) { bd = md; best = k; }
-                        }
-                        parent[i] = best;
-                    }
+                    var parent = MatchNearest(deds, walls, MeasureState.DedupTolerance);
+                    var dedsByParent = Enumerable.Range(0, deds.Count)
+                        .Where(i => parent[i].HasValue).ToLookup(i => parent[i].Value);
 
                     var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                     var rows = new List<string[]>();
                     double tot = 0;
                     int letter = 0;
-                    var sized = walls.Select(w => new { Curve = w, Len = Rnd(CurveLen(w)) }).GroupBy(w => w.Len).OrderByDescending(g => g.Key);
+                    var sized = walls.Select((w, wi) => new { Curve = w, Index = wi, Len = Rnd(CurveLen(w)) }).GroupBy(w => w.Len).OrderByDescending(g => g.Key);
                     foreach (var bucket in sized)
                     {
                         string group = "P-" + GroupLetter(letter++);
@@ -767,11 +750,9 @@ namespace HCW.AutoCAD.Plugin.Commands
                         double deduct = 0;
                         foreach (var wall in bucket)
                         {
-                            int index = walls.IndexOf(wall.Curve);
                             PlaceLabel(tr, db, btr, CurveMid(wall.Curve), group, book, th, force: group);
-                            for (int i = 0; i < deds.Count; i++)
+                            foreach (int i in dedsByParent[wall.Index])
                             {
-                                if (parent[i] != index) continue;
                                 string blockName;
                                 deduct += OpeningArea(book, labelIndex, deds[i], height, th, blockOf.TryGetValue(i, out blockName) ? blockName : null);
                             }
@@ -1327,17 +1308,33 @@ namespace HCW.AutoCAD.Plugin.Commands
             return segs.OrderBy(x => CurveMid(curves[x.index]).X).ThenBy(x => CurveMid(curves[x.index]).Y);
         }
 
-        /// <summary>Quick reject before the exact distance test: do the two curves' boxes come within the tolerance?</summary>
-        private static bool Near(Curve a, Curve b, double tol)
+        /// <summary>
+        /// For each deduction, the index of the nearest line it overlaps within tol (null if none).
+        /// Bounding boxes are read once per curve instead of once per pair.
+        /// </summary>
+        private static int?[] MatchNearest(IList<Curve> deds, IList<Curve> lines, double tol)
         {
-            try
+            Extents3d? Box(Curve x) { try { return x.GeometricExtents; } catch { return null; } }
+            var dBox = deds.Select(Box).ToArray();
+            var lBox = lines.Select(Box).ToArray();
+            var res = new int?[deds.Count];
+            for (int i = 0; i < deds.Count; i++)
             {
-                var ea = a.GeometricExtents;
-                var eb = b.GeometricExtents;
-                return ea.MinPoint.X - tol <= eb.MaxPoint.X && eb.MinPoint.X - tol <= ea.MaxPoint.X
-                    && ea.MinPoint.Y - tol <= eb.MaxPoint.Y && eb.MinPoint.Y - tol <= ea.MaxPoint.Y;
+                int? best = null; double bd = double.MaxValue;
+                for (int k = 0; k < lines.Count; k++)
+                {
+                    if (dBox[i].HasValue && lBox[k].HasValue)
+                    {
+                        var ea = dBox[i].Value; var eb = lBox[k].Value;
+                        if (ea.MinPoint.X - tol > eb.MaxPoint.X || eb.MinPoint.X - tol > ea.MaxPoint.X
+                            || ea.MinPoint.Y - tol > eb.MaxPoint.Y || eb.MinPoint.Y - tol > ea.MaxPoint.Y) continue;
+                    }
+                    double md = MaxDist(deds[i], lines[k]);
+                    if (md <= tol && md < bd) { bd = md; best = k; }
+                }
+                res[i] = best;
             }
-            catch { return true; }
+            return res;
         }
 
         private static void Output(Transaction tr, Database db, string defName, string[] headers, List<string[]> rows, double h)
