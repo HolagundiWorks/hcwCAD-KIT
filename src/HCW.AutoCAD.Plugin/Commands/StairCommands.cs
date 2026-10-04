@@ -149,6 +149,18 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (r[0] == r[0].ToUpperInvariant() || r[0] == "Skirting")
                     ed.WriteMessage("\n  " + Util.Pad(r[0], 22) + r[1] + " " + r[2]);
             ed.WriteMessage("\n  Saved as the take-off \"Stair " + id + "\"; MEXPORT writes it with the others.");
+
+            // reinforcement estimate and bar schedule
+            var bars = StairRebar.Compute(spec, calc, new RebarOptions
+            {
+                MainDia = Settings.GetDouble("StairMainBarDia", 12), MainSpacing = Settings.GetDouble("StairMainBarSpacing", 150),
+                DistDia = Settings.GetDouble("StairDistBarDia", 8), DistSpacing = Settings.GetDouble("StairDistBarSpacing", 200),
+                Cover = Settings.GetDouble("StairCover", 25), AnchorageDiameters = Settings.GetDouble("StairAnchorageDia", 40),
+            });
+            MeasureBook.SaveTakeoff(tr, db, "Stair " + id + " bars", StairRebar.Headers, StairRebar.Rows(bars, q.Concrete));
+            double kg = StairRebar.TotalWeight(bars);
+            ed.WriteMessage("\n  Reinforcement estimate " + kg.ToString("0.0", CultureInfo.InvariantCulture) + " kg ("
+                + (q.Concrete > 0 ? (kg / q.Concrete).ToString("0", CultureInfo.InvariantCulture) : "0") + " kg/m3), saved as \"Stair " + id + " bars\".");
         }
 
         // ------------------------------------------------------------------ inputs and the report

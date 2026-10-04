@@ -1334,3 +1334,67 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class StairRebarTests
+    {
+        private static readonly RebarOptions Opts = new RebarOptions { MainDia = 12, MainSpacing = 150, DistDia = 8, DistSpacing = 200, Cover = 25, AnchorageDiameters = 40 };
+
+        [Theory]
+        [InlineData(1150, 150, 8)]      // 1150 / 150 = 7.67 -> 7 bays, 8 bars
+        [InlineData(1200, 150, 9)]      // exactly 8 bays
+        [InlineData(0, 150, 0)]
+        [InlineData(-5, 150, 0)]
+        [InlineData(1000, 0, 0)]
+        [InlineData(100, 150, 1)]
+        public void BarCountAcrossASpan(double span, double spacing, int want) => Assert.Equal(want, StairRebar.Count(span, spacing));
+
+        [Fact]
+        public void SingleFlightBars()
+        {
+            var s = new StairSpec { Kind = StairKind.Single, Width = 1200, FloorHeight = 1500, TotalRisers = 10, Going = 250, WaistThickness = 150 };
+            var bars = StairRebar.Compute(s, StairCalc.Calculate(s), Opts);
+            Assert.Equal(new[] { "M1", "D1" }, bars.Select(b => b.Mark).ToArray());
+            double slope = Math.Sqrt(2250.0 * 2250 + 1500.0 * 1500);
+            Assert.Equal(8, bars[0].Nos);                                       // (1200 - 50) / 150 -> 7 bays
+            Assert.Equal((slope + 2 * 40 * 12) / 1000, bars[0].Length, 9);
+            Assert.Equal((int)Math.Floor((slope - 50) / 200) + 1, bars[1].Nos);
+            Assert.Equal(1.15, bars[1].Length, 9);
+            // weight: d^2 / 162 per metre
+            Assert.Equal(bars[0].Nos * bars[0].Length * 144 / 162.0, bars[0].Weight, 9);
+        }
+
+        [Fact]
+        public void DogLegAddsLandingBarsAndASecondFlight()
+        {
+            var s = new StairSpec
+            {
+                Kind = StairKind.DogLeg, Width = 1200, FloorHeight = 3000, TotalRisers = 20, FirstFlightRisers = 10, Going = 250,
+                LandingLength = 1200, WaistThickness = 150, LandingThickness = 150,
+            };
+            var bars = StairRebar.Compute(s, StairCalc.Calculate(s), Opts);
+            Assert.Equal(new[] { "M1", "D1", "M2", "D2", "ML", "DL" }, bars.Select(b => b.Mark).ToArray());
+            var ml = bars.First(b => b.Mark == "ML");
+            Assert.Equal(StairRebar.Count(2400 - 50, 150), ml.Nos);                  // landing width 2400 across the main bars
+            Assert.Equal((1200 - 50) / 1000.0, ml.Length, 9);
+            var dl = bars.First(b => b.Mark == "DL");
+            Assert.Equal(StairRebar.Count(1200 - 50, 200), dl.Nos);
+            Assert.Equal((2400 - 50) / 1000.0, dl.Length, 9);
+            Assert.True(StairRebar.TotalWeight(bars) > 0);
+        }
+
+        [Fact]
+        public void ScheduleRowsHaveATotalAndSteelPerCubicMetre()
+        {
+            var s = new StairSpec { Kind = StairKind.Single, Width = 1200, FloorHeight = 1500, TotalRisers = 10, Going = 250, WaistThickness = 150 };
+            var bars = StairRebar.Compute(s, StairCalc.Calculate(s), Opts);
+            var rows = StairRebar.Rows(bars, 0.7);
+            Assert.All(rows, r => Assert.Equal(StairRebar.Headers.Length, r.Length));
+            Assert.Equal("TOTAL", rows[rows.Count - 2][0]);
+            Assert.EndsWith("kg/m3", rows.Last()[6]);
+            Assert.Equal(bars.Count + 2, rows.Count);
+            Assert.Equal(bars.Count + 1, StairRebar.Rows(bars, 0).Count);               // no per-m3 row without concrete
+        }
+    }
+}
