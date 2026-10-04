@@ -363,3 +363,84 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class OpeningFrameTests
+    {
+        private static bool Same(P2 a, P2 b) => a.DistanceTo(b) < 1e-9;
+        private static bool SameSet(P2 a1, P2 a2, P2 b1, P2 b2) => (Same(a1, b1) && Same(a2, b2)) || (Same(a1, b2) && Same(a2, b1));
+
+        // A 0.23 thick wall along a direction at the given angle; faces drawn in opposite directions like a closed outline.
+        private static List<Seg> Wall(double deg)
+        {
+            double a = deg * Math.PI / 180;
+            var u = new P2(Math.Cos(a), Math.Sin(a)); var n = new P2(-u.Y, u.X);
+            var o = new P2(3, 2);
+            return new List<Seg>
+            {
+                new Seg(o, o + u * 5),
+                new Seg(o + u * 5 + n * 0.23, o + n * 0.23),
+            };
+        }
+
+        [Theory]
+        [InlineData(true, 0, 0.1, 5, false)]
+        [InlineData(true, 0, 0.1, -5, false)]
+        [InlineData(true, 0, 0.1, 5, true)]
+        [InlineData(true, 30, 0.1, -5, true)]
+        [InlineData(true, 200, 0.23, 5, false)]
+        [InlineData(false, 0, 0.1, 5, false)]
+        [InlineData(false, 125, 0.23, -5, false)]
+        public void BlockInsertionGivesBackTheCutCorners(bool door, double deg, double pickAlongNormal, double sideAlongNormal, bool flip)
+        {
+            double a = deg * Math.PI / 180;
+            var u = new P2(Math.Cos(a), Math.Sin(a)); var n = new P2(-u.Y, u.X);
+            var segs = Wall(deg);
+            var pick = new P2(3, 2) + u * 2.5 + n * pickAlongNormal;
+            string err;
+            var plan = OpeningCut.Plan(segs, pick, 0.9, 0.05, 0.6, out err);
+            Assert.NotNull(plan);
+
+            var side = pick + n * sideAlongNormal;
+            var pl = OpeningFrame.Compute(door, plan, side, flip);
+            var c = OpeningFrame.FromBlock(door, pl.Origin, pl.Angle, pl.Sx, pl.Sy, 0.9, plan.Thickness);
+
+            // Both faces' corners come back, in either order.
+            Assert.True(SameSet(c.FaceAStart, c.FaceAEnd, plan.P1a, plan.P1b) && SameSet(c.FaceBStart, c.FaceBEnd, plan.P2a, plan.P2b)
+                     || SameSet(c.FaceAStart, c.FaceAEnd, plan.P2a, plan.P2b) && SameSet(c.FaceBStart, c.FaceBEnd, plan.P1a, plan.P1b));
+            Assert.True(Same(c.Centre, (plan.P1a + plan.P1b) * 0.5) || Same(c.Centre, (plan.P2a + plan.P2b) * 0.5));
+            Assert.Equal(flip && door, c.Flipped);
+            if (door)
+            {
+                // The leaf swings to the side that was picked, away from the wall body.
+                Assert.True(P2.Dot(c.Swing, n * sideAlongNormal) > 0);
+                Assert.Equal(1.0, c.Swing.Length, 9);
+            }
+            else Assert.Equal(0.0, c.Swing.Length, 9);
+        }
+
+        [Theory]
+        [InlineData("HCW_D_900x230", true, 900, 230)]
+        [InlineData("hcw_w_1200x115", false, 1200, 115)]
+        [InlineData("HCW_W_1200.5x230", false, 1200.5, 230)]
+        public void ParsesBlockNames(string name, bool door, double w, double t)
+        {
+            bool d; double ww, tt;
+            Assert.True(OpeningFrame.TryParseName(name, out d, out ww, out tt));
+            Assert.Equal(door, d); Assert.Equal(w, ww); Assert.Equal(t, tt);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("DOOR")]
+        [InlineData("HCW_D_900")]
+        [InlineData("HCW_X_900x230")]
+        [InlineData("HCW_D_900x230_2")]
+        public void RejectsOtherNames(string name)
+        {
+            bool d; double w, t;
+            Assert.False(OpeningFrame.TryParseName(name, out d, out w, out t));
+        }
+    }
+}

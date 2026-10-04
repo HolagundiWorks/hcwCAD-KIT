@@ -81,100 +81,321 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private static string Place(bool door, Point3d pickW, Point3d sideW, bool flip, double widthMm)
         {
+            using (Util.Doc.LockDocument())
+            using (var tr = Util.Db.TransactionManager.StartTransaction())
+            {
+                string message;
+                if (!PlaceIn(tr, door, pickW, sideW, flip, widthMm, null, out message)) return message;
+                tr.Commit();
+                return message;
+            }
+        }
+
+        /// <summary>
+        /// Cuts the wall and inserts the block inside the caller's transaction. When it returns false nothing the caller
+        /// should keep has been done (the caller leaves the transaction uncommitted). tagOverride reuses a tag such as D3.
+        /// </summary>
+        private static bool PlaceIn(Transaction tr, bool door, Point3d pickW, Point3d sideW, bool flip, double widthMm, string tagOverride, out string message)
+        {
             var db = Util.Db;
             double w = Util.MmToDrawingUnits(widthMm);
             double minT = Util.MmToDrawingUnits(MinThickMm), maxT = Util.MmToDrawingUnits(MaxThickMm);
             var pick = new P2(pickW.X, pickW.Y);
+            var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
 
-            using (Util.Doc.LockDocument())
-            using (var tr = db.TransactionManager.StartTransaction())
+            // The wall layer is the layer of the line nearest the pick; its faces are every segment on that layer.
+            var near = Segments(tr, space, pick, maxT + w);
+            SegRef nearest = null; double nd = double.MaxValue;
+            foreach (var r in near)
             {
-                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                double d = OpeningCut.DistanceToSegment(r.Seg, pick);
+                if (d < nd) { nd = d; nearest = r; }
+            }
+            if (nearest == null || nd > maxT) { message = "no wall face near that point."; return false; }
+            var faces = near.Where(r => string.Equals(r.Layer, nearest.Layer, StringComparison.OrdinalIgnoreCase)).ToList();
 
-                // The wall layer is the layer of the line nearest the pick; its faces are every segment on that layer.
-                var near = Segments(tr, space, pick, maxT + w);
-                SegRef nearest = null; double nd = double.MaxValue;
-                foreach (var r in near)
+            string error;
+            var plan = OpeningCut.Plan(faces.Select(r => r.Seg).ToList(), pick, w, minT, maxT, out error);
+            if (plan == null) { message = error + "."; return false; }
+
+            // Turn the two faces into single lines (a polyline outline is exploded where it is cut).
+            var exploded = new Dictionary<ObjectId, List<Line>>();
+            Line first = Resolve(tr, space, faces[plan.First], exploded);
+            Line second = Resolve(tr, space, faces[plan.Second], exploded);
+            if (first == null || second == null) { message = "could not read the wall faces."; return false; }
+            string wallLayer = first.Layer;
+            double z = pickW.Z;
+
+            var p1a = plan.P1a; var p1b = plan.P1b; var p2a = plan.P2a; var p2b = plan.P2b;
+            Cut(tr, space, first, p1a, p1b);
+            Cut(tr, space, second, p2a, p2b);
+            AddLine(tr, space, p1a, p2a, wallLayer, z);
+            AddLine(tr, space, p1b, p2b, wallLayer, z);
+
+            var n = new P2(-plan.Dir.Y, plan.Dir.X);
+            var place = OpeningFrame.Compute(door, plan, new P2(sideW.X, sideW.Y), flip);
+            double thickMm = Math.Round(plan.Thickness / Util.MmToDrawingUnits(1.0));
+            string size = Math.Round(widthMm) + "x" + thickMm;
+            double textH = Util.MmToDrawingUnits(TagHeightMm);
+
+            P2 tagAt; string tag; string blockName;
+            if (door)
+            {
+                // Tag on the side the door does not swing to, just outside the wall.
+                var oppA = place.HingeOnFirst ? p2a : p1a; var oppB = place.HingeOnFirst ? p2b : p1b;
+                tagAt = (oppA + oppB) * 0.5 + n * (-place.Sw * textH);
+                blockName = "HCW_D_" + size;
+                EnsureDoorBlock(tr, db, blockName, w, plan.Thickness);
+            }
+            else
+            {
+                tagAt = (p1a + p1b) * 0.5 + n * (-place.S2 * textH);
+                blockName = "HCW_W_" + size;
+                EnsureWindowBlock(tr, db, blockName, w, plan.Thickness);
+            }
+            tag = tagOverride ?? NextTag(tr, space, door ? "D" : "W");
+            InsertBlock(tr, space, blockName, new Point3d(place.Origin.X, place.Origin.Y, z), place.Angle, place.Sx, place.Sy, door ? LayerDoor : LayerWin);
+
+            Util.EnsureHcwLayer(tr, db, LayerTag);
+            var text = new DBText
+            {
+                Position = new Point3d(tagAt.X, tagAt.Y, z),
+                Height = textH,
+                TextString = tag,
+                Layer = LayerTag,
+                HorizontalMode = TextHorizontalMode.TextCenter,
+                VerticalMode = TextVerticalMode.TextVerticalMid,
+            };
+            text.AlignmentPoint = new Point3d(tagAt.X, tagAt.Y, z);
+            space.AppendEntity(text);
+            tr.AddNewlyCreatedDBObject(text, true);
+
+            message = tag + " " + Math.Round(widthMm) + " mm in a " + thickMm + " mm wall.";
+            return true;
+        }
+
+        // ---- replace and move ----
+
+        private class OpeningInfo
+        {
+            public ObjectId Id;
+            public bool Door;
+            public double WidthMm, ThicknessMm;
+            public OpeningFrame.Corners Corners;
+            public double Z;
+        }
+
+        private static OpeningInfo SelectOpening(Editor ed, string prompt)
+        {
+            while (true)
+            {
+                var o = new PromptEntityOptions(prompt);
+                o.SetRejectMessage("\nSelect a door or window made by HCWDOOR or HCWWINDOW.");
+                o.AddAllowedClass(typeof(BlockReference), true);
+                var r = ed.GetEntity(o);
+                if (r.Status != PromptStatus.OK) return null;
+                using (var tr = Util.Db.TransactionManager.StartTransaction())
                 {
-                    double d = OpeningCut.DistanceToSegment(r.Seg, pick);
-                    if (d < nd) { nd = d; nearest = r; }
+                    var br = (BlockReference)tr.GetObject(r.ObjectId, OpenMode.ForRead);
+                    bool door; double wMm, tMm;
+                    if (!OpeningFrame.TryParseName(BlockOpenings.EffectiveName(tr, br), out door, out wMm, out tMm))
+                    {
+                        ed.WriteMessage("\nThat block is not a door or window made by HCWDOOR or HCWWINDOW (HCW_D_… or HCW_W_…).");
+                        continue;
+                    }
+                    double mm = Util.MmToDrawingUnits(1.0);
+                    var info = new OpeningInfo
+                    {
+                        Id = r.ObjectId, Door = door, WidthMm = wMm, ThicknessMm = tMm, Z = br.Position.Z,
+                        Corners = OpeningFrame.FromBlock(door, new P2(br.Position.X, br.Position.Y), br.Rotation,
+                            br.ScaleFactors.X, br.ScaleFactors.Y, wMm * mm, tMm * mm),
+                    };
+                    tr.Commit();
+                    return info;
                 }
-                if (nearest == null || nd > maxT) return "no wall face near that point.";
-                var faces = near.Where(r => string.Equals(r.Layer, nearest.Layer, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+        }
 
-                string error;
-                var plan = OpeningCut.Plan(faces.Select(r => r.Seg).ToList(), pick, w, minT, maxT, out error);
-                if (plan == null) return error + ".";
+        /// <summary>
+        /// Takes an opening out of the wall: erases its block, tag and jamb lines and bridges the gap in both faces.
+        /// Returns the tag text it had (null if no tag was found).
+        /// </summary>
+        private static string Heal(Transaction tr, BlockTableRecord space, OpeningInfo info)
+        {
+            double mm = Util.MmToDrawingUnits(1.0);
+            double tol = 2 * mm;                         // the block name rounds the wall thickness to a whole mm
+            var c = info.Corners;
+            double h = Util.MmToDrawingUnits(TagHeightMm);
 
-                // Turn the two faces into single lines (a polyline outline is exploded where it is cut).
-                var exploded = new Dictionary<ObjectId, List<Line>>();
-                Line first = Resolve(tr, space, faces[plan.First], exploded);
-                Line second = Resolve(tr, space, faces[plan.Second], exploded);
-                if (first == null || second == null) return "could not read the wall faces.";
-                string wallLayer = first.Layer;
-                double z = pickW.Z;
-
-                var p1a = plan.P1a; var p1b = plan.P1b; var p2a = plan.P2a; var p2b = plan.P2b;
-                Cut(tr, space, first, p1a, p1b);
-                Cut(tr, space, second, p2a, p2b);
-                AddLine(tr, space, p1a, p2a, wallLayer, z);
-                AddLine(tr, space, p1b, p2b, wallLayer, z);
-
-                // Orientation. n is the left normal of the first face; s2 is the side the second face lies on.
-                var u = plan.Dir;
-                var n = new P2(-u.Y, u.X);
-                double s2 = Math.Sign(P2.Cross(u, p2a - p1a));
-                double thickMm = Math.Round(plan.Thickness / Util.MmToDrawingUnits(1.0));
-                string size = Math.Round(widthMm) + "x" + thickMm;
-                double textH = Util.MmToDrawingUnits(TagHeightMm);
-                double ang = Math.Atan2(u.Y, u.X);
-
-                Point3d origin; double sx, sy; P2 tagAt; string tag;
-                if (door)
+            string wallLayer = null;
+            var pairs = new[] { new[] { c.FaceAStart, c.FaceBStart }, new[] { c.FaceAEnd, c.FaceBEnd } };
+            var rx = new Regex("^[DW]\\d+$", RegexOptions.IgnoreCase);
+            DBText tagText = null; double tagDist = double.MaxValue;
+            var lines = new List<Line>();
+            foreach (ObjectId id in space)
+            {
+                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null || ent.IsErased) continue;
+                var ln = ent as Line;
+                if (ln != null) { lines.Add(ln); continue; }
+                var t = ent as DBText;
+                if (t != null && string.Equals(t.Layer, LayerTag, StringComparison.OrdinalIgnoreCase) && rx.IsMatch(t.TextString ?? ""))
                 {
-                    var side = new P2(sideW.X, sideW.Y);
-                    double sw = Math.Sign(P2.Dot(side - p1a, n));
-                    if (sw == 0) sw = -s2;
-                    bool hingeOnFirst = sw == -s2;
-                    var a = hingeOnFirst ? p1a : p2a;
-                    var b = hingeOnFirst ? p1b : p2b;
-                    var o = flip ? b : a;
-                    origin = new Point3d(o.X, o.Y, z);
-                    sx = flip ? -1 : 1; sy = sw;
-                    // Tag on the side the door does not swing to, just outside the wall.
-                    var oppA = hingeOnFirst ? p2a : p1a; var oppB = hingeOnFirst ? p2b : p1b;
-                    tagAt = (oppA + oppB) * 0.5 + n * (-sw * textH * 1.0);
-                    EnsureDoorBlock(tr, db, "HCW_D_" + size, w, plan.Thickness);
-                    tag = NextTag(tr, space, "D");
-                    InsertBlock(tr, space, "HCW_D_" + size, origin, ang, sx, sy, LayerDoor);
+                    double d = new P2(t.Position.X, t.Position.Y).DistanceTo(c.Centre);
+                    double reach = Math.Max(info.WidthMm * mm, 4 * h);
+                    if (d <= reach && d < tagDist) { tagText = t; tagDist = d; }
+                }
+            }
+
+            // Jamb lines run across the wall between the two face corners at each end of the opening.
+            foreach (var pair in pairs)
+            {
+                foreach (var ln in lines)
+                {
+                    var a = new P2(ln.StartPoint.X, ln.StartPoint.Y); var b = new P2(ln.EndPoint.X, ln.EndPoint.Y);
+                    bool match = (a.DistanceTo(pair[0]) <= tol && b.DistanceTo(pair[1]) <= tol)
+                              || (a.DistanceTo(pair[1]) <= tol && b.DistanceTo(pair[0]) <= tol);
+                    if (!match || ln.IsErased) continue;
+                    wallLayer = ln.Layer;
+                    ln.UpgradeOpen();
+                    ln.Erase();
+                    break;
+                }
+            }
+
+            // Bridge each face across the gap, with the look of the face line next to it.
+            var faces = new[] { new[] { c.FaceAStart, c.FaceAEnd }, new[] { c.FaceBStart, c.FaceBEnd } };
+            foreach (var face in faces)
+            {
+                Line like = null;
+                foreach (var ln in lines)
+                {
+                    if (ln.IsErased) continue;
+                    if (wallLayer != null && !string.Equals(ln.Layer, wallLayer, StringComparison.OrdinalIgnoreCase)) continue;
+                    var a = new P2(ln.StartPoint.X, ln.StartPoint.Y); var b = new P2(ln.EndPoint.X, ln.EndPoint.Y);
+                    if (a.DistanceTo(face[0]) <= tol || a.DistanceTo(face[1]) <= tol || b.DistanceTo(face[0]) <= tol || b.DistanceTo(face[1]) <= tol) { like = ln; break; }
+                }
+                Line bridge;
+                if (like != null)
+                {
+                    bridge = (Line)like.Clone();
+                    bridge.StartPoint = new Point3d(face[0].X, face[0].Y, info.Z);
+                    bridge.EndPoint = new Point3d(face[1].X, face[1].Y, info.Z);
                 }
                 else
                 {
-                    origin = new Point3d(p1a.X, p1a.Y, z);
-                    sx = 1; sy = s2;
-                    tagAt = (p1a + p1b) * 0.5 + n * (-s2 * textH * 1.0);
-                    EnsureWindowBlock(tr, db, "HCW_W_" + size, w, plan.Thickness);
-                    tag = NextTag(tr, space, "W");
-                    InsertBlock(tr, space, "HCW_W_" + size, origin, ang, sx, sy, LayerWin);
+                    bridge = new Line(new Point3d(face[0].X, face[0].Y, info.Z), new Point3d(face[1].X, face[1].Y, info.Z)) { Layer = wallLayer ?? WallCommands.WallLayer };
                 }
-
-                Util.EnsureHcwLayer(tr, db, LayerTag);
-                var text = new DBText
-                {
-                    Position = new Point3d(tagAt.X, tagAt.Y, z),
-                    Height = textH,
-                    TextString = tag,
-                    Layer = LayerTag,
-                    HorizontalMode = TextHorizontalMode.TextCenter,
-                    VerticalMode = TextVerticalMode.TextVerticalMid,
-                };
-                text.AlignmentPoint = new Point3d(tagAt.X, tagAt.Y, z);
-                space.AppendEntity(text);
-                tr.AddNewlyCreatedDBObject(text, true);
-
-                tr.Commit();
-                return tag + " " + Math.Round(widthMm) + " mm in a " + thickMm + " mm wall.";
+                space.AppendEntity(bridge);
+                tr.AddNewlyCreatedDBObject(bridge, true);
             }
+
+            string tag = tagText?.TextString;
+            if (tagText != null) { tagText.UpgradeOpen(); tagText.Erase(); }
+            var block = tr.GetObject(info.Id, OpenMode.ForWrite);
+            block.Erase();
+            return tag;
+        }
+
+        /// <summary>Asks the side a door opens to. With previous swing, Enter keeps it.</summary>
+        private static bool AskSwing(Editor ed, bool hasPrevious, ref bool flip, out Point3d? side)
+        {
+            side = null;
+            while (true)
+            {
+                var o = new PromptPointOptions("\nPick the side the door opens to [Flip hinge]" + (hasPrevious ? " <same as before>" : "") + ": ", "Flip")
+                    { AllowNone = hasPrevious };
+                var r = ed.GetPoint(o);
+                if (r.Status == PromptStatus.Keyword) { flip = !flip; ed.WriteMessage("\nHinge on the other end."); continue; }
+                if (r.Status == PromptStatus.None && hasPrevious) return true;
+                if (r.Status != PromptStatus.OK) return false;
+                side = r.Value.TransformBy(ed.CurrentUserCoordinateSystem);
+                return true;
+            }
+        }
+
+        [CommandMethod("HCWOPENMOVE")]
+        public void MoveOpening()
+        {
+            var ed = Util.Ed;
+            var info = SelectOpening(ed, "\nSelect the door or window to move: ");
+            if (info == null) return;
+
+            var pr = ed.GetPoint(new PromptPointOptions("\nPick the new position on the wall: "));
+            if (pr.Status != PromptStatus.OK) return;
+            var pick = pr.Value.TransformBy(ed.CurrentUserCoordinateSystem);
+
+            bool flip = info.Corners.Flipped;
+            Point3d? side = null;
+            if (info.Door && !AskSwing(ed, true, ref flip, out side)) return;
+
+            string message;
+            using (Util.Doc.LockDocument())
+            using (var tr = Util.Db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(Util.Db.CurrentSpaceId, OpenMode.ForWrite);
+                string tag = Heal(tr, space, info);
+                Point3d sideW = side ?? PreviousSide(info, pick);
+                if (!PlaceIn(tr, info.Door, new Point3d(pick.X, pick.Y, info.Z), sideW, flip, info.WidthMm, tag, out message))
+                {
+                    ed.WriteMessage("\nHCWOPENMOVE: " + message + " The opening was left where it was.");
+                    return;                                             // uncommitted: the heal is rolled back
+                }
+                tr.Commit();
+            }
+            ed.WriteMessage("\nHCWOPENMOVE: " + message);
+        }
+
+        [CommandMethod("HCWOPENREPLACE")]
+        public void ReplaceOpening()
+        {
+            var ed = Util.Ed;
+            var info = SelectOpening(ed, "\nSelect the door or window to replace: ");
+            if (info == null) return;
+
+            var ko = new PromptKeywordOptions("\nReplace with [Door/Window] <" + (info.Door ? "Door" : "Window") + ">: ", "Door Window") { AllowNone = true };
+            ko.Keywords.Default = info.Door ? "Door" : "Window";
+            var kr = ed.GetKeywords(ko);
+            bool door = info.Door;
+            if (kr.Status == PromptStatus.OK) door = kr.StringResult == "Door";
+            else if (kr.Status != PromptStatus.None) return;
+
+            double defaultMm = door == info.Door ? info.WidthMm : (door ? _doorMm : _windowMm);
+            var wr = ed.GetDouble(new PromptDoubleOptions("\nWidth in mm <" + defaultMm + ">: ")
+                { AllowNegative = false, AllowZero = false, DefaultValue = defaultMm, UseDefaultValue = true });
+            if (wr.Status != PromptStatus.OK) return;
+            double widthMm = wr.Value;
+
+            bool flip = door && info.Door && info.Corners.Flipped;
+            Point3d? side = null;
+            if (door && !AskSwing(ed, info.Door, ref flip, out side)) return;
+
+            var centre = new Point3d(info.Corners.Centre.X, info.Corners.Centre.Y, info.Z);
+            string message;
+            using (Util.Doc.LockDocument())
+            using (var tr = Util.Db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(Util.Db.CurrentSpaceId, OpenMode.ForWrite);
+                string tag = Heal(tr, space, info);
+                Point3d sideW = side ?? PreviousSide(info, centre);
+                string keep = door == info.Door ? tag : null;           // the same kind keeps its number
+                if (!PlaceIn(tr, door, centre, sideW, flip, widthMm, keep, out message))
+                {
+                    ed.WriteMessage("\nHCWOPENREPLACE: " + message + " The opening was left as it was.");
+                    return;
+                }
+                tr.Commit();
+            }
+            if (door) _doorMm = widthMm; else _windowMm = widthMm;
+            ed.WriteMessage("\nHCWOPENREPLACE: " + message);
+        }
+
+        /// <summary>A point on the side the old door swung to, beyond the thickest wall, for use at a new position.</summary>
+        private static Point3d PreviousSide(OpeningInfo info, Point3d at)
+        {
+            double far = 2 * Util.MmToDrawingUnits(MaxThickMm);
+            var s = info.Corners.Swing;
+            return new Point3d(at.X + s.X * far, at.Y + s.Y * far, at.Z);
         }
 
         /// <summary>Straight segments of lines and polylines whose box comes within reach of the pick.</summary>

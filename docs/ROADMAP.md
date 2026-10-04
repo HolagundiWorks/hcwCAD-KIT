@@ -44,7 +44,7 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 - **Join on draw:** merge a new wall into the walls it touches as it is drawn, instead of a separate `HCWWALLJOIN`.
 - **Wall objects:** keep the centre line and thickness with the wall so a wall can be edited and the openings follow it.
 - **Opening types:** double leaf and sliding doors, door thickness and frame, sill and lintel heights as block attributes feeding the schedule.
-- **Replace and move:** swap a door for a window, and move an opening along its wall with the cut following.
+- **Replace and move:** done for blocks made by `HCWDOOR` and `HCWWINDOW`. Still to do: openings drawn some other way, moving several at once, and dragging an opening along its wall with the cut following live.
 - **Grid editing:** add or remove a grid line.
 - **Columns:** different sizes at chosen intersections in one pass, a column on `MEASURE-COLUMN` for the take-off without moving it, grid-anchored offsets (edge columns flush with a wall face), and column blocks with a mark attribute.
 
