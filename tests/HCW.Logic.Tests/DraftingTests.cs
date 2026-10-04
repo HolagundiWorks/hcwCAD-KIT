@@ -828,3 +828,160 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class PlanarRoomsTests
+    {
+        private static IEnumerable<Seg> Rect(double x0, double y0, double x1, double y1)
+        {
+            yield return new Seg(new P2(x0, y0), new P2(x1, y0));
+            yield return new Seg(new P2(x1, y0), new P2(x1, y1));
+            yield return new Seg(new P2(x1, y1), new P2(x0, y1));
+            yield return new Seg(new P2(x0, y1), new P2(x0, y0));
+        }
+
+        private static double Area(List<P2> p) => Math.Abs(PlanarRooms.SignedArea(p));
+
+        [Fact]
+        public void FindsASimpleRoom()
+        {
+            string err;
+            var room = PlanarRooms.Find(Rect(0, 0, 4, 3).ToList(), new P2(2, 1.5), 1e-6, out err);
+            Assert.NotNull(room);
+            Assert.Equal(4, room.Count);
+            Assert.Equal(12.0, Area(room), 9);
+            Assert.True(PlanarRooms.SignedArea(room) > 0);     // counter-clockwise
+        }
+
+        [Fact]
+        public void PointOutsideEverythingFindsNothing()
+        {
+            string err;
+            Assert.Null(PlanarRooms.Find(Rect(0, 0, 4, 3).ToList(), new P2(10, 10), 1e-6, out err));
+            Assert.Contains("not inside", err);
+            Assert.Null(PlanarRooms.Find(new List<Seg>(), new P2(0, 0), 1e-6, out err));
+        }
+
+        [Fact]
+        public void RoomInsideATwoLoopWallRingIsTheInnerLoop()
+        {
+            // Outer face 0..4.46 x 0..3.46, inner face 0.23..4.23 x 0.23..3.23: the room is the inner loop, not the wall body.
+            var segs = Rect(0, 0, 4.46, 3.46).Concat(Rect(0.23, 0.23, 4.23, 3.23)).ToList();
+            string err;
+            var room = PlanarRooms.Find(segs, new P2(2, 2), 1e-6, out err);
+            Assert.Equal(4.0 * 3.0, Area(room), 9);
+            // A point in the wall body itself finds the body's outer loop (the smallest closed region holding it).
+            var body = PlanarRooms.Find(segs, new P2(0.1, 0.1), 1e-6, out err);
+            Assert.Equal(4.46 * 3.46, Area(body), 9);
+        }
+
+        [Fact]
+        public void TwoRoomsShareAWallAndCrossingsAreCut()
+        {
+            // A 8 x 4 box with a partition line across the middle that runs the full height and overshoots both ends.
+            var segs = Rect(0, 0, 8, 4).ToList();
+            segs.Add(new Seg(new P2(4, -1), new P2(4, 5)));
+            string err;
+            var left = PlanarRooms.Find(segs, new P2(2, 2), 1e-6, out err);
+            var right = PlanarRooms.Find(segs, new P2(6, 2), 1e-6, out err);
+            Assert.Equal(16.0, Area(left), 9);
+            Assert.Equal(16.0, Area(right), 9);
+        }
+
+        [Fact]
+        public void CrossedLinesMakeFourRooms()
+        {
+            var segs = Rect(0, 0, 6, 6).ToList();
+            segs.Add(new Seg(new P2(3, 0), new P2(3, 6)));
+            segs.Add(new Seg(new P2(0, 3), new P2(6, 3)));
+            string err;
+            foreach (var p in new[] { new P2(1, 1), new P2(5, 1), new P2(1, 5), new P2(5, 5) })
+                Assert.Equal(9.0, Area(PlanarRooms.Find(segs, p, 1e-6, out err)), 9);
+        }
+
+        [Fact]
+        public void LShapedRoomKeepsItsCorner()
+        {
+            var l = new[] { new P2(0, 0), new P2(6, 0), new P2(6, 2), new P2(2, 2), new P2(2, 5), new P2(0, 5) };
+            var segs = l.Select((p, i) => new Seg(p, l[(i + 1) % l.Length])).ToList();
+            string err;
+            var room = PlanarRooms.Find(segs, new P2(1, 1), 1e-6, out err);
+            Assert.Equal(6.0 * 2 + 2.0 * 3, Area(room), 9);
+            Assert.Equal(6, room.Count);
+        }
+
+        [Fact]
+        public void SpursInsideTheRoomAreIgnored()
+        {
+            var segs = Rect(0, 0, 4, 3).ToList();
+            segs.Add(new Seg(new P2(0, 1.5), new P2(2, 1.5)));       // a stub from the wall into the room
+            string err;
+            var room = PlanarRooms.Find(segs, new P2(3, 1), 1e-6, out err);
+            Assert.Equal(12.0, Area(room), 9);
+            Assert.Equal(4, room.Count);                              // the stub's point is simplified away
+        }
+
+        [Fact]
+        public void EndsThatOnlyJustMissAreJoinedWithinTolerance()
+        {
+            var segs = new List<Seg>
+            {
+                new Seg(new P2(0, 0), new P2(4, 0)),
+                new Seg(new P2(4.0005, 0), new P2(4, 3)),     // starts 0.5 mm off
+                new Seg(new P2(4, 3), new P2(0, 3)),
+                new Seg(new P2(0, 3), new P2(0, 0)),
+            };
+            string err;
+            Assert.NotNull(PlanarRooms.Find(segs, new P2(2, 1), 0.001, out err));
+            Assert.Null(PlanarRooms.Find(segs, new P2(2, 1), 0.0001, out err));    // tighter than the miss: the room is open
+        }
+
+        [Fact]
+        public void AnOpenRoomFallsIntoTheRegionAroundIt()
+        {
+            // The partition stops short of the north wall: the two halves are one room.
+            var segs = Rect(0, 0, 8, 4).ToList();
+            segs.Add(new Seg(new P2(4, 0), new P2(4, 3)));
+            string err;
+            var room = PlanarRooms.Find(segs, new P2(2, 2), 1e-6, out err);
+            Assert.Equal(32.0, Area(room), 9);
+        }
+
+        [Fact]
+        public void CollinearOverlappingFacesDoNotBreakIt()
+        {
+            // The south wall drawn as two overlapping lines, plus a duplicate of the east wall.
+            var segs = new List<Seg>
+            {
+                new Seg(new P2(0, 0), new P2(3, 0)), new Seg(new P2(2, 0), new P2(4, 0)),
+                new Seg(new P2(4, 0), new P2(4, 3)), new Seg(new P2(4, 3), new P2(4, 0)),
+                new Seg(new P2(4, 3), new P2(0, 3)), new Seg(new P2(0, 3), new P2(0, 0)),
+            };
+            string err;
+            var room = PlanarRooms.Find(segs, new P2(2, 1), 1e-6, out err);
+            Assert.Equal(12.0, Area(room), 9);
+        }
+    }
+}
+
+namespace HCW.Logic.Tests
+{
+    public class CentroidTests
+    {
+        [Fact]
+        public void CentroidOfARectangleAndAnL()
+        {
+            var r = PlanarRooms.Centroid(new[] { new P2(0, 0), new P2(4, 0), new P2(4, 2), new P2(0, 2) });
+            Assert.Equal(2.0, r.X, 9); Assert.Equal(1.0, r.Y, 9);
+            // L: 6x2 bar plus 2x3 block above its left end; centroid by area weighting
+            var l = PlanarRooms.Centroid(new[] { new P2(0, 0), new P2(6, 0), new P2(6, 2), new P2(2, 2), new P2(2, 5), new P2(0, 5) });
+            double a1 = 12, a2 = 6;
+            Assert.Equal((a1 * 3 + a2 * 1) / (a1 + a2), l.X, 9);
+            Assert.Equal((a1 * 1 + a2 * 3.5) / (a1 + a2), l.Y, 9);
+            // No area: average of the corners.
+            var line = PlanarRooms.Centroid(new[] { new P2(0, 0), new P2(2, 0), new P2(4, 0) });
+            Assert.Equal(2.0, line.X, 9);
+        }
+    }
+}
