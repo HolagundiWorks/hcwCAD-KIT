@@ -83,6 +83,8 @@ namespace HCW.AutoCAD.Plugin
             Entry("ElectricalLabelLayer", "EL-LABELS", "Electrical: layer for the ID text."),
             Entry("ElectricalLabelHeightMm", "0", "Electrical: real-size height of the ID text in millimetres; 0 sizes it from the block (at least 150 mm)."),
             Entry("ElectricalTableTextMm", "2.5", "Electrical: plotted text height of the schedules, in millimetres."),
+            Entry("AreaFarPermittedPercent", "0", "HCWAREASTMT: permissible floor area ratio as a percentage of the site (125 for an FAR of 1.25). Fills FAR_PERM and flags a statement that goes over it. 0 leaves it for you to type. Take it from the bylaws for the plot."),
+            Entry("AreaGroundCoverPermittedPercent", "0", "HCWAREASTMT: permissible ground cover as a percentage of the site. Fills GC_PERM (in square metres) and flags a statement that goes over it. 0 leaves it for you to type."),
             Entry("StairInputUnit", "Auto", "AECSTAIR: unit of the numbers you type: Auto (mm in a metric drawing, in in a feet or inches drawing), mm, cm, m, in or ft."),
             Entry("StairPreferredRiseMm", "165", "AECSTAIR: the rise the automatic riser count aims for, in millimetres."),
             Entry("StairMaxRiseMm", "190", "AECSTAIR check: largest rise, in millimetres."),

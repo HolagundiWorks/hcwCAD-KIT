@@ -1398,3 +1398,53 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class AreaPermissibleTests
+    {
+        private static List<FloorInput> Floors() => new List<FloorInput>
+        {
+            new FloorInput { Name = "GROUND", Gross = 100, Deduction = 10 },
+            new FloorInput { Name = "FIRST", Gross = 90, Deduction = 12.5 },
+        };
+
+        [Fact]
+        public void PermissibleValuesFillTheFieldsAndPassWhenInside()
+        {
+            var s = AreaStatement.Compute(Floors(), 200, 125, 60);            // FAR 83.75 %, cover 50 %
+            Assert.Empty(s.Warnings);
+            Assert.Equal(120, s.GroundCoverPermitted.Value, 9);
+            var f = s.ToFields();
+            Assert.Equal("125.00", f["FAR_PERM"]);
+            Assert.Equal("120.00", f["GC_PERM"]);
+        }
+
+        [Fact]
+        public void GoingOverIsWarned()
+        {
+            var s = AreaStatement.Compute(Floors(), 200, 80, 40);
+            Assert.Contains(s.Warnings, w => w.Contains("F.A.R.") && w.Contains("80.00"));
+            Assert.Contains(s.Warnings, w => w.Contains("Ground cover") && w.Contains("40.00"));
+            // exactly on the limit is not over
+            Assert.Empty(AreaStatement.Compute(Floors(), 200, 83.75, 50).Warnings);
+        }
+
+        [Fact]
+        public void NotGivenLeavesTheFieldsOutSoTypedValuesStay()
+        {
+            var f = AreaStatement.Compute(Floors(), 200).ToFields();
+            Assert.False(f.ContainsKey("FAR_PERM"));
+            Assert.False(f.ContainsKey("GC_PERM"));
+        }
+
+        [Fact]
+        public void NoSiteMeansNoPermittedGroundCoverArea()
+        {
+            var s = AreaStatement.Compute(Floors(), 0, 125, 60);
+            Assert.Null(s.GroundCoverPermitted);
+            Assert.False(s.ToFields().ContainsKey("GC_PERM"));
+            Assert.Equal("125.00", s.ToFields()["FAR_PERM"]);
+        }
+    }
+}

@@ -75,7 +75,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 floors.Add(new FloorInput { Name = name, Gross = gross.Sqm, Deduction = ded.Sqm });
             }
 
-            var stmt = AreaStatement.Compute(floors, site);
+            var stmt = AreaStatement.Compute(floors, site, Settings.GetDouble("AreaFarPermittedPercent", 0), Settings.GetDouble("AreaGroundCoverPermittedPercent", 0));
             Report(ed, stmt);
 
             // Title blocks anywhere in the drawing.
@@ -169,6 +169,9 @@ namespace HCW.AutoCAD.Plugin.Commands
                 ed.WriteMessage("\n  Site area " + AreaStatement.Fmt(s.Site)
                     + "   F.A.R. " + AreaStatement.Fmt(s.FarPercent.Value) + " %"
                     + "   Ground cover " + AreaStatement.Fmt(s.GroundCover) + " (" + AreaStatement.Fmt(s.GroundCoverPercent.Value) + " %)");
+                if (s.FarPermittedPercent > 0 || s.GroundCoverPermittedPercent > 0)
+                    ed.WriteMessage("\n  Permissible: F.A.R. " + (s.FarPermittedPercent > 0 ? AreaStatement.Fmt(s.FarPermittedPercent) + " %" : "not set")
+                        + "   ground cover " + (s.GroundCoverPermitted.HasValue ? AreaStatement.Fmt(s.GroundCoverPermitted.Value) + " sq m (" + AreaStatement.Fmt(s.GroundCoverPermittedPercent) + " %)" : "not set"));
             }
             foreach (var w in s.Warnings) ed.WriteMessage("\n  WARNING: " + w);
         }

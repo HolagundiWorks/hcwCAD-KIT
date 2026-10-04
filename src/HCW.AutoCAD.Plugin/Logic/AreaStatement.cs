@@ -31,12 +31,16 @@ namespace HCW.AutoCAD.Plugin.Logic
         /// <summary>Footprint of the first (ground) floor, and its percentage of the site.</summary>
         public double GroundCover;
         public double? GroundCoverPercent;
+        /// <summary>Permissible floor area ratio (percent of the site) and ground cover (percent of the site); 0 when not given.</summary>
+        public double FarPermittedPercent, GroundCoverPermittedPercent;
+        /// <summary>Permissible ground cover in square metres (site area x percentage), or null when not worked out.</summary>
+        public double? GroundCoverPermitted;
         public List<string> Warnings = new List<string>();
 
         /// <summary>Net = gross less deductions (never below 0). The first floor listed is the ground floor for ground cover.</summary>
-        public static AreaStatement Compute(IList<FloorInput> floors, double siteArea)
+        public static AreaStatement Compute(IList<FloorInput> floors, double siteArea, double farPermittedPercent = 0, double groundCoverPermittedPercent = 0)
         {
-            var s = new AreaStatement { Site = siteArea };
+            var s = new AreaStatement { Site = siteArea, FarPermittedPercent = farPermittedPercent, GroundCoverPermittedPercent = groundCoverPermittedPercent };
             foreach (var f in floors)
             {
                 double net = f.Gross - f.Deduction;
@@ -61,6 +65,12 @@ namespace HCW.AutoCAD.Plugin.Logic
                 }
             }
             else s.Warnings.Add("No site area, so the floor area ratio and ground cover are not worked out.");
+
+            if (siteArea > 0 && groundCoverPermittedPercent > 0) s.GroundCoverPermitted = siteArea * groundCoverPermittedPercent / 100.0;
+            if (s.FarPercent.HasValue && farPermittedPercent > 0 && s.FarPercent.Value > farPermittedPercent + 1e-9)
+                s.Warnings.Add("F.A.R. " + Fmt(s.FarPercent.Value) + " % is more than the permissible " + Fmt(farPermittedPercent) + " %.");
+            if (s.GroundCoverPercent.HasValue && groundCoverPermittedPercent > 0 && s.GroundCoverPercent.Value > groundCoverPermittedPercent + 1e-9)
+                s.Warnings.Add("Ground cover " + Fmt(s.GroundCoverPercent.Value) + " % is more than the permissible " + Fmt(groundCoverPermittedPercent) + " %.");
             return s;
         }
 
@@ -87,6 +97,9 @@ namespace HCW.AutoCAD.Plugin.Logic
             d["FAR_ACH"] = FarPercent.HasValue ? Fmt(FarPercent.Value) : "--";
             d["GC_ACH"] = GroundCoverPercent.HasValue ? Fmt(GroundCover) : "--";
             d["GC_PCT"] = GroundCoverPercent.HasValue ? Fmt(GroundCoverPercent.Value) : "--";
+            // The permissible values are only written when they were given, so a typed value is not overwritten by dashes.
+            if (FarPermittedPercent > 0) d["FAR_PERM"] = Fmt(FarPermittedPercent);
+            if (GroundCoverPermitted.HasValue) d["GC_PERM"] = Fmt(GroundCoverPermitted.Value);
             return d;
         }
 
