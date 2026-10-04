@@ -53,6 +53,7 @@ namespace HCW.AutoCAD.Plugin.UI
             toolsTab.Panels.Add(BuildElectricalPanel());
             toolsTab.Panels.Add(BuildStairPanel());
             toolsTab.Panels.Add(BuildWallsPanel());
+            toolsTab.Panels.Add(BuildSymbolsPanel());
             toolsTab.Panels.Add(BuildAreaTextPanel());
 
             var settingsTab = new RibbonTab { Title = "hcwCAD-KIT Settings", Id = SettingsTabId };
@@ -220,6 +221,16 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWAXIS", "Axis\nGrid", "grid", "Draw a column grid from bay widths, with numbered and lettered bubbles");
             AddLarge(src, "HCWCOLUMN", "Place\nColumns", "column", "Put a column of one size on every grid intersection, or those in a window");
             AddLarge(src, "HCWCOLSCHED", "Column\nSchedule", "table-of-contents", "Mark every column C1, C2 ... by size and draw the column schedule");
+            return Wrap(src);
+        }
+
+        private RibbonPanel BuildSymbolsPanel()
+        {
+            var src = NewSource("Symbols");
+            AddLarge(src, "HCWLEVEL", "Level\nMark", "ruler", "Place level marks with their value: typed, or worked out from a datum by height");
+            AddLarge(src, "HCWNORTH", "North\nArrow", "flag", "Place a north arrow, turned to the direction you pick");
+            AddLarge(src, "HCWSECTION", "Section\nMarker", "rule", "Draw a section line with a lettered head at each end, looking to the side you pick");
+            AddLarge(src, "HCWSLOPE", "Slope\nArrow", "text--vertical-alignment", "Draw a slope arrow with its text, such as 1:100 or 2%");
             return Wrap(src);
         }
 

@@ -10,7 +10,7 @@ What is not built yet. Everything else is described in the [README](../README.md
 2. **Openings from wall gaps.** A break in a wall line is not yet labelled as an opening. **Non-rectangular rooms.** Openings along the edges of L-shaped and other outlines (today only rectangular rooms get them).
 3. **Cross-chain collisions.** Rows stop a chain overprinting itself; a text moved to row 3 can still meet the next chain's text at some step and scale settings.
 4. **Associative dimensions**, so moving a wall updates them.
-5. **Levels and tags.** Level marks, opening tags (`D1`, `W1`) from the schedule, and room names beside the room dimensions.
+5. **Levels and tags.** Level marks are built (`HCWLEVEL`). Still to do: opening tags (`D1`, `W1`) from the schedule, and room names beside the room dimensions.
 
 Open questions: single-line (centreline) walls and mixed drawings are not handled: only faces (two lines or a closed outline).
 
@@ -47,6 +47,15 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 - **Replace and move:** done for blocks made by `HCWDOOR` and `HCWWINDOW`. Still to do: openings drawn some other way, moving several at once, and dragging an opening along its wall with the cut following live.
 - **Grid editing:** add or remove a grid line.
 - **Columns:** different sizes at chosen intersections in one pass, a column on `MEASURE-COLUMN` for the take-off without moving it, grid-anchored offsets (edge columns flush with a wall face), and column blocks with a mark attribute.
+
+## Symbols
+
+`HCWLEVEL`, `HCWNORTH`, `HCWSECTION` and `HCWSLOPE` are built (see the README). Still to do:
+
+- **Elevation marker:** the circle with an elevation number over its sheet number.
+- **Section heads from the sheet set:** fill the sheet number in the section bubble from the layout it is drawn on.
+- **Level marks:** the upward-pointing variant for ceiling levels, and a level schedule from the `LEVEL` attributes.
+- **Live datum:** level marks that update when the datum moves.
 
 ## Take-off
 

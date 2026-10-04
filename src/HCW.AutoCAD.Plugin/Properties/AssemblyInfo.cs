@@ -37,5 +37,6 @@ using Autodesk.AutoCAD.Runtime;
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.OpeningCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.AxisGridCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.ColumnCommands))]
+[assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.SymbolCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.ElectricalCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.StairCommands))]

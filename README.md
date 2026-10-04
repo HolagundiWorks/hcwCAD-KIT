@@ -260,6 +260,19 @@ These tools are on the **Walls & Openings** panel of the hcwCAD-KIT tab. They dr
 
 An opening is refused, with the reason, when the pick is not near a wall, there is no opposite face, or the opening would run past the end of a face. Columns are on `A-COL`, which `AUTODIM` can read as its column layer; to measure them with `MCOL`, move them to `MEASURE-COLUMN` (the rectangles are plain closed polylines). Run `HCWWALLJOIN` before cutting openings if junctions need to be clean, since a cut works on the faces as they are.
 
+### Symbols
+
+The **Symbols** panel (hcwCAD-KIT tab) draws symbols sized for the sheet. Each command asks the plot scale once, remembers it, and draws the symbol in sheet millimetres times that scale, so it plots at the same size at 1:50 or 1:200. Symbols go on `AN-SYMB`; loose text goes on `AN-TEXT`.
+
+| Command | What it does |
+|---|---|
+| `HCWLEVEL` | Places level marks (a triangle on the level point, a line, and the value above it) as the block `HCW_LEVEL` with an editable `LEVEL` attribute. Pick the point. The value comes from the datum: choose **Datum**, pick a point and give its level in metres, and every later mark takes its level from its height above or below that point. Or choose **Value** and type the level for the next mark. With no datum it asks each time. Values read `+3.150`, `-0.450`, `±0.000`. Enter ends the command. |
+| `HCWNORTH` | Places the north arrow (block `HCW_NORTH`: circle, half-filled arrow, N). Pick the position, then a point in the direction of north; Enter points it up the screen. |
+| `HCWSECTION` | Pick the start and end of the section line and the side you look toward, then the label (default A, then B, C … without I and O). Draws the section line in centre linetype, a thick shaft at each end pointing the way you look, and a lettered bubble on each. |
+| `HCWSLOPE` | Type the slope text (`1:100`, `2%`), then pick the high end and the low end. Draws the line, an arrow head at the low end and the text above the middle, turned so it reads left to right. Enter ends the command. |
+
+An elevation marker (the circle with an elevation number over a sheet number) is not built yet.
+
 ### Auto dimension (working drawings)
 
 Four commands make the dimensions for a working drawing. **`AUTODIM`** and **`AUTODIMROOM`** open a layer dialog first; you tick the layers that hold each part of the plan:

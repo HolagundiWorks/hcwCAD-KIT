@@ -444,3 +444,55 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class SymbolMathTests
+    {
+        [Theory]
+        [InlineData(0, "±0.000")]
+        [InlineData(0.0004, "±0.000")]
+        [InlineData(3.15, "+3.150")]
+        [InlineData(-0.45, "-0.450")]
+        [InlineData(0.0005, "+0.001")]
+        [InlineData(-12.3456, "-12.346")]
+        public void LevelText(double v, string want) => Assert.Equal(want, SymbolMath.LevelText(v));
+
+        [Fact]
+        public void LevelFromDatum()
+        {
+            // metre drawing: 1 unit per metre
+            Assert.Equal(3.15, SymbolMath.LevelFromDatum(0, 10, 13.15, 1), 9);
+            // millimetre drawing: 1000 units per metre; datum +1.200 at y 5000, point 450 mm lower
+            Assert.Equal(0.75, SymbolMath.LevelFromDatum(1.2, 5000, 4550, 1000), 9);
+            Assert.Throws<ArgumentOutOfRangeException>(() => SymbolMath.LevelFromDatum(0, 0, 0, 0));
+        }
+
+        [Theory]
+        [InlineData(0, 0)]
+        [InlineData(45, 45)]
+        [InlineData(90, 90)]
+        [InlineData(135, -45)]
+        [InlineData(180, 0)]
+        [InlineData(-90, 90)]
+        [InlineData(-135, 45)]
+        [InlineData(270, 90)]
+        [InlineData(360, 0)]
+        public void ReadableAngle(double deg, double want) =>
+            Assert.Equal(want, SymbolMath.ReadableAngle(deg * Math.PI / 180) * 180 / Math.PI, 6);
+
+        [Fact]
+        public void LookNormalPointsToTheChosenSide()
+        {
+            var a = new P2(0, 0); var b = new P2(4, 0);
+            var up = SymbolMath.LookNormal(a, b, new P2(2, 3));
+            var down = SymbolMath.LookNormal(a, b, new P2(2, -3));
+            Assert.Equal(1.0, up.Y, 9); Assert.Equal(0.0, up.X, 9);
+            Assert.Equal(-1.0, down.Y, 9);
+            // On the line: the left normal.
+            Assert.Equal(1.0, SymbolMath.LookNormal(a, b, new P2(2, 0)).Y, 9);
+            // Degenerate line.
+            Assert.Equal(1.0, SymbolMath.LookNormal(a, a, new P2(1, 1)).Y, 9);
+        }
+    }
+}
