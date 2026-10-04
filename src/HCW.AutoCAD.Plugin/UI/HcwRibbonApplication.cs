@@ -239,6 +239,7 @@ namespace HCW.AutoCAD.Plugin.UI
         {
             var src = NewSource("Area & Text Tools");
             AddLarge(src, "POLYAREA", "Poly\nArea", "area--custom", "Number selected polylines and draw a running-total area table");
+            AddLarge(src, "HCWAREASTMT", "Area\nStatement", "report--data", "Building permit area statement: floor areas, net, FAR and ground cover, filled into the title block");
             AddLarge(src, "HCWSTYLES", "Text\nStyles", "text--font", "Create HCW-SITE, HCW-WORKING and HCW-DETAIL text and dimension styles");
             AddSmallGroup(src,
                 ("INCARRAY", "Inc Array", "add--alt", "Array the selection and increment every number in the copied text, attributes and dimensions"),

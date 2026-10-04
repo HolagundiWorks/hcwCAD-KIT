@@ -39,5 +39,6 @@ using Autodesk.AutoCAD.Runtime;
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.ColumnCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.SymbolCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.RailCommands))]
+[assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.AreaStatementCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.ElectricalCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.StairCommands))]

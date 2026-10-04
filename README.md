@@ -274,6 +274,18 @@ The **Symbols** panel (hcwCAD-KIT tab) draws symbols sized for the sheet. Each c
 
 An elevation marker (the circle with an elevation number over a sheet number) is not built yet.
 
+### Area statement (`HCWAREASTMT`)
+
+The **Area Statement** button (Area & Text panel) builds the building permit area statement and fills the title block. Run it from any tab; it switches to Model to select and switches back. Areas are in square metres whatever the drawing units.
+
+1. Select the **site boundary** (a closed polyline; Enter skips it, and then the floor area ratio and ground cover are not worked out).
+2. Give the **number of floors** (1 to 12) and a name for each (defaults GROUND, FIRST, SECOND …).
+3. For each floor, select its **built-up outlines** (closed polylines; Enter if none), then the **areas left out of the FAR** such as shafts, ducts and the lift (Enter if none). Open polylines are skipped and counted.
+
+It prints a table: gross, deduction and net per floor, the totals, the site area, the F.A.R. (total net area as a percentage of the site) and ground cover (the first floor's gross area, and its percentage of the site). It warns when a floor's deductions exceed its area, or ground cover is more than the site.
+
+Every hcwCAD-KIT title block in the drawing, in model space or on any layout, can then be filled: `SITE_AREA`, `FL1`–`FL4` with their `DED`, `NET` and `GROSS`, `TOT_DED`, `TOT_NET`, `TOT_GROSS`, `FAR_ACH`, `GC_ACH` and `GC_PCT`. Unused floor rows read `--`. The title block has four floor rows, so floors 5 and up count in the totals only. The permissible values (`FAR_PERM`, `GC_PERM`) stay for you to type. Finally you can pick a point to draw the same figures as a table on `AN-TEXT`.
+
 ### Auto dimension (working drawings)
 
 Four commands make the dimensions for a working drawing. **`AUTODIM`** and **`AUTODIMROOM`** open a layer dialog first; you tick the layers that hold each part of the plan:

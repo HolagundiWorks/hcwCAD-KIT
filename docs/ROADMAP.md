@@ -65,6 +65,15 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 - **Wall numbering by room.** Today: left to right, top to bottom, or along a picked path.
 - **Deduction matching.** Index walls by bounding box for very large selections (a box test already rejects most pairs).
 
+## Area statement
+
+`HCWAREASTMT` is built (see the README). Still to do:
+
+- **Read floors from layers:** take each floor's outlines from layers (`BP-BUILDING-CUT` per floor) instead of selecting them.
+- **Permissible values:** fill `FAR_PERM` and `GC_PERM` from a table by plot size and zone, and flag when the achieved figures exceed them.
+- **Exemptions by rule:** a bylaw table of what may be left out of the FAR (stair, lift, parking, balcony projections) so deductions are not selected by hand.
+- **More than four floors** in the title block, and a statement that updates when the outlines change.
+
 ## Schedules and sheets
 
 - Sheet set: set viewport layers and per-sheet scales; fill more title-block fields (project, owner, architect) from the fields library.

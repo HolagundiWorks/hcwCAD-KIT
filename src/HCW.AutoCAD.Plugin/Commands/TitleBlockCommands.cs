@@ -587,7 +587,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             return list;
         }
 
-        private static void WriteFields(Transaction tr, BlockReference br, Dictionary<string, string> values)
+        internal static void WriteFields(Transaction tr, BlockReference br, Dictionary<string, string> values)
         {
             foreach (ObjectId id in br.AttributeCollection)
             {

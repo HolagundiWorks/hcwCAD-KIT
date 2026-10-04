@@ -546,3 +546,86 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class AreaStatementTests
+    {
+        private static List<FloorInput> Floors() => new List<FloorInput>
+        {
+            new FloorInput { Name = "GROUND", Gross = 100, Deduction = 10 },
+            new FloorInput { Name = "FIRST", Gross = 90, Deduction = 12.5 },
+        };
+
+        [Fact]
+        public void NetTotalsFarAndGroundCover()
+        {
+            var s = AreaStatement.Compute(Floors(), 200);
+            Assert.Equal(90, s.Floors[0].Net);
+            Assert.Equal(77.5, s.Floors[1].Net);
+            Assert.Equal(190, s.TotalGross);
+            Assert.Equal(22.5, s.TotalDeduction);
+            Assert.Equal(167.5, s.TotalNet);
+            Assert.Equal(167.5 / 200 * 100, s.FarPercent.Value, 9);
+            Assert.Equal(100, s.GroundCover);
+            Assert.Equal(50, s.GroundCoverPercent.Value, 9);
+            Assert.Empty(s.Warnings);
+        }
+
+        [Fact]
+        public void FieldsAreFormattedAndUnusedFloorsAreDashed()
+        {
+            var f = AreaStatement.Compute(Floors(), 200).ToFields();
+            Assert.Equal("GROUND", f["FL1"]);
+            Assert.Equal("100.00", f["GROSS1"]);
+            Assert.Equal("12.50", f["DED2"]);
+            Assert.Equal("77.50", f["NET2"]);
+            Assert.Equal("--", f["FL3"]);
+            Assert.Equal("--", f["NET4"]);
+            Assert.Equal("167.50", f["TOT_NET"]);
+            Assert.Equal("200.00", f["SITE_AREA"]);
+            Assert.Equal("83.75", f["FAR_ACH"]);
+            Assert.Equal("100.00", f["GC_ACH"]);
+            Assert.Equal("50.00", f["GC_PCT"]);
+        }
+
+        [Fact]
+        public void NoSiteAreaLeavesRatiosOut()
+        {
+            var s = AreaStatement.Compute(Floors(), 0);
+            Assert.Null(s.FarPercent);
+            Assert.Null(s.GroundCoverPercent);
+            Assert.Single(s.Warnings);
+            var f = s.ToFields();
+            Assert.Equal("--", f["FAR_ACH"]);
+            Assert.Equal("--", f["SITE_AREA"]);
+            Assert.Equal("190.00", f["TOT_GROSS"]);
+        }
+
+        [Fact]
+        public void DeductionsBeyondTheFloorAreWarned()
+        {
+            var s = AreaStatement.Compute(new[] { new FloorInput { Name = "TERRACE", Gross = 5, Deduction = 8 } }, 100);
+            Assert.Equal(0, s.Floors[0].Net);
+            Assert.Contains(s.Warnings, w => w.Contains("TERRACE"));
+        }
+
+        [Fact]
+        public void MoreFloorsThanSlotsStillCountInTotals()
+        {
+            var floors = Enumerable.Range(1, 6).Select(i => new FloorInput { Name = "F" + i, Gross = 10, Deduction = 0 }).ToList();
+            var s = AreaStatement.Compute(floors, 100);
+            var f = s.ToFields(4);
+            Assert.Equal(60, s.TotalGross);
+            Assert.Equal("60.00", f["TOT_GROSS"]);
+            Assert.False(f.ContainsKey("FL5"));
+        }
+
+        [Fact]
+        public void GroundCoverOverTheSiteIsWarned()
+        {
+            var s = AreaStatement.Compute(new[] { new FloorInput { Name = "G", Gross = 150, Deduction = 0 } }, 100);
+            Assert.Contains(s.Warnings, w => w.Contains("Ground cover"));
+        }
+    }
+}
