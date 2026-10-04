@@ -1164,3 +1164,81 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class StairQuantityTests
+    {
+        private static StairQuantities Q(StairSpec s) => StairQuantities.Compute(s, StairCalc.Calculate(s));
+
+        private static StairSpec Single() => new StairSpec
+        {
+            Kind = StairKind.Single, Width = 1200, FloorHeight = 1500, TotalRisers = 10, Going = 250, WaistThickness = 150,
+        };
+
+        [Fact]
+        public void SingleFlightQuantities()
+        {
+            var q = Q(Single());                       // rise 150, 9 treads: run 2.25 m, height 1.5 m
+            double slope = Math.Sqrt(2.25 * 2.25 + 1.5 * 1.5);
+            Assert.Equal(1.2 * 0.15 * slope, q.WaistConcrete, 9);
+            Assert.Equal(0.5 * 0.25 * 0.15 * 10 * 1.2, q.StepsConcrete, 9);
+            Assert.Equal(0, q.LandingConcrete);
+            Assert.Equal(1.2 * slope, q.Soffit, 9);
+            Assert.Equal(2 * (0.15 * slope + 0.5 * 0.25 * 0.15 * 10), q.FlightSides, 9);
+            Assert.Equal(1.2 * 0.15 * 10, q.RiserShuttering, 9);
+            Assert.Equal(1.2 * 0.25 * 9, q.TreadFinish, 9);
+            Assert.Equal(1.2 * 0.15 * 10, q.RiserFinish, 9);
+            Assert.Equal(0, q.LandingFinish);
+            Assert.Equal(2 * slope, q.Skirting, 9);
+            Assert.Equal(q.WaistConcrete + q.StepsConcrete, q.Concrete, 9);
+        }
+
+        [Fact]
+        public void DogLegAddsALandingAndASecondFlight()
+        {
+            var s = new StairSpec
+            {
+                Kind = StairKind.DogLeg, Width = 1200, FloorHeight = 3000, TotalRisers = 20, FirstFlightRisers = 10, Going = 250,
+                LandingLength = 1200, WaistThickness = 150, LandingThickness = 150,
+            };
+            var q = Q(s);
+            // two flights of 10 risers (9 treads), landing 2.4 x 1.2 m
+            double slope = Math.Sqrt(2.25 * 2.25 + 1.5 * 1.5);
+            Assert.Equal(2 * 1.2 * 0.15 * slope, q.WaistConcrete, 9);
+            Assert.Equal(2.4 * 1.2 * 0.15, q.LandingConcrete, 9);
+            Assert.Equal(2.4 * 1.2, q.LandingSoffit, 9);
+            Assert.Equal(2.4 * 1.2, q.LandingFinish, 9);
+            Assert.Equal(4 * slope, q.Skirting, 9);
+            Assert.Equal(q.Soffit + q.FlightSides + q.RiserShuttering + q.LandingSoffit, q.Shuttering, 9);
+            Assert.Equal(q.TreadFinish + q.RiserFinish + q.LandingFinish, q.Finishes, 9);
+        }
+
+        [Fact]
+        public void UnevenFlightsAreWorkedSeparately()
+        {
+            var s = new StairSpec
+            {
+                Kind = StairKind.L, Width = 1000, FloorHeight = 3000, TotalRisers = 20, FirstFlightRisers = 8, Going = 250,
+                LandingLength = 1000, WaistThickness = 150, LandingThickness = 150,
+            };
+            var q = Q(s);
+            double s1 = Math.Sqrt(Math.Pow(7 * 0.25, 2) + Math.Pow(8 * 0.15, 2));
+            double s2 = Math.Sqrt(Math.Pow(11 * 0.25, 2) + Math.Pow(12 * 0.15, 2));
+            Assert.Equal(1.0 * 0.15 * (s1 + s2), q.WaistConcrete, 9);
+            Assert.Equal(2 * (s1 + s2), q.Skirting, 9);
+            Assert.Equal(1.0 * 0.15 * 1.0, q.LandingConcrete, 9);        // L landing: stair width x landing length x thickness
+        }
+
+        [Fact]
+        public void RowsListEveryItemWithUnits()
+        {
+            var rows = Q(Single()).Rows();
+            Assert.Equal(14, rows.Count);
+            Assert.All(rows, r => Assert.Equal(StairQuantities.Headers.Length, r.Length));
+            Assert.Contains(rows, r => r[0] == "CONCRETE TOTAL" && r[2] == "m3");
+            Assert.Contains(rows, r => r[0] == "Skirting" && r[2] == "m");
+            Assert.Equal("0.000", rows.First(r => r[0] == "Concrete - landing")[1]);
+        }
+    }
+}

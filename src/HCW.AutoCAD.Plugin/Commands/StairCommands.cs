@@ -84,6 +84,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 id = NextId(tr, db);
                 Generate(tr, db, spec, id, units);
                 DrawingStore.Write(tr, db, StoreDictionary, id, spec.ToLines());
+                SaveQuantities(ed, tr, db, id, spec);
                 tr.Commit();
             }
             _last = Copy(spec);
@@ -125,10 +126,29 @@ namespace HCW.AutoCAD.Plugin.Commands
                 EraseStair(tr, db, id);
                 Generate(tr, db, spec, id, units);
                 DrawingStore.Write(tr, db, StoreDictionary, id, spec.ToLines());
+                SaveQuantities(ed, tr, db, id, spec);
                 tr.Commit();
             }
             _last = Copy(spec);
             ed.WriteMessage("\nAECSTAIREDIT: " + id + " redrawn in place.");
+        }
+
+        /// <summary>
+        /// Works out the concrete, shuttering and finish quantities of the stair, lists them on the command line and keeps them as the
+        /// take-off "Stair ST-01", so MEXPORT writes them with the other take-offs. A repeat run (AECSTAIREDIT) replaces them.
+        /// </summary>
+        private static void SaveQuantities(Editor ed, Transaction tr, Database db, string id, StairSpec spec)
+        {
+            var calc = StairCalc.Calculate(spec, Limits());
+            if (!calc.CanDraw) return;
+            var q = StairQuantities.Compute(spec, calc);
+            var rows = q.Rows();
+            MeasureBook.SaveTakeoff(tr, db, "Stair " + id, StairQuantities.Headers, rows);
+            ed.WriteMessage("\n\nQUANTITIES (" + id + ")");
+            foreach (var r in rows)
+                if (r[0] == r[0].ToUpperInvariant() || r[0] == "Skirting")
+                    ed.WriteMessage("\n  " + Util.Pad(r[0], 22) + r[1] + " " + r[2]);
+            ed.WriteMessage("\n  Saved as the take-off \"Stair " + id + "\"; MEXPORT writes it with the others.");
         }
 
         // ------------------------------------------------------------------ inputs and the report

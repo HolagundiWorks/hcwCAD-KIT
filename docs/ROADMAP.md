@@ -34,7 +34,7 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 - **Reinforcement:** main and distribution bars in the waist slab and landing, with a bar schedule.
 - **Levels and floors:** more than one storey in one command, with a stair per floor.
 - **Section through an L or U as cut:** today an L is a developed section and a U returns over the first flight.
-- **Quantity:** concrete volume, shuttering area and finishes per stair, into the take-off export.
+- **Quantity:** concrete, shuttering, finishes and skirting per stair are worked out and saved as a take-off for `MEXPORT`. Still to do: landing edge shuttering, reinforcement weight with the bar schedule, and quantities for stairs not made by `AECSTAIR`.
 
 ## Walls, openings and grid
 

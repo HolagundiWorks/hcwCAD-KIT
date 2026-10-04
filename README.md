@@ -367,6 +367,12 @@ CHECKS
   Landing length        1200 mm (width 1200 mm)   OK
 ```
 
+**Quantities.** Whenever a staircase is generated or changed (`AECSTAIR`, `AECSTAIREDIT`) its quantities are worked out, listed on the command line and saved as the take-off `Stair ST-01`, so `MEXPORT` (CSV, or Xlsx with the other take-offs) writes them. They are: concrete in m3 (waist slab, steps, landing), shuttering in m2 (soffit, both sides of each flight, risers, landing soffit), finishes in m2 (treads, risers, landing) and skirting in metres. The method is stated in the Basis column of the export:
+
+- Each flight is a waist slab, measured square to the slope, with a triangular step on every riser. The slope length is worked from the flight's run (treads × going) and its height (risers × rise).
+- The landing is a flat slab: landing width × landing length × landing thickness. A single flight has none.
+- Shuttering leaves out the free edges of the landing. Treads are one fewer than risers in each flight, the landing top being the last tread. These are quantities from the inputs, so check them against your own method before pricing.
+
 The intermediate level is `start level + risers in the first flight × rise`. The tool reports OK or CHECK against limits held in the settings (`StairMaxRiseMm`, `StairMinGoingMm`, `Stair2RGMinMm`, `Stair2RGMaxMm` …); it never decides a stair is acceptable, so put your office's code criteria there. A stair that cannot be drawn (fewer than 2 risers in a flight) is refused. Choose **Generate** or **Change**.
 
 **What is drawn.** You pick the first riser (right-hand corner looking up the stair), the direction of the first flight, and the foot of the first riser for the section.
