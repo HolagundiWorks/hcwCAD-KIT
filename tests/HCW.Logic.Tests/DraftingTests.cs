@@ -241,3 +241,125 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class ColumnLogicTests
+    {
+        [Theory]
+        [InlineData("230x450", false, 230, 450, "230x450")]
+        [InlineData("230 X 450", false, 230, 450, "230x450")]
+        [InlineData("230*450", false, 230, 450, "230x450")]
+        [InlineData("300", false, 300, 300, "300x300")]
+        [InlineData("D450", true, 450, 450, "Ø450")]
+        [InlineData("dia 450", true, 450, 450, "Ø450")]
+        [InlineData("%%c450", true, 450, 450, "Ø450")]
+        [InlineData("Ø300", true, 300, 300, "Ø300")]
+        [InlineData("225.5x300", false, 225.5, 300, "225.5x300")]
+        public void ParsesSizes(string text, bool round, double w, double d, string label)
+        {
+            string err;
+            var s = ColumnSize.Parse(text, out err);
+            Assert.NotNull(s);
+            Assert.Equal(round, s.Round);
+            Assert.Equal(w, s.W);
+            Assert.Equal(d, s.D);
+            Assert.Equal(label, s.Label);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("abc")]
+        [InlineData("0x300")]
+        [InlineData("230x")]
+        [InlineData("-5")]
+        [InlineData("D")]
+        public void RejectsBadSizes(string text)
+        {
+            string err;
+            Assert.Null(ColumnSize.Parse(text, out err));
+            Assert.False(string.IsNullOrEmpty(err));
+        }
+
+        [Fact]
+        public void AreaOfRectAndCircle()
+        {
+            string err;
+            Assert.Equal(230.0 * 450, ColumnSize.Parse("230x450", out err).Area);
+            Assert.Equal(Math.PI * 100 * 100, ColumnSize.Parse("D200", out err).Area, 6);
+        }
+
+        private static List<Seg> Grid(int cols, int rows, double bay)
+        {
+            var segs = new List<Seg>();
+            for (int c = 0; c < cols; c++) segs.Add(new Seg(new P2(c * bay, -1), new P2(c * bay, (rows - 1) * bay + 1)));
+            for (int r = 0; r < rows; r++) segs.Add(new Seg(new P2(-1, r * bay), new P2((cols - 1) * bay + 1, r * bay)));
+            return segs;
+        }
+
+        [Fact]
+        public void GridGivesOnePointPerCrossing()
+        {
+            var pts = GridIntersections.Find(Grid(4, 3, 4.0), 1e-6);
+            Assert.Equal(12, pts.Count);
+            Assert.All(pts, p => Assert.Equal(0.0, p.Angle, 9));
+            Assert.Contains(pts, p => Math.Abs(p.Pt.X - 12) < 1e-9 && Math.Abs(p.Pt.Y - 8) < 1e-9);
+        }
+
+        [Fact]
+        public void LinesThatDoNotReachEachOtherDoNotCross()
+        {
+            var vertical = new Seg(new P2(0, 0), new P2(0, 4));
+            var shortRight = new Seg(new P2(2, 2), new P2(6, 2));     // starts to the right of the vertical line
+            var parallel = new Seg(new P2(10, 0), new P2(10, 4));     // parallel to the vertical line
+            Assert.Empty(GridIntersections.Find(new List<Seg> { vertical, shortRight }, 1e-6));
+            Assert.Empty(GridIntersections.Find(new List<Seg> { vertical, parallel }, 1e-6));
+            Assert.Single(GridIntersections.Find(new List<Seg> { parallel, new Seg(new P2(8, 2), new P2(12, 2)) }, 1e-6));
+        }
+
+        [Fact]
+        public void TiltedGridKeepsTheColumnAlongTheGrid()
+        {
+            double a = 30 * Math.PI / 180;
+            var u = new P2(Math.Cos(a), Math.Sin(a)); var n = new P2(-u.Y, u.X);
+            var segs = new List<Seg> { new Seg(u * -5, u * 5), new Seg(n * -5, n * 5) };
+            var pts = GridIntersections.Find(segs, 1e-6);
+            Assert.Single(pts);
+            Assert.Equal(30 * Math.PI / 180, pts[0].Angle, 9);
+        }
+
+        [Theory]
+        [InlineData(0, 0)]
+        [InlineData(90, 0)]
+        [InlineData(45, 45)]
+        [InlineData(50, -40)]
+        [InlineData(-30, -30)]
+        [InlineData(180, 0)]
+        public void FoldKeepsAnglesWithin45(double deg, double want) =>
+            Assert.Equal(want, GridIntersections.Fold(deg * Math.PI / 180) * 180 / Math.PI, 6);
+
+        [Fact]
+        public void MarksGoToTheBiggestSectionFirst()
+        {
+            string err;
+            var sizes = new[] { "230x450", "300x300", "230x450", "D400", "230x450", "300x300" }
+                .Select(t => ColumnSize.Parse(t, out err)).ToList();
+            var rows = ColumnMarks.Assign(sizes);
+            Assert.Equal(new[] { "C1", "C2", "C3" }, rows.Select(r => r.Mark).ToArray());
+            Assert.Equal("Ø400", rows[0].Label);             // area 125,664 beats 103,500 and 90,000
+            Assert.Equal("230x450", rows[1].Label);
+            Assert.Equal(new[] { 1, 3, 2 }, rows.Select(r => r.Count).ToArray());
+        }
+
+        [Fact]
+        public void SizesAreRoundedBeforeTheyAreGrouped()
+        {
+            var rows = ColumnMarks.Assign(new[]
+            {
+                new ColumnSize { W = 229.8, D = 450.2 }, new ColumnSize { W = 230.2, D = 449.9 },
+            });
+            Assert.Single(rows);
+            Assert.Equal(2, rows[0].Count);
+        }
+    }
+}

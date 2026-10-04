@@ -216,6 +216,8 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWDOOR", "Door", "home", "Cut a door in a wall: pick the position and the side it opens to");
             AddLarge(src, "HCWWINDOW", "Window", "view", "Cut a window in a wall: pick the position");
             AddLarge(src, "HCWAXIS", "Axis\nGrid", "grid", "Draw a column grid from bay widths, with numbered and lettered bubbles");
+            AddLarge(src, "HCWCOLUMN", "Place\nColumns", "column", "Put a column of one size on every grid intersection, or those in a window");
+            AddLarge(src, "HCWCOLSCHED", "Column\nSchedule", "table-of-contents", "Mark every column C1, C2 ... by size and draw the column schedule");
             return Wrap(src);
         }
 
