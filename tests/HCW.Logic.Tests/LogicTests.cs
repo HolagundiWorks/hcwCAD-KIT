@@ -1172,7 +1172,7 @@ namespace HCW.Logic.Tests
             var (s, c) = Make(StairKind.U);
             s.OpenWell = false;
             var d = StairGeometry.Plan(s, c, Opt);
-            Assert.Single(d.Polys.Where(p => p.Layer == "WELL"));
+            Assert.Single(d.Polys, p => p.Layer == "WELL");
         }
 
         [Fact]
@@ -1191,7 +1191,7 @@ namespace HCW.Logic.Tests
         {
             var (s, c) = Make(StairKind.Single, 20, 20);
             s.Nosing = 0;
-            Assert.Empty(StairGeometry.Plan(s, c, Opt).Polys.Where(p => p.Layer == "NOSING"));
+            Assert.DoesNotContain(StairGeometry.Plan(s, c, Opt).Polys, p => p.Layer == "NOSING");
             s.Nosing = 25;
             Assert.Equal(19, StairGeometry.Plan(s, c, Opt).Polys.Count(p => p.Layer == "NOSING"));
         }
@@ -1240,7 +1240,7 @@ namespace HCW.Logic.Tests
         public void EveryCatalogCodeIsUnique()
         {
             Assert.Equal(ElectricalKinds.All.Length, ElectricalKinds.All.Select(k => k.Code).Distinct().Count());
-            Assert.Single(ElectricalKinds.All.Where(k => k.IsBoard));
+            Assert.Single(ElectricalKinds.All, k => k.IsBoard);
         }
 
         [Fact]
