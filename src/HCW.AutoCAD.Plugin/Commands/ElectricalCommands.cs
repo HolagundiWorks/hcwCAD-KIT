@@ -424,6 +424,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             public List<ElNode> Nodes = new List<ElNode>();
             public List<ElNet> Nets = new List<ElNet>();
             public int Wires;
+            public List<ElWire> WireList = new List<ElWire>();
         }
 
         private static string GroupName(string group) => group == "LT" ? "Lighting" : "Power";
@@ -443,9 +444,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (dxf != "LINE" && dxf != "LWPOLYLINE" && dxf != "POLYLINE" && dxf != "ARC" && dxf != "SPLINE") continue;
                 var curve = tr.GetObject(id, OpenMode.ForRead) as Curve;
                 if (curve == null || !layers.Contains(curve.Layer)) continue;
-                wires.Add(new ElWire { Points = Vertices(tr, curve) });
+                var wire = new ElWire { Points = Vertices(tr, curve) };
+                try { wire.TrueLength = curve.GetDistanceAtParameter(curve.EndParam); } catch (System.Exception) { /* the vertices give the length */ }
+                wires.Add(wire);
             }
             result.Wires = wires.Count;
+            result.WireList = wires;
             result.Nets = ElectricalNet.Build(result.Nodes, wires, tolerance);
             return result;
         }
@@ -590,8 +594,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             var db = Util.Db;
             if (!EnsureBlocks(ed, db)) return;
 
-            var layoutOpt = new PromptKeywordOptions("\nSchedule [Matrix/Board/Point/Load] <" + _layout + ">: ") { AllowNone = true };
-            foreach (var k in new[] { "Matrix", "Board", "Point", "Load" }) layoutOpt.Keywords.Add(k);
+            var layoutOpt = new PromptKeywordOptions("\nSchedule [Matrix/Board/Point/Load/Cable] <" + _layout + ">: ") { AllowNone = true };
+            foreach (var k in new[] { "Matrix", "Board", "Point", "Load", "Cable" }) layoutOpt.Keywords.Add(k);
             var layout = ed.GetKeywords(layoutOpt);
             if (layout.Status == PromptStatus.OK) _layout = layout.StringResult;
             else if (layout.Status != PromptStatus.None) return;
@@ -641,7 +645,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 Util.EnsureLayer(tr, db, TableLayer, 7);
                 EnsureRegApp(tr, db);
                 var analyses = AnalyseAll(tr, db, blocks, wiring, mm);
-                drawn = DrawSchedule(tr, db, blocks, analyses, _layout, _cells, new Point3d(ppr.Value.X, ppr.Value.Y, 0), h) > 0;
+                drawn = DrawSchedule(tr, db, blocks, analyses, _layout, _cells, new Point3d(ppr.Value.X, ppr.Value.Y, 0), h, mm) > 0;
                 tr.Commit();
             }
             ed.WriteMessage(drawn
@@ -698,7 +702,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     foreach (var id in group.Value) ((Entity)tr.GetObject(id, OpenMode.ForWrite)).Erase();
                     double h = double.Parse(p[2], CultureInfo.InvariantCulture);
                     var anchor = new Point3d(double.Parse(p[3], CultureInfo.InvariantCulture), double.Parse(p[4], CultureInfo.InvariantCulture), 0);
-                    if (DrawSchedule(tr, db, blocks, analyses, p[0], p[1], anchor, h) > 0) redrawn++;
+                    if (DrawSchedule(tr, db, blocks, analyses, p[0], p[1], anchor, h, mm) > 0) redrawn++;
                 }
                 tr.Commit();
             }
@@ -710,7 +714,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// Matrix: a row per switchboard and a column per kind of point. Board: a row per board and point. Point: a row per point.
         /// Returns the height used, or 0 when there is nothing to show.
         /// </summary>
-        private static double DrawSchedule(Transaction tr, Database db, List<ElBlock> blocks, List<Analysis> analyses, string layout, string cells, Point3d anchor, double h)
+        private static double DrawSchedule(Transaction tr, Database db, List<ElBlock> blocks, List<Analysis> analyses, string layout, string cells, Point3d anchor, double h, double mm)
         {
             string[] headers;
             var rows = new List<string[]>();
@@ -737,6 +741,27 @@ namespace HCW.AutoCAD.Plugin.Commands
                 rows.AddRange(loadRows.Select(ElectricalLoad.ToCells));
                 rows.Add(ElectricalLoad.ToCells(total));
                 title = "ELECTRICAL LOAD SCHEDULE";
+            }
+            else if (layout == "Cable")
+            {
+                double upm = mm * 1000.0;                        // drawing units in a metre
+                double allowance = Settings.GetDouble("ElectricalCableAllowancePct", 10);
+                double drop = Settings.GetDouble("ElectricalDropMm", 0) / 1000.0;
+                var perGroup = new Dictionary<string, Dictionary<string, double>>();
+                double unattached = 0;
+                foreach (var a in analyses)
+                {
+                    double un;
+                    perGroup[a.Group] = CableLength.PerBoard(a.Nodes, a.Nets, a.WireList, upm, allowance, drop, out un);
+                    unattached += un;
+                }
+                headers = CableLength.Header;
+                Dictionary<string, double> lt, pw;
+                perGroup.TryGetValue("LT", out lt);
+                perGroup.TryGetValue("PW", out pw);
+                rows.AddRange(CableLength.Table(blocks.Where(b => b.Kind.IsBoard).Select(b => b.CurrentId), lt, pw));
+                title = "CABLE LENGTH SCHEDULE";
+                if (unattached > 0) title += " (" + unattached.ToString("0.0", CultureInfo.InvariantCulture) + " m of wiring reaches no board and is left out)";
             }
             else if (layout == "Point")
             {

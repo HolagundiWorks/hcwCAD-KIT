@@ -1082,3 +1082,85 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class CableLengthTests
+    {
+        private static ElWire Wire(double x1, double y1, double x2, double y2) =>
+            new ElWire { Points = new List<PlanPoint> { new PlanPoint(x1, y1), new PlanPoint(x2, y2) } };
+
+        private static ElNode Board(string id) => new ElNode { Id = id, Code = "SB", IsBoard = true };
+        private static ElNode Point(string id) => new ElNode { Id = id, Code = "LP" };
+
+        [Fact]
+        public void WireLengthUsesTrueLengthWhenKnown()
+        {
+            var w = Wire(0, 0, 3, 4);
+            Assert.Equal(5.0, w.Length, 9);
+            w.TrueLength = 7.5;
+            Assert.Equal(7.5, w.Length, 9);
+            var poly = new ElWire { Points = new List<PlanPoint> { new PlanPoint(0, 0), new PlanPoint(3, 0), new PlanPoint(3, 4) } };
+            Assert.Equal(7.0, poly.Length, 9);
+            Assert.Equal(0.0, new ElWire().Length);
+        }
+
+        [Fact]
+        public void LengthPlusDropsPlusAllowance()
+        {
+            // 10 m of wire in drawing units of mm: 10000; two points on it, 1.5 m drop each; 10 % allowance
+            var nodes = new List<ElNode> { Board("SB-01"), Point("LP-01"), Point("LP-02") };
+            var wires = new List<ElWire> { Wire(0, 0, 6000, 0), Wire(6000, 0, 6000, 4000) };
+            var nets = new List<ElNet> { new ElNet { Wires = { 0, 1 }, Boards = { 0 }, Points = { 1, 2 } } };
+            double un;
+            var r = CableLength.PerBoard(nodes, nets, wires, 1000, 10, 1.5, out un);
+            Assert.Equal((10 + 3) * 1.1, r["SB-01"], 9);
+            Assert.Equal(0, un);
+        }
+
+        [Fact]
+        public void ANetOnTwoBoardsIsSharedAndOneOnNoneIsUnattached()
+        {
+            var nodes = new List<ElNode> { Board("SB-01"), Board("SB-02"), Point("LP-01"), Point("LP-02") };
+            var wires = new List<ElWire> { Wire(0, 0, 8, 0), Wire(0, 5, 2, 5) };
+            var nets = new List<ElNet>
+            {
+                new ElNet { Wires = { 0 }, Boards = { 0, 1 }, Points = { 2 } },
+                new ElNet { Wires = { 1 }, Points = { 3 } },
+            };
+            double un;
+            var r = CableLength.PerBoard(nodes, nets, wires, 1, 0, 0, out un);
+            Assert.Equal(4.0, r["SB-01"], 9);
+            Assert.Equal(4.0, r["SB-02"], 9);
+            Assert.Equal(2.0, un, 9);
+        }
+
+        [Fact]
+        public void BoardsWithNoWireAreListedAtZeroAndBadInputIsRefused()
+        {
+            double un;
+            var r = CableLength.PerBoard(new List<ElNode> { Board("SB-01") }, new List<ElNet>(), new List<ElWire>(), 1000, 10, 0, out un);
+            Assert.Equal(0, r["SB-01"]);
+            Assert.Throws<ArgumentOutOfRangeException>(() => CableLength.PerBoard(new List<ElNode>(), new List<ElNet>(), new List<ElWire>(), 0, 0, 0, out un));
+            // a negative allowance or drop is taken as 0
+            var nodes = new List<ElNode> { Board("SB-01"), Point("LP-01") };
+            var nets = new List<ElNet> { new ElNet { Wires = { 0 }, Boards = { 0 }, Points = { 1 } } };
+            var r2 = CableLength.PerBoard(nodes, nets, new List<ElWire> { Wire(0, 0, 5, 0) }, 1, -50, -2, out un);
+            Assert.Equal(5.0, r2["SB-01"], 9);
+        }
+
+        [Fact]
+        public void TableHasARowPerBoardAndATotal()
+        {
+            var lt = new Dictionary<string, double> { { "SB-02", 12.34 }, { "SB-01", 5 } };
+            var pw = new Dictionary<string, double> { { "SB-01", 20.06 } };
+            var t = CableLength.Table(new[] { "SB-02", "SB-01", "SB-10" }, lt, pw);
+            Assert.Equal(4, t.Count);
+            Assert.Equal(new[] { "SB-01", "5.0", "20.1", "25.1" }, t[0]);
+            Assert.Equal(new[] { "SB-02", "12.3", "", "12.3" }, t[1]);
+            Assert.Equal(new[] { "SB-10", "", "", "" }, t[2]);
+            Assert.Equal(new[] { "TOTAL", "17.3", "20.1", "37.4" }, t[3]);
+            Assert.Equal(CableLength.Header.Length, t[0].Length);
+        }
+    }
+}

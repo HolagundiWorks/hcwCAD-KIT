@@ -398,7 +398,7 @@ A block has one role. The choice is saved in the drawing, so the blocks can have
 | `ELNUM` (and `SBNUM`, `LPNUM`, `FPNUM` for one item) | Give every block an ID and write it beside the block as text: `SB-01`, `LP-01`, `GY-01`. `ELNUM` numbers every item that has blocks. Choose **Keep** (blocks keep the ID they have, new blocks get the next numbers) or **All** (start again from 1, left to right then bottom to top). |
 | `ELLAYERS` | Choose the layers the wiring is drawn on: one list for lighting wires (lights, fans, switches, calling bell), one for power wires (sockets and appliances). **Pick from drawing…** takes the layers of objects you select. Saved in the drawing. Asked automatically the first time it is needed. |
 | `ELCONNECT` | Works out the connections and prints them: per wiring group, the items, boards and circuits; items wired to more than one board; items not wired to any board; boards with nothing wired to them. Circles on `EL-CHECK` flag what is not wired. |
-| `ELSCHEDULE` | Draws the schedule as a table. Choose the layout (**Matrix**, **Board**, **Point** or **Load**), for the matrix whether cells show **Numbers** or **Counts**, the plot scale, and pick the top-left corner. |
+| `ELSCHEDULE` | Draws the schedule as a table. Choose the layout (**Matrix**, **Board**, **Point**, **Load** or **Cable**), for the matrix whether cells show **Numbers** or **Counts**, the plot scale, and pick the top-left corner. |
 | `ELUPDATE` | After you change the drawing: numbers new blocks, moves the ID text, re-checks the wiring and redraws every schedule already in the drawing, in place and at the same text size. |
 
 **The ID stays with the block.** It is stored on the block itself (extended data), not only as text, so it follows the block when it is moved or the wiring is redrawn. If the block has attributes `ID`, `NUMBER` and `TAG`, they are filled in too (`LP-01`, `01`, `LP`). The ID is also written as text beside every block on `EL-LABELS`, so each one can be identified on the drawing (unless the block already shows a visible `ID` attribute); the text follows the block when you run any of the commands above. A **copied block carries its old ID with it**, so a repeated ID is renumbered (the one first in reading order keeps it).
@@ -429,7 +429,13 @@ The **5 Amp** column lists the light points, fan points and 5 amp sockets. The c
 - A point wired to two boards counts in the load of both (as in the matrix); the TOTAL row counts each point once.
 - This gives the load and the number of circuits. It does not yet say which point is on which circuit.
 
-Settings (see `HCWSETTINGS`): the default block names, `ElectricalColumns`, the load schedule settings (`ElectricalWatts`, `ElectricalDedicated`, `ElectricalLightingCircuitW`, `ElectricalPowerCircuitW`), `ElectricalSnapMm`, `ElectricalLabels` (0 turns the ID text off), `ElectricalLabelLayer`, `ElectricalLabelHeightMm` (0 sizes the text from the block, at least 150 mm real size), `ElectricalTableTextMm`.
+**The cable schedule.** Choosing **Cable** in `ELSCHEDULE` draws the length of wiring for each switchboard, in metres, as lighting wiring, power wiring and total, with a TOTAL row. `ELUPDATE` redraws it. The length of each run comes from the wiring lines themselves (arcs by their true length), so it is only as good as the wiring you drew.
+
+- For each run of connected wires: its drawn length, plus `ElectricalDropMm` (millimetres, 0 to start with) for every point on it, to cover the drop to a switch or the rise to a fitting; then `ElectricalCableAllowancePct` (10 % to start with) for bends, slack and waste. Both are only starting values: set them from your own practice. With the drop at 0, vertical lengths are not in the figure.
+- A run that reaches two boards is shared equally between them. Wiring that reaches no board is left out and its length is shown in the title, so you can see what is missing.
+- This is the length of wire drawn in plan, not a cable size or a conductor count.
+
+Settings (see `HCWSETTINGS`): the default block names, `ElectricalColumns`, the cable schedule settings (`ElectricalCableAllowancePct`, `ElectricalDropMm`), the load schedule settings (`ElectricalWatts`, `ElectricalDedicated`, `ElectricalLightingCircuitW`, `ElectricalPowerCircuitW`), `ElectricalSnapMm`, `ElectricalLabels` (0 turns the ID text off), `ElectricalLabelLayer`, `ElectricalLabelHeightMm` (0 sizes the text from the block, at least 150 mm real size), `ElectricalTableTextMm`.
 
 ### Area and text
 

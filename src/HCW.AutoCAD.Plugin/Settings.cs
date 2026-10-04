@@ -73,6 +73,8 @@ namespace HCW.AutoCAD.Plugin
             Entry("ElectricalDedicated", Logic.ElectricalLoad.DefaultDedicated, "Electrical load schedule: kinds that each get their own power circuit (separate with ;). The rest of the power load shares circuits up to ElectricalPowerCircuitW."),
             Entry("ElectricalLightingCircuitW", "1000", "Electrical load schedule: most connected load on one lighting circuit, in watts (0 = one lighting circuit per board). Set it from your own design rules."),
             Entry("ElectricalPowerCircuitW", "3000", "Electrical load schedule: most connected load on one shared power circuit, in watts (0 = one shared power circuit per board)."),
+            Entry("ElectricalCableAllowancePct", "10", "Electrical cable schedule: allowance added to the drawn wire length for bends, slack and waste, in percent. Set it from your own practice."),
+            Entry("ElectricalDropMm", "0", "Electrical cable schedule: real-size length added for each point on a run for the drop or rise to it (a switch, a fitting), in millimetres. 0 leaves drops out."),
             Entry("ElectricalSnapMm", "100", "Electrical: a wire reaches a block when one of its vertices is within this real-size distance (millimetres) of the block's extents."),
             Entry("ElectricalLabels", "1", "Electrical: 1 writes each block's ID beside it as text (blocks with an ID attribute show it there instead); 0 turns the text off."),
             Entry("ElectricalLabelLayer", "EL-LABELS", "Electrical: layer for the ID text."),

@@ -19,6 +19,24 @@ namespace HCW.AutoCAD.Plugin.Logic
     public class ElWire
     {
         public List<PlanPoint> Points = new List<PlanPoint>();
+        /// <summary>The true length of the wire (an arc is longer than its chord). 0 means use the length of the vertices.</summary>
+        public double TrueLength;
+
+        /// <summary>The length to use: the true length when known, otherwise the straight segments between the vertices.</summary>
+        public double Length
+        {
+            get
+            {
+                if (TrueLength > 0) return TrueLength;
+                double sum = 0;
+                for (int i = 0; i + 1 < Points.Count; i++)
+                {
+                    double dx = Points[i + 1].X - Points[i].X, dy = Points[i + 1].Y - Points[i].Y;
+                    sum += Math.Sqrt(dx * dx + dy * dy);
+                }
+                return sum;
+            }
+        }
     }
 
     /// <summary>Wires that are joined together, and the boards and points they reach.</summary>
