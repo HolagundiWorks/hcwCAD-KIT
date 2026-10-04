@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <Compile Include="..\..\src\HCW.AutoCAD.Plugin\Logic\*.cs" LinkBase="Logic" />
+    <Compile Include="..\..\src\HCW.AutoCAD.Plugin\LayerData.cs" LinkBase="Logic" />
   </ItemGroup>
 
   <ItemGroup>

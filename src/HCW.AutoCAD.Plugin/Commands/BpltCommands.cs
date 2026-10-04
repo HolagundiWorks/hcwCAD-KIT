@@ -88,15 +88,14 @@ namespace HCW.AutoCAD.Plugin.Commands
                 var lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
                 var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                 int copied = 0, skipped = 0;
+                var apMap = LayerData.BpToAp.ToDictionary(m => m.Bp, m => m.Ap, StringComparer.OrdinalIgnoreCase);
 
                 foreach (SelectedObject so in psr.Value)
                 {
                     var ent = (Entity)tr.GetObject(so.ObjectId, OpenMode.ForRead);
                     string layName = ent.Layer;
                     if (!layName.StartsWith("BP-", StringComparison.OrdinalIgnoreCase)) { skipped++; continue; }
-                    string apName = LayerData.BpToAp
-                        .Where(m => string.Equals(m.Bp, layName, StringComparison.OrdinalIgnoreCase))
-                        .Select(m => m.Ap).FirstOrDefault() ?? "AP-" + layName.Substring(3);
+                    string apName = apMap.TryGetValue(layName, out var mapped) ? mapped : "AP-" + layName.Substring(3);
                     if (!lt.Has(apName)) { skipped++; continue; }
 
                     var clone = (Entity)ent.Clone();
@@ -120,23 +119,23 @@ namespace HCW.AutoCAD.Plugin.Commands
             {
                 var lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
                 var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
-                var required = LayerData.Bplt.Where(l => l.Name.StartsWith("AP-")).Select(l => l.Name);
+                var required = LayerData.Bplt.Where(l => l.Name.StartsWith("AP-")).Select(l => l.Name).ToList();
+                var hasAny = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var hasClosed = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (ObjectId id in btr)
+                {
+                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                    if (ent == null || !ent.Layer.StartsWith("AP-", StringComparison.OrdinalIgnoreCase)) continue;
+                    hasAny.Add(ent.Layer);
+                    if (ent is Polyline pl && pl.Closed) hasClosed.Add(ent.Layer);
+                }
                 int ok = 0, missing = 0, notClosed = 0;
 
                 foreach (var name in required)
                 {
                     if (!lt.Has(name)) { missing++; ed.WriteMessage($"\n  MISSING LAYER: {name}"); continue; }
-                    bool foundClosed = false, foundAny = false;
-                    foreach (ObjectId id in btr)
-                    {
-                        var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                        if (ent == null || !string.Equals(ent.Layer, name, StringComparison.OrdinalIgnoreCase)) continue;
-                        foundAny = true;
-                        if (ent is Polyline pl && pl.Closed) { foundClosed = true; break; }
-                    }
-                    if (foundClosed) ok++;
-                    else if (foundAny) { notClosed++; ed.WriteMessage($"\n  NOT CLOSED: {name}"); }
-                    else { notClosed++; ed.WriteMessage($"\n  EMPTY: {name}"); }
+                    if (hasClosed.Contains(name)) ok++;
+                    else { notClosed++; ed.WriteMessage(hasAny.Contains(name) ? $"\n  NOT CLOSED: {name}" : $"\n  EMPTY: {name}"); }
                 }
                 ed.WriteMessage($"\nBPLTCHECK: {ok} OK, {notClosed} empty/not-closed, {missing} layer(s) missing entirely.");
                 tr.Commit();
