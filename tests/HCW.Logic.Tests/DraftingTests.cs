@@ -1479,3 +1479,70 @@ namespace HCW.Logic.Tests
         public void NothingGivesNoRows() => Assert.Empty(LevelSchedule.Build(new string[0]));
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class CornerFitTests
+    {
+        private static bool Near(P2 a, P2 b) => a.DistanceTo(b) < 1e-9;
+
+        [Fact]
+        public void TwoShortLinesAreExtendedToTheCorner()
+        {
+            // horizontal 0..3 and vertical 5..8 at x = 4: they meet at (4, 0)
+            string err;
+            var r = CornerFit.Fit(new Seg(new P2(0, 0), new P2(3, 0)), new P2(1, 0), new Seg(new P2(4, 5), new P2(4, 8)), new P2(4, 7), out err);
+            Assert.NotNull(r);
+            Assert.True(Near(r.Corner, new P2(4, 0)));
+            Assert.True(Near(r.A.A, new P2(0, 0)) && Near(r.A.B, new P2(4, 0)));              // extended to the right
+            Assert.True(Near(r.B.A, new P2(4, 0)) && Near(r.B.B, new P2(4, 8)));              // extended down
+        }
+
+        [Fact]
+        public void LinesThatCrossAreTrimmedToTheSideYouPicked()
+        {
+            // a cross at (2, 2): keep the left and bottom arms
+            string err;
+            var h = new Seg(new P2(0, 2), new P2(5, 2));
+            var v = new Seg(new P2(2, 0), new P2(2, 5));
+            var r = CornerFit.Fit(h, new P2(0.5, 2), v, new P2(2, 0.5), out err);
+            Assert.True(Near(r.A.A, new P2(0, 2)) && Near(r.A.B, new P2(2, 2)));
+            Assert.True(Near(r.B.A, new P2(2, 0)) && Near(r.B.B, new P2(2, 2)));
+            // keep the right and top arms instead
+            var r2 = CornerFit.Fit(h, new P2(4.5, 2), v, new P2(2, 4.5), out err);
+            Assert.True(Near(r2.A.A, new P2(2, 2)) && Near(r2.A.B, new P2(5, 2)));
+            Assert.True(Near(r2.B.A, new P2(2, 2)) && Near(r2.B.B, new P2(2, 5)));
+        }
+
+        [Fact]
+        public void AnExtendedLineKeepsItsOwnStartWhenPickedNearIt()
+        {
+            // a line drawn right to left meeting a wall at x = 10: keep the start (picked end), extend the far end to the corner
+            string err;
+            var r = CornerFit.Fit(new Seg(new P2(8, 1), new P2(2, 1)), new P2(3, 1), new Seg(new P2(10, 0), new P2(10, 5)), new P2(10, 4), out err);
+            Assert.True(Near(r.Corner, new P2(10, 1)));
+            Assert.True(Near(r.A.A, new P2(10, 1)) && Near(r.A.B, new P2(2, 1)));              // the near end moved to the corner, the picked end stays
+        }
+
+        [Fact]
+        public void ParallelZeroLengthAndFarCornersAreRefused()
+        {
+            string err;
+            Assert.Null(CornerFit.Fit(new Seg(new P2(0, 0), new P2(1, 0)), new P2(0, 0), new Seg(new P2(0, 1), new P2(1, 1)), new P2(0, 1), out err));
+            Assert.Contains("parallel", err);
+            Assert.Null(CornerFit.Fit(new Seg(new P2(0, 0), new P2(0, 0)), new P2(0, 0), new Seg(new P2(0, 1), new P2(1, 1)), new P2(0, 1), out err));
+            Assert.Contains("no length", err);
+            Assert.Null(CornerFit.Fit(new Seg(new P2(0, 0), new P2(1, 0)), new P2(0, 0), new Seg(new P2(0, 1), new P2(1, 1.0000001)), new P2(0, 1), out err));
+            Assert.Contains("far", err);
+        }
+
+        [Fact]
+        public void AngledLinesMeetAtTheirCorner()
+        {
+            string err;
+            var r = CornerFit.Fit(new Seg(new P2(0, 0), new P2(1, 1)), new P2(0.5, 0.5), new Seg(new P2(6, 0), new P2(5, 1)), new P2(5.5, 0.5), out err);
+            Assert.True(Near(r.Corner, new P2(3, 3)));
+            Assert.True(Near(r.A.B, new P2(3, 3)) && Near(r.B.B, new P2(3, 3)) || Near(r.B.A, new P2(3, 3)));
+        }
+    }
+}

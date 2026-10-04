@@ -45,7 +45,7 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 - **Wall objects:** keep the centre line and thickness with the wall so a wall can be edited and the openings follow it.
 - **Opening types:** double leaf and sliding doors, door thickness and frame, sill and lintel heights as block attributes feeding the schedule.
 - **Replace and move:** done for blocks made by `HCWDOOR` and `HCWWINDOW`. Still to do: openings drawn some other way, moving several at once, and dragging an opening along its wall with the cut following live.
-- **Clean-up:** `HCWCLEAN` removes zero-length and duplicate lines and joins collinear ones. Still to do: polylines and arcs (joining end to end, removing duplicates), and a one-click corner that trims or extends two wall lines to meet.
+- **Clean-up:** `HCWCLEAN` removes zero-length and duplicate lines and joins collinear ones. `HCWCORNER` trims or extends two lines to their corner. Still to do: polylines and arcs (joining end to end, removing duplicates), and a corner for polylines.
 - **Lift and escalator:** `HCWLIFT` draws the plan of a passenger lift shaft. Still to do: lift sizes by capacity from a table you set, a lift pit and machine room, a lift section, and escalators with an adjustable angle, length and landing.
 - **Handrail:** `HCWRAIL` draws the plan. Still to do: a balustrade with balusters and a handrail height in elevation, rails that follow the stair flight, and curved rails.
 - **Grid editing:** add or remove a grid line.

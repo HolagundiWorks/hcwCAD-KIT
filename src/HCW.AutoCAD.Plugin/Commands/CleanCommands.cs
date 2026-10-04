@@ -18,6 +18,67 @@ namespace HCW.AutoCAD.Plugin.Commands
     {
         private static bool _join = true;
 
+        /// <summary>
+        /// HCWCORNER trims or extends two lines to meet at their corner, keeping the part of each that you click. Click the
+        /// first line, then the second; a line that stopped short is extended, one that ran past is trimmed. Repeats until Enter.
+        /// Like FILLET with radius 0, for lines only, on any layer that is not locked.
+        /// </summary>
+        [CommandMethod("HCWCORNER")]
+        public void Corner()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            while (true)
+            {
+                var first = PickLine(ed, "\nSelect the first line, on the part to keep (Enter to finish): ");
+                if (first == null) return;
+                var second = PickLine(ed, "\nSelect the second line, on the part to keep: ");
+                if (second == null) return;
+                if (first.Value.Key == second.Value.Key) { ed.WriteMessage("\nHCWCORNER: pick two different lines."); continue; }
+
+                using (Util.Doc.LockDocument())
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var a = (Line)tr.GetObject(first.Value.Key, OpenMode.ForRead);
+                    var b = (Line)tr.GetObject(second.Value.Key, OpenMode.ForRead);
+                    string locked = null;
+                    foreach (var ln in new[] { a, b })
+                        if (((LayerTableRecord)tr.GetObject(ln.LayerId, OpenMode.ForRead)).IsLocked) locked = ln.Layer;
+                    if (locked != null) { ed.WriteMessage("\nHCWCORNER: layer " + locked + " is locked."); continue; }
+
+                    string error;
+                    var fit = CornerFit.Fit(
+                        new Seg(new P2(a.StartPoint.X, a.StartPoint.Y), new P2(a.EndPoint.X, a.EndPoint.Y)), new P2(first.Value.Value.X, first.Value.Value.Y),
+                        new Seg(new P2(b.StartPoint.X, b.StartPoint.Y), new P2(b.EndPoint.X, b.EndPoint.Y)), new P2(second.Value.Value.X, second.Value.Value.Y), out error);
+                    if (fit == null) { ed.WriteMessage("\nHCWCORNER: " + error + "."); continue; }
+
+                    Apply(a, fit.A);
+                    Apply(b, fit.B);
+                    tr.Commit();
+                }
+                ed.WriteMessage("\nHCWCORNER: lines meet at the corner.");
+            }
+        }
+
+        private static KeyValuePair<ObjectId, Point3d>? PickLine(Editor ed, string prompt)
+        {
+            var o = new PromptEntityOptions(prompt) { AllowNone = true };
+            o.SetRejectMessage("\nSelect a line.");
+            o.AddAllowedClass(typeof(Line), true);
+            var r = ed.GetEntity(o);
+            if (r.Status != PromptStatus.OK) return null;
+            return new KeyValuePair<ObjectId, Point3d>(r.ObjectId, r.PickedPoint);
+        }
+
+        /// <summary>Gives a line new end points, keeping its elevation.</summary>
+        private static void Apply(Line ln, Seg s)
+        {
+            ln.UpgradeOpen();
+            double z = ln.StartPoint.Z;
+            ln.StartPoint = new Point3d(s.A.X, s.A.Y, z);
+            ln.EndPoint = new Point3d(s.B.X, s.B.Y, z);
+        }
+
         [CommandMethod("HCWCLEAN")]
         public void CleanLines()
         {
