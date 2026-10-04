@@ -49,49 +49,6 @@ namespace HCW.AutoCAD.Plugin
             ("BP-STRUC-REF", 3, "Continuous", 13),
             ("BP-EXISTING", 251, "Continuous", 13),
             ("BP-DEMOLISH", 251, "DASHED", 13),
-            ("AP-DRAWING-BOUND", 253, "Continuous", 13),
-            ("AP-SITE-GROSS", 253, "Continuous", 13),
-            ("AP-SITE-NET", 253, "Continuous", 13),
-            ("AP-SITE-SURR", 253, "Continuous", 13),
-            ("AP-ROAD", 253, "Continuous", 13),
-            ("AP-MEANS-ACCESS", 253, "Continuous", 13),
-            ("AP-PARAPET", 253, "Continuous", 13),
-            ("AP-BLDG-BOUNDARY", 253, "Continuous", 13),
-            ("AP-FLOOR-LEVEL", 253, "Continuous", 13),
-            ("AP-BLDG-AREA", 253, "Continuous", 13),
-            ("AP-ROOM", 253, "Continuous", 13),
-            ("AP-PREMISES", 253, "Continuous", 13),
-            ("AP-STAIRCASE", 253, "Continuous", 13),
-            ("AP-RAMP", 253, "Continuous", 13),
-            ("AP-LIFT", 253, "Continuous", 13),
-            ("AP-PARKING", 253, "Continuous", 13),
-            ("AP-PROJECTION", 253, "Continuous", 13),
-            ("AP-RWH", 253, "Continuous", 13),
-            ("AP-OPEN-SPACE", 253, "Continuous", 13),
-            ("AP-COMP-WALL", 253, "Continuous", 13),
-            ("AP-MEZZANINE", 253, "Continuous", 13),
-            ("AP-PORCH", 253, "Continuous", 13),
-            ("AP-PLANTATION", 253, "Continuous", 13),
-            ("AP-GARAGE", 253, "Continuous", 13),
-            ("AP-PwD", 253, "Continuous", 13),
-            ("AP-ACCESSORY", 253, "Continuous", 13),
-            ("AP-DRIVEWAY", 253, "Continuous", 13),
-        };
-
-        /// <summary>
-        /// BP- layer that does not share its name with its AP- layer -> AP- layer name (used by BPLTCOPY).
-        /// A BP- layer not listed here maps to "AP-" plus the rest of its name.
-        /// Text, dimensions, title block, north point and revisions use the AN- layers, not BP- ones.
-        /// </summary>
-        public static readonly (string Bp, string Ap)[] BpToAp =
-        {
-            ("BP-SITE-SURRENDER", "AP-SITE-SURR"),
-            ("BP-ROAD-EDGE", "AP-ROAD"),
-            ("BP-ROAD-CL", "AP-ROAD"),
-            ("BP-BUILDING-CUT", "AP-BLDG-BOUNDARY"),
-            ("BP-STAIR", "AP-STAIRCASE"),
-            ("BP-SHAFT", "AP-PREMISES"),
-            ("BP-PARKING-AISLE", "AP-PARKING"),
         };
 
         /// <summary>HCW Layer Standard v4.0: name, ACI colour, linetype, lineweight (mm), description.</summary>

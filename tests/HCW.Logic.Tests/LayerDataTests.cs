@@ -16,16 +16,5 @@ namespace HCW.Logic.Tests
         [Fact] public void HcwNamesAreUnique() => NoDuplicates(LayerData.Hcw.Select(l => l.Name));
         [Fact] public void VhNamesAreUnique() => NoDuplicates(LayerData.Vh.Select(l => l.Name));
         [Fact] public void BpltNamesAreUnique() => NoDuplicates(LayerData.Bplt.Select(l => l.Name));
-
-        [Fact]
-        public void BpToApTargetsExist()
-        {
-            var names = LayerData.Bplt.Select(l => l.Name).ToList();
-            foreach (var m in LayerData.BpToAp)
-            {
-                Assert.Contains(m.Bp, names);
-                Assert.Contains(m.Ap, names);
-            }
-        }
     }
 }

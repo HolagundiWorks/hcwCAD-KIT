@@ -268,11 +268,8 @@ namespace HCW.AutoCAD.Plugin.UI
         private RibbonPanel BuildBpltSetupPanel()
         {
             var src = NewSource("BPLT");
-            AddLarge(src, "BPLTSTART", "BPLT\nStart", "flag", "Set metres and create the BP- and AP- submission layers");
+            AddLarge(src, "BPLTSTART", "BPLT\nStart", "flag", "Set metres and create the BP- submission layers");
             AddSmallGroup(src,
-                ("BPLTCOPY", "Copy to AP-", "copy", "Duplicate selected BP- entities onto their matching AP- layer"),
-                ("BPLTCHECK", "Check AP-", "rule", "Verify every required AP- layer has a closed polyline"),
-                ("BPLTAREA", "Area Summary", "area", "Report gross area per AP- layer"),
                 ("BPLTREPORT", "Export Report", "report", "Export the full BPLT layer report as CSV"));
             return Wrap(src);
         }

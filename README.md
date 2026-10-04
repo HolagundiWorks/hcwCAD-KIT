@@ -405,7 +405,7 @@ The **Layers** panel is on this tab. It has one dropdown and one **Create Layers
 |---|---|
 | `HCWLAYERS` | Creates or verifies the 36-layer HCW Layer Standard v4.0 (colour, linetype, lineweight). Existing layers are left in place; missing ones are added. |
 | `VHLAYERS` | Creates the legacy underscore layer set (`A_WALL_CUT`, `S_COLUMN`, and so on) and makes `A_WALL_CUT` current. Use one layer standard per drawing. |
-| `BPLTLAYERS` | The **HCW + Building Permit** choice in the dropdown. Creates the HCW standard layers plus 39 BP- drafting layers and the AP- marking layers, without changing drawing units. Text, dimensions, title block, north point and revisions use the `AN-` layers. |
+| `BPLTLAYERS` | The **HCW + Building Permit** choice in the dropdown. Creates the HCW standard layers plus the BP- drafting layers, without changing drawing units. Text, dimensions, title block, north point and revisions use the `AN-` layers. |
 
 ### Layer maintenance
 
@@ -457,13 +457,11 @@ These buttons drive the same auto-unit engine as the **hcwCAD-KIT** room panel.
 
 ### BPLT
 
-`BPLTSTART` and **Copy to AP-** are on this tab. `BPLTCOPY` copies selected objects that sit on a `BP-…` layer onto `AP-` plus the rest of that name. Objects that are not on a BP- layer, or whose matching AP- layer does not exist, are skipped.
+`BPLTSTART` and **Export Report** are on this tab.
 
 | Command | What it does |
 |---|---|
-| `BPLTSTART` | Creates every BP- and AP- layer, then sets metres, decimal units, and default dimension text and arrow size. |
-| `BPLTCHECK` | For each AP- layer, reports OK (has a closed polyline), EMPTY, NOT CLOSED, or MISSING LAYER. |
-| `BPLTAREA` | Sums closed polyline area on each AP- layer and prints it. The heading says square metres; the number is the raw drawing-unit area, so the drawing should already be in metres (`BPLTSTART` sets that). |
+| `BPLTSTART` | Creates every BP- layer, then sets metres, decimal units, and default dimension text and arrow size. |
 | `BPLTREPORT` | Writes `BPLT_Report.csv` beside the drawing: layer name, colour, linetype, lineweight, and whether the layer exists. |
 
 ### Text settings
@@ -508,7 +506,7 @@ Labels go on `ROOM-LABELS`. Rectangles go on `ROOM-RECT`. The default text heigh
 
 **VHLAYERS** — older names with underscores (`A_WALL_CUT`, `S_COLUMN`, `E_LIGHT`, `P_WATER_SUPPLY`, `AN_TEXT`, `X_GUIDE`, …). Guide layers `X_*` are created non-plotting. Do not mix this set with HCW v4.0 in the same drawing if both are meant to be the office standard.
 
-**BPLT** — `BP-` layers for the drawing (site, building, parking, services; text, dimensions and title block use the `AN-` layers) and `AP-` layers for AutoPlan closed-polyline marks (site, building area, rooms, stairs, parking, and similar). `BPLTREPORT` lists every name and whether it exists.
+**BPLT** — `BP-` layers for the drawing (site, building, parking, services; text, dimensions and title block use the `AN-` layers). `BPLTREPORT` lists every name and whether it exists.
 
 ---
 

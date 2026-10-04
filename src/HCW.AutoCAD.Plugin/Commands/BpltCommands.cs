@@ -9,11 +9,11 @@ using AcAp = Autodesk.AutoCAD.ApplicationServices.Application;
 namespace HCW.AutoCAD.Plugin.Commands
 {
     /// <summary>
-    /// hcwCAD-KIT building-permission layers (BBMP/AutoPlan).
+    /// hcwCAD-KIT building-permission layers (BBMP).
     /// </summary>
     public class BpltCommands
     {
-        /// <summary>Creates the HCW standard layers plus the BP-/AP- permit layers in one pass.</summary>
+        /// <summary>Creates the HCW standard layers plus the BP- permit layers in one pass.</summary>
         internal static void CreateAllLayers(Transaction tr, Database db)
         {
             foreach (var ld in LayerData.Hcw)
@@ -36,7 +36,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 {
                     CreateAllLayers(tr, db);
 
-                    // AutoPlan mandatory submission environment. Set via SETVAR-equivalent
+                    // Building permit submission environment. Set via SETVAR-equivalent
                     // calls (rather than Database properties, which don't cover every DIMVAR)
                     // so this works identically across AutoCAD 2021-2024.
                     db.Insunits = UnitsValue.Meters;
@@ -66,105 +66,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             {
                 CreateAllLayers(tr, db);
                 tr.Commit();
-                int ap = LayerData.Bplt.Count(l => l.Name.StartsWith("AP-"));
-                int bp = LayerData.Bplt.Length - ap;
-                ed.WriteMessage($"\nBPLTLAYERS: {LayerData.Hcw.Length} HCW layers, {bp} BP- drafting layers and {ap} AP- AutoPlan " +
-                                 "marking layers created/verified.");
-            }
-        }
-
-        [CommandMethod("BPLTCOPY")]
-        public void BpltCopy()
-        {
-            // Duplicate every BP-* entity onto its matching AP-* marking layer (same geometry,
-            // AutoPlan-required helper layer), skipping entities whose BP- layer has no AP- match.
-            var db = Util.Db; var ed = Util.Ed;
-            var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect BP- entities to duplicate onto their AP- layer: " });
-            if (psr.Status != PromptStatus.OK) { ed.WriteMessage("\nNothing selected."); return; }
-
-            using (Util.Doc.LockDocument())
-            using (var tr = db.TransactionManager.StartTransaction())
-            {
-                var lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
-                var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
-                int copied = 0, skipped = 0;
-                var apMap = LayerData.BpToAp.ToDictionary(m => m.Bp, m => m.Ap, StringComparer.OrdinalIgnoreCase);
-
-                foreach (SelectedObject so in psr.Value)
-                {
-                    var ent = (Entity)tr.GetObject(so.ObjectId, OpenMode.ForRead);
-                    string layName = ent.Layer;
-                    if (!layName.StartsWith("BP-", StringComparison.OrdinalIgnoreCase)) { skipped++; continue; }
-                    string apName = apMap.TryGetValue(layName, out var mapped) ? mapped : "AP-" + layName.Substring(3);
-                    if (!lt.Has(apName)) { skipped++; continue; }
-
-                    var clone = (Entity)ent.Clone();
-                    clone.Layer = apName;
-                    btr.AppendEntity(clone);
-                    tr.AddNewlyCreatedDBObject(clone, true);
-                    copied++;
-                }
-                tr.Commit();
-                ed.WriteMessage($"\nBPLTCOPY: {copied} object(s) duplicated onto AP- layers, {skipped} skipped (no matching AP- layer).");
-            }
-        }
-
-        [CommandMethod("BPLTCHECK")]
-        public void BpltCheck()
-        {
-            // Every AP- layer that AutoPlan requires must contain at least one CLOSED polyline.
-            var db = Util.Db; var ed = Util.Ed;
-            using (Util.Doc.LockDocument())
-            using (var tr = db.TransactionManager.StartTransaction())
-            {
-                var lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
-                var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
-                var required = LayerData.Bplt.Where(l => l.Name.StartsWith("AP-")).Select(l => l.Name).ToList();
-                var hasAny = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var hasClosed = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (ObjectId id in btr)
-                {
-                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                    if (ent == null || !ent.Layer.StartsWith("AP-", StringComparison.OrdinalIgnoreCase)) continue;
-                    hasAny.Add(ent.Layer);
-                    if (ent is Polyline pl && pl.Closed) hasClosed.Add(ent.Layer);
-                }
-                int ok = 0, missing = 0, notClosed = 0;
-
-                foreach (var name in required)
-                {
-                    if (!lt.Has(name)) { missing++; ed.WriteMessage($"\n  MISSING LAYER: {name}"); continue; }
-                    if (hasClosed.Contains(name)) ok++;
-                    else { notClosed++; ed.WriteMessage(hasAny.Contains(name) ? $"\n  NOT CLOSED: {name}" : $"\n  EMPTY: {name}"); }
-                }
-                ed.WriteMessage($"\nBPLTCHECK: {ok} OK, {notClosed} empty/not-closed, {missing} layer(s) missing entirely.");
-                tr.Commit();
-            }
-        }
-
-        [CommandMethod("BPLTAREA")]
-        public void BpltArea()
-        {
-            var db = Util.Db; var ed = Util.Ed;
-            using (Util.Doc.LockDocument())
-            using (var tr = db.TransactionManager.StartTransaction())
-            {
-                var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
-                var totals = new System.Collections.Generic.Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-                foreach (ObjectId id in btr)
-                {
-                    if (!(tr.GetObject(id, OpenMode.ForRead) is Entity ent)) continue;
-                    if (!ent.Layer.StartsWith("AP-", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (ent is Polyline pl && pl.Closed)
-                    {
-                        double a = Math.Abs(pl.Area);
-                        totals[ent.Layer] = totals.TryGetValue(ent.Layer, out var t) ? t + a : a;
-                    }
-                }
-                ed.WriteMessage("\nBPLTAREA - AutoPlan area summary (sq.m):");
-                foreach (var kv in totals.OrderBy(k => k.Key))
-                    ed.WriteMessage($"\n  {Util.Pad(kv.Key, 22)} {kv.Value:F2}");
-                tr.Commit();
+                ed.WriteMessage($"\nBPLTLAYERS: {LayerData.Hcw.Length} HCW layers and {LayerData.Bplt.Length} BP- drafting layers created/verified.");
             }
         }
 
