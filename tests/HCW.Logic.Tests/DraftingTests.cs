@@ -1448,3 +1448,34 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class LevelScheduleTests
+    {
+        [Theory]
+        [InlineData("+3.150", 3.15)]
+        [InlineData("-0.450", -0.45)]
+        [InlineData("±0.000", 0.0)]
+        [InlineData("3.15", 3.15)]
+        [InlineData(" +12.5 ", 12.5)]
+        public void ParsesLevels(string text, double want) => Assert.Equal(want, LevelSchedule.Parse(text).Value, 9);
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("FFL")]
+        [InlineData(null)]
+        public void NonNumbersAreNull(string text) => Assert.Null(LevelSchedule.Parse(text));
+
+        [Fact]
+        public void HighestFirstWithCounts()
+        {
+            var rows = LevelSchedule.Build(new[] { "+3.150", "±0.000", "+3.150", "-0.450", "+6.300", "FFL", " ", "+3.150" });
+            Assert.Equal(new[] { "+6.300", "+3.150", "±0.000", "-0.450", "FFL" }, rows.Select(r => r.Level).ToArray());
+            Assert.Equal(new[] { 1, 3, 1, 1, 1 }, rows.Select(r => r.Marks).ToArray());
+        }
+
+        [Fact]
+        public void NothingGivesNoRows() => Assert.Empty(LevelSchedule.Build(new string[0]));
+    }
+}

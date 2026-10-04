@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -17,12 +18,14 @@ namespace HCW.AutoCAD.Plugin.Commands
     public class SymbolCommands
     {
         private const string LayerSymbol = "AN-SYMB", LayerText = "AN-TEXT";
-        private const string BlockLevel = "HCW_LEVEL", BlockNorth = "HCW_NORTH";
+        private const string BlockLevel = "HCW_LEVEL", BlockLevelUp = "HCW_LEVEL_UP", BlockNorth = "HCW_NORTH", BlockElev = "HCW_ELEV";
 
         private static double _scale = 100;
         private static bool _hasDatum;
         private static double _datumY, _datumLevel;
         private static int _sectionIndex;
+        private static bool _ceiling;
+        private static int _elevIndex = 1;
         private static string _slopeText = "1:100";
 
         /// <summary>Size of one sheet millimetre in drawing units at the current plot scale.</summary>
@@ -51,11 +54,17 @@ namespace HCW.AutoCAD.Plugin.Commands
 
             while (true)
             {
-                var o = new PromptPointOptions("\nPick the level point [Value/Datum]" + (_hasDatum ? " <level from the datum>" : "") + ": ", "Value Datum") { AllowNone = true };
+                var o = new PromptPointOptions("\nPick the level point [Value/Datum/Ceiling/Floor]" + (_ceiling ? " (ceiling marks)" : "") + (_hasDatum ? " <level from the datum>" : "") + ": ", "Value Datum Ceiling Floor") { AllowNone = true };
                 var r = ed.GetPoint(o);
                 if (r.Status == PromptStatus.None || r.Status == PromptStatus.Cancel) return;
                 if (r.Status == PromptStatus.Keyword)
                 {
+                    if (r.StringResult == "Ceiling" || r.StringResult == "Floor")
+                    {
+                        _ceiling = r.StringResult == "Ceiling";
+                        ed.WriteMessage(_ceiling ? "\nCeiling marks: the triangle points up at the level." : "\nFloor marks: the triangle points down at the level.");
+                        continue;
+                    }
                     if (r.StringResult == "Value")
                     {
                         var v = ed.GetDouble(new PromptDoubleOptions("\nLevel in metres for the next mark (+3.150 is typed 3.15): ") { AllowNone = false });
@@ -95,10 +104,10 @@ namespace HCW.AutoCAD.Plugin.Commands
                 using (var tr = db.TransactionManager.StartTransaction())
                 {
                     Util.EnsureHcwLayer(tr, db, LayerSymbol);
-                    EnsureLevelBlock(tr, db);
+                    EnsureLevelBlock(tr, db, _ceiling);
                     var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                     var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                    var br = new BlockReference(at, bt[BlockLevel]) { Layer = LayerSymbol, ScaleFactors = new Scale3d(Mm) };
+                    var br = new BlockReference(at, bt[_ceiling ? BlockLevelUp : BlockLevel]) { Layer = LayerSymbol, ScaleFactors = new Scale3d(Mm) };
                     space.AppendEntity(br);
                     tr.AddNewlyCreatedDBObject(br, true);
                     TitleBlockCommands.AddAttributes(tr, br);
@@ -113,22 +122,27 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
-        /// <summary>Level mark in sheet millimetres: a triangle on the level point, a line to the right, the value above it.</summary>
-        private static void EnsureLevelBlock(Transaction tr, Database db)
+        /// <summary>
+        /// Level mark in sheet millimetres: a triangle on the level point, a line to the right, the value beside the line.
+        /// Floor mark: triangle pointing down, value above the line. Ceiling mark: triangle pointing up, value below the line.
+        /// </summary>
+        private static void EnsureLevelBlock(Transaction tr, Database db, bool up)
         {
             var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-            if (bt.Has(BlockLevel)) return;
-            var def = NewBlock(tr, bt, BlockLevel);
+            string name = up ? BlockLevelUp : BlockLevel;
+            if (bt.Has(name)) return;
+            var def = NewBlock(tr, bt, name);
+            double s = up ? -1 : 1;                       // the up mark is the down mark turned over, with its text on the other side of the line
             var tri = new Polyline();
             tri.AddVertexAt(0, new Point2d(0, 0), 0, 0, 0);
-            tri.AddVertexAt(1, new Point2d(-1.5, 2.6), 0, 0, 0);
-            tri.AddVertexAt(2, new Point2d(1.5, 2.6), 0, 0, 0);
+            tri.AddVertexAt(1, new Point2d(-1.5, 2.6 * s), 0, 0, 0);
+            tri.AddVertexAt(2, new Point2d(1.5, 2.6 * s), 0, 0, 0);
             tri.Closed = true;
             Add(tr, def, tri);
-            Add(tr, def, new Line(new Point3d(-1.5, 2.6, 0), new Point3d(16, 2.6, 0)));
+            Add(tr, def, new Line(new Point3d(-1.5, 2.6 * s, 0), new Point3d(16, 2.6 * s, 0)));
             var ad = new AttributeDefinition
             {
-                Position = new Point3d(2.2, 3.3, 0), Height = 2.5, Tag = "LEVEL", Prompt = "Level (m)", TextString = "±0.000",
+                Position = new Point3d(2.2, up ? -5.6 : 3.3, 0), Height = 2.5, Tag = "LEVEL", Prompt = "Level (m)", TextString = "±0.000",
             };
             Add(tr, def, ad);
         }
@@ -325,6 +339,129 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
                 ed.WriteMessage("\nHCWSLOPE: " + text);
             }
+        }
+
+        // ---- level schedule ----
+
+        [CommandMethod("HCWLEVELSCHED")]
+        public void LevelScheduleCommand()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            if (!AskScale(ed)) return;
+            var pr = ed.GetPoint("\nPick the top-left corner of the level schedule: ");
+            if (pr.Status != PromptStatus.OK) return;
+            var at = pr.Value.TransformBy(ed.CurrentUserCoordinateSystem);
+
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                var texts = new List<string>();
+                foreach (ObjectId id in space)
+                {
+                    if (id.ObjectClass.DxfName != "INSERT") continue;
+                    var br = (BlockReference)tr.GetObject(id, OpenMode.ForRead);
+                    string name = BlockOpenings.EffectiveName(tr, br);
+                    if (!string.Equals(name, BlockLevel, StringComparison.OrdinalIgnoreCase) && !string.Equals(name, BlockLevelUp, StringComparison.OrdinalIgnoreCase)) continue;
+                    foreach (ObjectId attId in br.AttributeCollection)
+                    {
+                        var att = (AttributeReference)tr.GetObject(attId, OpenMode.ForRead);
+                        if (string.Equals(att.Tag, "LEVEL", StringComparison.OrdinalIgnoreCase)) texts.Add(att.TextString);
+                    }
+                }
+                var rows = LevelSchedule.Build(texts);
+                if (rows.Count == 0)
+                {
+                    ed.WriteMessage("\nHCWLEVELSCHED: no level marks (HCWLEVEL) in this space.");
+                    return;
+                }
+                Util.EnsureHcwLayer(tr, db, LayerText);
+                double h = 2.5 * Mm;
+                MeasureCommands.DrawTable(tr, db, new Point3d(at.X, at.Y - 2.5 * h, 0), new[] { "Level (m)", "Marks" },
+                    rows.Select(r => new[] { r.Level, r.Marks.ToString() }).ToList(), h, LayerText);
+                var title = new DBText { Height = h * 1.2, TextString = "LEVEL SCHEDULE", Layer = LayerText, Position = new Point3d(at.X, at.Y - 1.2 * h, 0) };
+                space.AppendEntity(title);
+                tr.AddNewlyCreatedDBObject(title, true);
+                tr.Commit();
+                ed.WriteMessage("\nHCWLEVELSCHED: " + rows.Count + " level(s), " + rows.Sum(r => r.Marks) + " mark(s).");
+            }
+        }
+
+        // ---- elevation marker ----
+
+        [CommandMethod("HCWELEV")]
+        public void ElevationMarker()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            if (!AskScale(ed)) return;
+            var ucs = ed.CurrentUserCoordinateSystem;
+
+            while (true)
+            {
+                var pr = ed.GetPoint(new PromptPointOptions("\nPick the position of the elevation marker (Enter to finish): ") { AllowNone = true });
+                if (pr.Status != PromptStatus.OK) return;
+                var at = pr.Value.TransformBy(ucs);
+                var dr = ed.GetPoint(new PromptPointOptions("\nPick a point in the direction you look: ") { UseBasePoint = true, BasePoint = pr.Value, UseDashedLine = true });
+                if (dr.Status != PromptStatus.OK) return;
+                var to = dr.Value.TransformBy(ucs);
+                if (to.DistanceTo(at) < 1e-9) { ed.WriteMessage("\nPick a point away from the marker."); continue; }
+                double rotation = Math.Atan2(to.Y - at.Y, to.X - at.X);
+
+                var nr = ed.GetString(new PromptStringOptions("\nElevation number <" + _elevIndex + ">: ") { AllowSpaces = false, DefaultValue = _elevIndex.ToString(), UseDefaultValue = true });
+                if (nr.Status != PromptStatus.OK) return;
+                string number = nr.StringResult.Trim().Length > 0 ? nr.StringResult.Trim() : _elevIndex.ToString();
+                var sr = ed.GetString(new PromptStringOptions("\nSheet number the elevation is drawn on <->: ") { AllowSpaces = false, DefaultValue = "-", UseDefaultValue = true });
+                if (sr.Status != PromptStatus.OK) return;
+                string sheet = sr.StringResult.Trim().Length > 0 ? sr.StringResult.Trim() : "-";
+
+                using (Util.Doc.LockDocument())
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    Util.EnsureHcwLayer(tr, db, LayerSymbol);
+                    EnsureElevationBlock(tr, db);
+                    var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                    var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    var br = new BlockReference(at, bt[BlockElev]) { Layer = LayerSymbol, Rotation = rotation, ScaleFactors = new Scale3d(Mm) };
+                    space.AppendEntity(br);
+                    tr.AddNewlyCreatedDBObject(br, true);
+                    TitleBlockCommands.AddAttributes(tr, br);
+                    foreach (ObjectId id in br.AttributeCollection)
+                    {
+                        var att = (AttributeReference)tr.GetObject(id, OpenMode.ForWrite);
+                        string tag = att.Tag ?? "";
+                        if (string.Equals(tag, "ELEV", StringComparison.OrdinalIgnoreCase)) att.TextString = number;
+                        else if (string.Equals(tag, "SHEET", StringComparison.OrdinalIgnoreCase)) att.TextString = sheet;
+                        att.Rotation = 0;                       // the numbers stay upright whichever way the marker points
+                    }
+                    tr.Commit();
+                }
+                int n;
+                if (int.TryParse(number, out n)) _elevIndex = n + 1; else _elevIndex++;
+                ed.WriteMessage("\nHCWELEV: elevation " + number + " on sheet " + sheet + ".");
+            }
+        }
+
+        /// <summary>Elevation marker in sheet millimetres: a 10 mm circle split by a line (elevation number above, sheet number below) and a pointer toward +x, the way you look.</summary>
+        private static void EnsureElevationBlock(Transaction tr, Database db)
+        {
+            var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+            if (bt.Has(BlockElev)) return;
+            var def = NewBlock(tr, bt, BlockElev);
+            Add(tr, def, new Circle(Point3d.Origin, Vector3d.ZAxis, 5));
+            Add(tr, def, new Line(new Point3d(-5, 0, 0), new Point3d(5, 0, 0)));
+            Add(tr, def, new Solid(new Point3d(5, 0, 0), new Point3d(9, 2, 0), new Point3d(9, -2, 0)));
+            Add(tr, def, new AttributeDefinition
+            {
+                Position = new Point3d(0, 2.6, 0), Height = 2.5, Tag = "ELEV", Prompt = "Elevation number", TextString = "1",
+                HorizontalMode = TextHorizontalMode.TextMid, VerticalMode = TextVerticalMode.TextVerticalMid, AlignmentPoint = new Point3d(0, 2.6, 0),
+            });
+            Add(tr, def, new AttributeDefinition
+            {
+                Position = new Point3d(0, -2.6, 0), Height = 2.5, Tag = "SHEET", Prompt = "Sheet number", TextString = "-",
+                HorizontalMode = TextHorizontalMode.TextMid, VerticalMode = TextVerticalMode.TextVerticalMid, AlignmentPoint = new Point3d(0, -2.6, 0),
+            });
         }
 
         // ---- helpers ----

@@ -233,6 +233,8 @@ namespace HCW.AutoCAD.Plugin.UI
             var src = NewSource("Symbols");
             AddLarge(src, "HCWLEVEL", "Level\nMark", "ruler", "Place level marks with their value: typed, or worked out from a datum by height");
             AddLarge(src, "HCWNORTH", "North\nArrow", "flag", "Place a north arrow, turned to the direction you pick");
+            AddLarge(src, "HCWELEV", "Elevation\nMarker", "tag", "Place an elevation marker: elevation number over sheet number, pointing the way you look");
+            AddLarge(src, "HCWLEVELSCHED", "Level\nSchedule", "table-of-contents", "Draw a schedule of the levels marked with HCWLEVEL");
             AddLarge(src, "HCWSECTION", "Section\nMarker", "rule", "Draw a section line with a lettered head at each end, looking to the side you pick");
             AddLarge(src, "HCWSLOPE", "Slope\nArrow", "text--vertical-alignment", "Draw a slope arrow with its text, such as 1:100 or 2%");
             return Wrap(src);

@@ -19,8 +19,8 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 `SBNUM`, `LPNUM`, `FPNUM`, `ELCONNECT`, `ELSCHEDULE` and `ELUPDATE` are built (see the README). Still to do:
 
 - **Switch control:** tie each switch to the lights it controls (today a switch is counted on the board its wiring reaches).
-- **More items:** exhaust fans, inverters, geyser points with their own rating, and any other item as a new kind in `ElectricalKinds`.
-- **Circuits and loads:** the load schedule gives each point a wattage and totals the load and the number of circuits per board (`ELSCHEDULE`, **Load**). Still to do: number the circuits (C1, C2 …) and say which point is on which one, the load per circuit, diversity factors, and cable and breaker sizes.
+- **More items:** exhaust fans and inverters are kinds now, and a point's load is set per kind in `ElectricalWatts`. Still to do: a rating per individual point (two geysers of different size), and any other item as a new kind in `ElectricalKinds`.
+- **Circuits and loads:** circuits are numbered per board with the points on each and its load (`ELSCHEDULE`, **Circuit**), and demand uses diversity factors (**Load**). Still to do: cable and breaker sizes, and balancing the load across phases.
 - **Cable lengths:** the cable schedule (`ELSCHEDULE`, **Cable**) totals the drawn wiring per switchboard with a drop and an allowance. Still to do: lengths per circuit, per cable size and conductor count, and a bill of quantities with the wire sizes.
 - **Live labels:** ID text follows a moved block only when a command runs; a reactor would move it at once.
 - **Pass-through wires:** a wire that runs straight through a symbol does not connect to it today (only vertices do).
@@ -31,10 +31,10 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 
 - **Winders and quarter-space landings** for L and U types, and a half-space landing that is not the full width of both flights.
 - **Headroom and railing:** headroom line over the section, handrail height, balustrade and stringer detail.
-- **Reinforcement:** main and distribution bars in the waist slab and landing, with a bar schedule.
+- **Reinforcement:** an estimate and bar schedule are saved with the quantities. Still to do: drawing the bars in the section and plan, cranks, hooks and top steel, and bar bending shapes.
 - **Levels and floors:** more than one storey in one command, with a stair per floor.
 - **Section through an L or U as cut:** today an L is a developed section and a U returns over the first flight.
-- **Quantity:** concrete, shuttering, finishes and skirting per stair are worked out and saved as a take-off for `MEXPORT`. Still to do: landing edge shuttering, reinforcement weight with the bar schedule, and quantities for stairs not made by `AECSTAIR`.
+- **Quantity:** concrete, shuttering, finishes and skirting per stair are worked out and saved as a take-off for `MEXPORT`. Still to do: landing edge shuttering, and quantities for stairs not made by `AECSTAIR`.
 
 ## Walls, openings and grid
 
@@ -49,15 +49,13 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 - **Lift and escalator:** `HCWLIFT` draws the plan of a passenger lift shaft. Still to do: lift sizes by capacity from a table you set, a lift pit and machine room, a lift section, and escalators with an adjustable angle, length and landing.
 - **Handrail:** `HCWRAIL` draws the plan. Still to do: a balustrade with balusters and a handrail height in elevation, rails that follow the stair flight, and curved rails.
 - **Grid editing:** add or remove a grid line.
-- **Columns:** different sizes at chosen intersections in one pass, a column on `MEASURE-COLUMN` for the take-off without moving it, grid-anchored offsets (edge columns flush with a wall face), and column blocks with a mark attribute.
+- **Columns:** `HCWCOLUMN` can put columns on `MEASURE-COLUMN` for the take-off. Still to do: different sizes at chosen intersections in one pass, grid-anchored offsets (edge columns flush with a wall face), and column blocks with a mark attribute.
 
 ## Symbols
 
-`HCWLEVEL`, `HCWNORTH`, `HCWSECTION` and `HCWSLOPE` are built (see the README). Still to do:
+`HCWLEVEL` (floor and ceiling marks), `HCWLEVELSCHED`, `HCWELEV`, `HCWNORTH`, `HCWSECTION` and `HCWSLOPE` are built (see the README). Still to do:
 
-- **Elevation marker:** the circle with an elevation number over its sheet number.
 - **Section heads from the sheet set:** fill the sheet number in the section bubble from the layout it is drawn on.
-- **Level marks:** the upward-pointing variant for ceiling levels, and a level schedule from the `LEVEL` attributes.
 - **Live datum:** level marks that update when the datum moves.
 
 ## Take-off
@@ -72,7 +70,7 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 `HCWAREASTMT` is built (see the README). Still to do:
 
 - **Read floors from layers:** take each floor's outlines from layers (`BP-BUILDING-CUT` per floor) instead of selecting them.
-- **Permissible values:** fill `FAR_PERM` and `GC_PERM` from a table by plot size and zone, and flag when the achieved figures exceed them.
+- **Permissible values:** `FAR_PERM` and `GC_PERM` are filled from two settings and an excess is flagged. Still to do: a table by plot size and zone, which needs the local bylaw figures.
 - **Exemptions by rule:** a bylaw table of what may be left out of the FAR (stair, lift, parking, balcony projections) so deductions are not selected by hand.
 - **More than four floors** in the title block, and a statement that updates when the outlines change.
 
@@ -80,6 +78,16 @@ Open questions: single-line (centreline) walls and mixed drawings are not handle
 
 - Sheet set: set viewport layers and per-sheet scales; fill more title-block fields (project, owner, architect) from the fields library.
 - Openings on more than one floor: tie a schedule entry to a floor so the lintel-bottom check uses that floor's value.
+
+## What needs a CAD host or a design decision first
+
+These are left because they cannot be built or checked without running inside AutoCAD, BricsCAD or ZWCAD, or need a decision about how the tool should behave:
+
+- **Reactors:** associative dimensions, live label and datum updates and dragging an opening along its wall all depend on object reactors, which behave differently in each host.
+- **Wall objects:** keeping a wall's centre line and thickness with it, so openings follow when it is edited, changes how every wall and opening tool stores its data.
+- **Curved walls and rooms that close across a gap,** and single-line (centreline) walls, need decisions on how an arc offsets and where a gap becomes an opening.
+- **Bylaw tables** (permissible FAR and ground cover by plot size, what is exempt from the FAR) need the figures for the local rules.
+- **Sheet set viewport layers and scales,** and the section bubble taking its sheet number from the layout, need testing against real sheet sets.
 
 ## Quality
 

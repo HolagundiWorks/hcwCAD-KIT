@@ -25,6 +25,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private static string _size = "230x450";
         private static bool _fill = true;
+        private static string _layer = LayerColumn;
 
         [CommandMethod("HCWCOLUMN")]
         public void PlaceColumns()
@@ -43,6 +44,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (size == null) ed.WriteMessage("\n" + error + ".");
                 else _size = r.StringResult.Trim();
             }
+
+            var lo = new PromptKeywordOptions("\nColumn layer [A-COL/MEASURE-COLUMN] <" + _layer + ">: ", "A-COL MEASURE-COLUMN") { AllowNone = true };
+            lo.Keywords.Default = _layer;
+            var lr = ed.GetKeywords(lo);
+            if (lr.Status == PromptStatus.OK) _layer = lr.StringResult;
+            else if (lr.Status != PromptStatus.None) return;
 
             var fo = new PromptKeywordOptions("\nSolid fill [Yes/No] <" + (_fill ? "Yes" : "No") + ">: ", "Yes No") { AllowNone = true };
             fo.Keywords.Default = _fill ? "Yes" : "No";
@@ -113,7 +120,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                Util.EnsureHcwLayer(tr, db, LayerColumn);
+                if (string.Equals(_layer, MeasureCommands.LayCol, StringComparison.OrdinalIgnoreCase)) Util.EnsureLayer(tr, db, MeasureCommands.LayCol, 2);
+                else Util.EnsureHcwLayer(tr, db, LayerColumn);
                 if (_fill) Util.EnsureHcwLayer(tr, db, LayerFill);
                 var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
 
@@ -141,7 +149,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                         pl.Closed = true;
                         outline = pl;
                     }
-                    outline.Layer = LayerColumn;
+                    outline.Layer = _layer;
                     space.AppendEntity(outline);
                     tr.AddNewlyCreatedDBObject(outline, true);
                     if (_fill) AddFill(tr, space, outline.ObjectId);
@@ -150,7 +158,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
                 tr.Commit();
             }
-            ed.WriteMessage("\nHCWCOLUMN: " + placed + " column(s) " + size.Label + " mm on " + LayerColumn
+            ed.WriteMessage("\nHCWCOLUMN: " + placed + " column(s) " + size.Label + " mm on " + _layer
                 + (skipped > 0 ? ", " + skipped + " intersection(s) already had one." : "."));
         }
 
@@ -192,7 +200,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 foreach (ObjectId id in space)
                 {
                     var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                    if (ent == null || ent.IsErased || !string.Equals(ent.Layer, LayerColumn, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (ent == null || ent.IsErased || !IsColumnLayer(ent.Layer)) continue;
                     var circle = ent as Circle;
                     var pl = ent as Polyline;
                     if (circle != null)
@@ -203,7 +211,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
                 if (cols.Count == 0)
                 {
-                    ed.WriteMessage("\nHCWCOLSCHED: no columns on " + LayerColumn + ". Place them with HCWCOLUMN.");
+                    ed.WriteMessage("\nHCWCOLSCHED: no columns on " + LayerColumn + " or " + MeasureCommands.LayCol + ". Place them with HCWCOLUMN.");
                     return;
                 }
 
@@ -243,9 +251,13 @@ namespace HCW.AutoCAD.Plugin.Commands
                 ed.WriteMessage("\nHCWCOLSCHED: " + cols.Count + " column(s) in " + rows.Count + " size(s): "
                     + string.Join(", ", rows.Select(r => r.Mark + " " + r.Label + " x" + r.Count)) + "."
                     + (removed > 0 ? " Earlier marks and table replaced." : "")
-                    + (skipped > 0 ? " " + skipped + " object(s) on " + LayerColumn + " are not rectangles or circles and were skipped." : ""));
+                    + (skipped > 0 ? " " + skipped + " object(s) on the column layers are not rectangles or circles and were skipped." : ""));
             }
         }
+
+        /// <summary>A column layer: A-COL, or MEASURE-COLUMN where the take-off reads them.</summary>
+        private static bool IsColumnLayer(string layer) =>
+            string.Equals(layer, LayerColumn, StringComparison.OrdinalIgnoreCase) || string.Equals(layer, MeasureCommands.LayCol, StringComparison.OrdinalIgnoreCase);
 
         private static void AddLine(List<Seg> into, Line ln) =>
             into.Add(new Seg(new P2(ln.StartPoint.X, ln.StartPoint.Y), new P2(ln.EndPoint.X, ln.EndPoint.Y)));
@@ -257,7 +269,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             foreach (ObjectId id in space)
             {
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                if (ent == null || !string.Equals(ent.Layer, LayerColumn, StringComparison.OrdinalIgnoreCase)) continue;
+                if (ent == null || !IsColumnLayer(ent.Layer)) continue;
                 if (!(ent is Circle) && !(ent is Polyline)) continue;
                 try
                 {
