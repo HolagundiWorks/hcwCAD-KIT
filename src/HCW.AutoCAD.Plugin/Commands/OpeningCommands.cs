@@ -218,6 +218,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             public OpeningFrame.Corners Corners;
             public double Z;
             public string Layer = "";
+            /// <summary>Not made by HCWDOOR or HCWWINDOW: a gap in the wall, or some other block standing in one. Its size comes from the gap.</summary>
+            public bool Foreign;
         }
 
         /// <summary>Reads a door or window block made by HCWDOOR or HCWWINDOW; null for any other block.</summary>
@@ -252,19 +254,120 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             while (true)
             {
-                var o = new PromptEntityOptions(prompt);
-                o.SetRejectMessage("\nSelect a door or window made by HCWDOOR or HCWWINDOW.");
+                var o = new PromptEntityOptions(prompt + "[Gap] ", "Gap");
+                o.SetRejectMessage("\nSelect a door or window block, or choose Gap to pick an opening drawn as a break in the wall.");
                 o.AddAllowedClass(typeof(BlockReference), true);
                 var r = ed.GetEntity(o);
+                if (r.Status == PromptStatus.Keyword) { var gap = PickGap(ed); if (gap != null) return gap; continue; }
                 if (r.Status != PromptStatus.OK) return null;
                 using (var tr = Util.Db.TransactionManager.StartTransaction())
                 {
-                    var info = ReadOpening(tr, r.ObjectId);
+                    var info = ReadOpening(tr, r.ObjectId) ?? ForeignBlock(ed, tr, r.ObjectId, true);
                     tr.Commit();
                     if (info != null) return info;
-                    ed.WriteMessage("\nThat block is not a door or window made by HCWDOOR or HCWWINDOW (HCW_D_, HCW_DD_, HCW_DS_ or HCW_W_ …).");
+                    ed.WriteMessage("\nThat block does not stand in a gap between wall lines, so it cannot be moved or replaced as an opening.");
                 }
             }
+        }
+
+        /// <summary>Asks for a point inside a break in the wall lines and reads the opening from the break (null when there is none there).</summary>
+        private static OpeningInfo PickGap(Editor ed)
+        {
+            var pr = ed.GetPoint("\nPick a point inside the gap in the wall: ");
+            if (pr.Status != PromptStatus.OK) return null;
+            var at = pr.Value.TransformBy(ed.CurrentUserCoordinateSystem);
+            var kind = new PromptKeywordOptions("\nThe gap is a [Door/Window] <Door>: ", "Door Window") { AllowNone = true };
+            kind.Keywords.Default = "Door";
+            var kr = ed.GetKeywords(kind);
+            if (kr.Status != PromptStatus.OK && kr.Status != PromptStatus.None) return null;
+            bool door = kr.Status == PromptStatus.None || kr.StringResult == "Door";
+            using (var tr = Util.Db.TransactionManager.StartTransaction())
+            {
+                var info = GapAt(tr, (BlockTableRecord)tr.GetObject(Util.Db.CurrentSpaceId, OpenMode.ForRead), new P2(at.X, at.Y), door, ObjectId.Null);
+                tr.Commit();
+                if (info == null) ed.WriteMessage("\nNo gap with a wall face on both sides was found there. The gap must be 300 mm to 6 m wide and break both face lines in the same place.");
+                return info;
+            }
+        }
+
+        /// <summary>A block that is not one of ours, standing in a gap of the wall: its opening is the gap. Door or window is guessed from the block name, or asked.</summary>
+        private static OpeningInfo ForeignBlock(Editor ed, Transaction tr, ObjectId id, bool ask)
+        {
+            var br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+            if (br == null) return null;
+            Extents3d e;
+            try { e = br.GeometricExtents; } catch (System.Exception) { return null; }
+            var centre = new P2((e.MinPoint.X + e.MaxPoint.X) / 2, (e.MinPoint.Y + e.MaxPoint.Y) / 2);
+            string name = (BlockOpenings.EffectiveName(tr, br) ?? "").ToUpperInvariant();
+            bool door = name.Contains("DOOR") || name.StartsWith("D") || name.Contains("DR");
+            bool window = name.Contains("WIN") || name.StartsWith("W") || name.Contains("GLAZ");
+            if (door == window)
+            {
+                door = true;
+                if (ask)
+                {
+                    var kind = new PromptKeywordOptions("\n" + name + " is a [Door/Window] <Door>: ", "Door Window") { AllowNone = true };
+                    kind.Keywords.Default = "Door";
+                    var kr = ed.GetKeywords(kind);
+                    if (kr.Status == PromptStatus.OK) door = kr.StringResult == "Door";
+                }
+            }
+            var info = GapAt(tr, (BlockTableRecord)tr.GetObject(Util.Db.CurrentSpaceId, OpenMode.ForRead), centre, door, id);
+            if (info != null) info.Layer = br.Layer;
+            return info;
+        }
+
+        /// <summary>
+        /// The opening a break in both faces of a straight wall makes, as an opening the move, slide and replace commands can work on.
+        /// The faces and ends come from the gap; the swing defaults to the left of the wall's direction.
+        /// </summary>
+        internal static OpeningInfo GapAt(Transaction tr, BlockTableRecord space, P2 at, bool door, ObjectId block)
+        {
+            double mm = Util.MmToDrawingUnits(1.0), tol = 2 * mm;
+            var segs = new List<WallSegment>();
+            foreach (ObjectId sid in space)
+            {
+                if (sid.ObjectClass.DxfName != "LINE" && sid.ObjectClass.DxfName != "LWPOLYLINE") continue;
+                var ent = tr.GetObject(sid, OpenMode.ForRead) as Entity;
+                var ln = ent as Line; var pl = ent as Polyline;
+                if (ln != null) segs.Add(new WallSegment(ln.StartPoint.X, ln.StartPoint.Y, ln.EndPoint.X, ln.EndPoint.Y));
+                else if (pl != null)
+                {
+                    int n = pl.NumberOfVertices, count = pl.Closed ? n : n - 1;
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (pl.GetSegmentType(i) != SegmentType.Line) continue;
+                        var a = pl.GetPoint2dAt(i); var b = pl.GetPoint2dAt((i + 1) % n);
+                        segs.Add(new WallSegment(a.X, a.Y, b.X, b.Y));
+                    }
+                }
+            }
+            var gaps = WallGaps.Find(segs, 1 * mm, 300 * mm, 6000 * mm, MaxThickMm * mm, 5 * mm);
+            var g = gaps.FirstOrDefault(x =>
+            {
+                double along = x.Horizontal ? at.X : at.Y, across = x.Horizontal ? at.Y : at.X;
+                return along >= x.Lo - tol && along <= x.Hi + tol
+                    && across >= Math.Min(x.Face1, x.Face2) - tol && across <= Math.Max(x.Face1, x.Face2) + tol;
+            });
+            if (g == null) return null;
+
+            var u = g.Horizontal ? new P2(1, 0) : new P2(0, 1);
+            var normal = new P2(-u.Y, u.X);
+            Func<double, double, P2> pt = (a, c) => g.Horizontal ? new P2(a, c) : new P2(c, a);
+            var corners = new OpeningFrame.Corners
+            {
+                FaceAStart = pt(g.Lo, g.Face1), FaceAEnd = pt(g.Hi, g.Face1),
+                FaceBStart = pt(g.Lo, g.Face2), FaceBEnd = pt(g.Hi, g.Face2),
+                Swing = door ? normal : new P2(0, 0), Flipped = false,
+            };
+            corners.Centre = (corners.FaceAStart + corners.FaceAEnd) * 0.5;
+            return new OpeningInfo
+            {
+                Id = block, Door = door, Type = door ? "single" : "", WidthMm = g.Width / mm, ThicknessMm = Math.Abs(g.Face2 - g.Face1) / mm,
+                SillMm = door ? 0 : Settings.GetDouble("WindowSillMm", 900),
+                HeightMm = door ? Settings.GetDouble("DoorHeightMm", 2100) : Settings.GetDouble("WindowHeightMm", 1200),
+                Corners = corners, Z = 0, Foreign = true,
+            };
         }
 
         /// <summary>The doors and windows made by the tools among the selected blocks, and how many other objects were skipped.</summary>
@@ -273,13 +376,19 @@ namespace HCW.AutoCAD.Plugin.Commands
             skipped = 0;
             var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = prompt },
                 new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "INSERT") }));
+            if (psr.Status == PromptStatus.None)
+            {
+                // Enter: an opening drawn as a break in the wall, picked by a point inside it.
+                var gap = PickGap(ed);
+                return gap == null ? null : new List<OpeningInfo> { gap };
+            }
             if (psr.Status != PromptStatus.OK) return null;
             var list = new List<OpeningInfo>();
             using (var tr = Util.Db.TransactionManager.StartTransaction())
             {
                 foreach (var id in psr.Value.GetObjectIds())
                 {
-                    var info = ReadOpening(tr, id);
+                    var info = ReadOpening(tr, id) ?? ForeignBlock(ed, tr, id, false);
                     if (info == null) skipped++; else list.Add(info);
                 }
                 tr.Commit();
@@ -381,8 +490,11 @@ namespace HCW.AutoCAD.Plugin.Commands
 
             string tag = tagText?.TextString;
             if (tagText != null) { tagText.UpgradeOpen(); tagText.Erase(); }
-            var block = tr.GetObject(info.Id, OpenMode.ForWrite);
-            block.Erase();
+            if (!info.Id.IsNull)
+            {
+                var block = tr.GetObject(info.Id, OpenMode.ForWrite);
+                block.Erase();
+            }
             return tag;
         }
 
@@ -412,7 +524,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed;
             int skipped;
-            var infos = SelectOpenings(ed, "\nSelect the doors and windows to move: ", out skipped);
+            var infos = SelectOpenings(ed, "\nSelect the doors and windows to move (Enter to pick a gap in the wall): ", out skipped);
             if (infos == null) return;
             if (infos.Count == 0) { ed.WriteMessage("\nHCWOPENMOVE: none of that is a door or window made by HCWDOOR or HCWWINDOW."); return; }
             if (skipped > 0) ed.WriteMessage("\n" + skipped + " other object(s) skipped.");
@@ -429,7 +541,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 var pick = pr.Value.TransformBy(ucs);
                 bool flip = info.Corners.Flipped;
                 Point3d? side = null;
-                if (info.Door && !AskSwing(ed, true, ref flip, out side)) return;
+                if (info.Door && !AskSwing(ed, !info.Foreign, ref flip, out side)) return;
                 targets.Add(new Point3d(pick.X, pick.Y, info.Z)); sides.Add(side); flips.Add(flip);
             }
             else
@@ -584,7 +696,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
             bool flip = door && info.Door && info.Corners.Flipped;
             Point3d? side = null;
-            if (door && !AskSwing(ed, info.Door, ref flip, out side)) return;
+            if (door && !AskSwing(ed, info.Door && !info.Foreign, ref flip, out side)) return;
 
             var centre = new Point3d(info.Corners.Centre.X, info.Corners.Centre.Y, info.Z);
             string message;
