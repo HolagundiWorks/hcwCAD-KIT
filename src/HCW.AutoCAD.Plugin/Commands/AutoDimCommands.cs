@@ -718,7 +718,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             // One pass over the space. Objects that cannot matter (text, hatches, dimensions ...) are skipped
             // from their type alone, without being opened.
             bool readTags = Settings.GetInt("AutoDimOpeningTags", 1) != 0;
-            var tagPattern = new System.Text.RegularExpressions.Regex("^[DW]\\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var tagPattern = new System.Text.RegularExpressions.Regex("^[DW]\\d+(/\\d+)?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             foreach (ObjectId id in space)
             {
                 if (!Relevant(id) && !(readTags && id.ObjectClass.DxfName == "TEXT")) continue;

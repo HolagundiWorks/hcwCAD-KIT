@@ -43,10 +43,10 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         [CommandMethod("HCWDOOR")]
-        public void Door() { Run(true); AutoSync(); }
+        public void Door() { Run(true); AfterEdit(); }
 
         [CommandMethod("HCWWINDOW")]
-        public void Window() { Run(false); AutoSync(); }
+        public void Window() { Run(false); AfterEdit(); }
 
         private static string _seededFor;
 
@@ -201,7 +201,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 blockName = OpeningFrame.NamePrefix(false, "") + size;
                 EnsureWindowBlock(tr, db, blockName, w, plan.Thickness);
             }
-            tag = tagOverride ?? NextTag(tr, space, door ? "D" : "W");
+            tag = tagOverride ?? (door ? NextTag(tr, space, "D") : WindowTag(tr, db, space, widthMm, par.HeightMm, par.SillMm));
             InsertBlock(tr, space, blockName, new Point3d(place.Origin.X, place.Origin.Y, z), place.Angle, place.Sx, place.Sy, door ? LayerDoor : LayerWin, par);
             AddLintel(tr, db, space, (p1a + p1b + p2a + p2b) * 0.25, plan.Dir, w, plan.Thickness, z);
 
@@ -442,7 +442,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
             string wallLayer = null;
             var pairs = new[] { new[] { c.FaceAStart, c.FaceBStart }, new[] { c.FaceAEnd, c.FaceBEnd } };
-            var rx = new Regex("^[DW]\\d+$", RegexOptions.IgnoreCase);
+            var rx = new Regex("^[DW]\\d+(/\\d+)?$", RegexOptions.IgnoreCase);
             DBText tagText = null; double tagDist = double.MaxValue;
             var lines = new List<Line>();
             foreach (ObjectId id in space)
@@ -538,7 +538,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// where it was and cut where it goes, keeping its width, type, heights and tag number. If any cannot be placed, nothing changes.
         /// </summary>
         [CommandMethod("HCWOPENMOVE")]
-        public void MoveOpening() { MoveOpeningCore(); AutoSync(); }
+        public void MoveOpening() { MoveOpeningCore(); AfterEdit(); }
 
         private void MoveOpeningCore()
         {
@@ -610,7 +610,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         /// <summary>HCWOPENSLIDE drags a door or window along its wall: a ghost of the opening follows the cursor and the move is made where you click.</summary>
         [CommandMethod("HCWOPENSLIDE")]
-        public void SlideOpening() { SlideOpeningCore(); AutoSync(); }
+        public void SlideOpening() { SlideOpeningCore(); AfterEdit(); }
 
         private void SlideOpeningCore()
         {
@@ -680,7 +680,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         [CommandMethod("HCWOPENREPLACE")]
-        public void ReplaceOpening() { ReplaceOpeningCore(); AutoSync(); }
+        public void ReplaceOpening() { ReplaceOpeningCore(); AfterEdit(); }
 
         private void ReplaceOpeningCore()
         {
@@ -738,6 +738,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                 string tag = Heal(tr, space, info);
                 Point3d sideW = side ?? PreviousSide(info, centre);
                 string keep = door == info.Door ? tag : null;           // the same kind keeps its number
+            if (!door && info.Door == door && (Math.Abs(widthMm - info.WidthMm) > 0.5 || Math.Abs(hr.Value - info.HeightMm) > 0.5 || Math.Abs(sill - info.SillMm) > 0.5))
+                keep = null;                                         // a different window size is a different code
                 var par = new OpeningParams { Type = type, SillMm = sill, HeightMm = hr.Value };
                 if (!PlaceIn(tr, door, centre, sideW, flip, widthMm, par, keep, out message))
                 {
@@ -755,7 +757,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// width, position and tag, so the take-off and the schedule read one component. If any cannot be placed, nothing changes.
         /// </summary>
         [CommandMethod("HCWOPENCONVERT")]
-        public void ConvertBlocks() { ConvertBlocksCore(); AutoSync(); }
+        public void ConvertBlocks() { ConvertBlocksCore(); AfterEdit(); }
 
         private void ConvertBlocksCore()
         {
@@ -800,7 +802,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// so HCWOPENSYNC, the take-off and HCWSECTIONDRAW follow.
         /// </summary>
         [CommandMethod("HCWOPENHEIGHT")]
-        public void SetHeights() { SetHeightsCore(); AutoSync(); }
+        public void SetHeights() { SetHeightsCore(); AfterEdit(); }
 
         private void SetHeightsCore()
         {
@@ -1160,6 +1162,41 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
+        /// <summary>
+        /// A window's tag is its window code from the schedule and its number among the windows of that code, "W1/3" (setting WindowTagFormat,
+        /// {code}/{no} by default). Windows of the same width, height and sill share a code; a size not yet in the schedule gets the next free
+        /// code and is added to the schedule at once.
+        /// </summary>
+        private static string WindowTag(Transaction tr, Database db, BlockTableRecord space, double widthMm, double heightMm, double sillMm)
+        {
+            bool imperial = MeasureCommands.MeasureState.Units == MeasureCommands.UnitSys.Imperial;
+            Func<double, double> toBook = mm => imperial ? mm / 25.4 : mm / 1000.0;
+            double w = toBook(widthMm), h = toBook(heightMm), sill = toBook(sillMm);
+            var book = MeasureBook.Load(tr, db);
+            var entry = book.Openings.FirstOrDefault(o => string.Equals(o.Kind, "Window", StringComparison.OrdinalIgnoreCase)
+                && Math.Abs(o.Width - w) < 1e-3 && Math.Abs(o.Height - h) < 1e-3 && Math.Abs(o.Sill - sill) < 1e-3);
+            if (entry == null)
+            {
+                int next = book.Openings.Select(o => o.Mark ?? "").Where(m => m.StartsWith("W", StringComparison.OrdinalIgnoreCase))
+                    .Select(m => { int n; return int.TryParse(m.Substring(1), out n) ? n : 0; }).DefaultIfEmpty(0).Max() + 1;
+                entry = new MeasureBook.OpeningSpec { Mark = "W" + next, Kind = "Window", Width = w, Height = h, Sill = sill, LintelBottom = toBook(sillMm + heightMm), Count = 0 };
+                book.Openings.Add(entry);
+                book.Save(tr, db);
+            }
+            string code = entry.Mark;
+            var rx = new Regex("^" + Regex.Escape(code) + "/(\\d+)$", RegexOptions.IgnoreCase);
+            int max = 0;
+            foreach (ObjectId id in space)
+            {
+                var t = tr.GetObject(id, OpenMode.ForRead) as DBText;
+                if (t == null || !string.Equals(t.Layer, LayerTag, StringComparison.OrdinalIgnoreCase)) continue;
+                var m = rx.Match(t.TextString ?? "");
+                int n;
+                if (m.Success && int.TryParse(m.Groups[1].Value, out n)) max = Math.Max(max, n);
+            }
+            return Settings.Get("WindowTagFormat", "{code}/{no}").Replace("{code}", code).Replace("{no}", (max + 1).ToString());
+        }
+
         /// <summary>The next free tag: one more than the highest D or W number already on the tag layer.</summary>
         private static string NextTag(Transaction tr, BlockTableRecord space, string prefix)
         {
@@ -1220,6 +1257,13 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// Keeps the opening schedule in step with the blocks: runs after the door, window and edit commands (setting OpeningAutoSync, on by default).
         /// Quiet when nothing needs doing.
         /// </summary>
+        /// <summary>After an opening command: the wall hatch is cut around the openings again, and the schedule brought up to date.</summary>
+        private static void AfterEdit()
+        {
+            WallHatch.RefreshNow();
+            AutoSync();
+        }
+
         private static void AutoSync()
         {
             if (Settings.GetInt("OpeningAutoSync", 1) == 0) return;

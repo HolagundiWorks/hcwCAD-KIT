@@ -752,3 +752,8 @@ RCC stairs take the waist slab thickness as an input (`AECSTAIR`, `AECSTAIREDIT`
 ## Lintels
 
 `HCWDOOR`, `HCWWINDOW` and everything that re-cuts an opening (move, slide, replace, convert, wall edit) now draw a lintel over each opening: a line on `MEASURE-LINTEL` as long as the opening plus the bearing at each end, which `MBML` measures as a concrete lintel, and a dashed outline as wide as the wall on `A-LINTEL`. They are tagged with the opening's centre and removed or redrawn with it. Settings: `LintelAuto` (0 turns it off) and `LintelBearingMm` (230). Openings cut before this version have no lintel; move or replace them to get one. The lintel depth and bottom height come from the levels and the opening's own LINTEL figure, not from the plan.
+
+## Window numbers and wall hatch
+
+* Windows are tagged `<window code>/<number>`, such as `W1/3`: the code is the window's mark in the opening schedule (windows of the same width, height and sill share a code; a new size gets the next free code and is added to the schedule at once) and the number counts the windows of that code. Setting `WindowTagFormat` changes the pattern (`{code}/{no}`). Doors keep `D1`, `D2` … . Replacing a window with a different size gives it a new code and number.
+* `HCWWALL` hatches the walls: all walls are joined into one shape, doors and windows are cut out of it, and it is hatched on `A-WALL-HATCH`. The hatch is redrawn when walls are drawn, edited or rebuilt and after every door and window command. Settings: `WallHatch` (0 turns it off), `WallHatchPattern` (ANSI31), `WallHatchSpacingMm` (60). It is not tied to the outlines, so after moving walls by hand run `HCWWALLEDIT` or draw a wall to refresh it.

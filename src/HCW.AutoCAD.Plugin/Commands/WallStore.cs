@@ -96,6 +96,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
+        internal static List<string> Keys(Transaction tr, Database db) => DrawingStore.Keys(tr, db, Dict);
+
         internal static string NextId(Transaction tr, Database db)
         {
             int max = 0;

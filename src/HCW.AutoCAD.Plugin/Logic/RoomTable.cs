@@ -52,7 +52,7 @@ namespace HCW.AutoCAD.Plugin.Logic
     {
         private static readonly Regex AreaLabel = new Regex(@"^\s*(\d+(?:[.,]\d+)?)\s*(?:m2|m²|sq\.?\s?m|sqm)\s*$", RegexOptions.IgnoreCase);
         private static readonly Regex NumberOnly = new Regex(@"^[\s\d.,+\-x*]+$", RegexOptions.IgnoreCase);
-        private static readonly Regex Tag = new Regex(@"^(?:[DW]\d+|R\d+|C\d+|LP|FP|SB)[\w-]*$", RegexOptions.IgnoreCase);
+        private static readonly Regex Tag = new Regex(@"^(?:[DW]\d+(?:/\d+)?|R\d+|C\d+|LP|FP|SB)[\w-]*$", RegexOptions.IgnoreCase);
 
         public static List<RoomRow> Build(IList<RoomInput> rooms, IList<RoomText> texts, IList<RoomDim> dims, double unitsPerMetre, RoomOrder order)
         {

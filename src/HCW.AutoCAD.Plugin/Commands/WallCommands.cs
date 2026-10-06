@@ -101,7 +101,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                             ed.WriteMessage("\nHCWWALL: the new wall touches walls that openings are cut in, and they could not be redrawn (" + err + "). Nothing was drawn.");
                             return;
                         }
-                        if (merged > 0) { tr.Commit(); ed.WriteMessage("\nHCWWALL: " + made + " wall outline(s) on " + WallLayer + ", " + _thicknessMm + " mm thick. Rebuilt with the walls it touches (" + rw + " wall(s), " + ro + " opening(s) re-cut)."); return; }
+                        if (merged > 0) { WallHatch.Refresh(tr, db, space); tr.Commit(); ed.WriteMessage("\nHCWWALL: " + made + " wall outline(s) on " + WallLayer + ", " + _thicknessMm + " mm thick. Rebuilt with the walls it touches (" + rw + " wall(s), " + ro + " opening(s) re-cut)."); return; }
                     }
                     foreach (ObjectId id in space)
                     {
@@ -116,6 +116,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     int m, k, bad;
                     if (group.Count > 1 && JoinOutlines(tr, db, space, group, out m, out k, out bad)) merged = m + k;
                 }
+                WallHatch.Refresh(tr, db, space);
                 tr.Commit();
             }
             ed.WriteMessage("\nHCWWALL: " + made + " wall outline(s) on " + WallLayer + ", " + _thicknessMm + " mm thick."
@@ -327,6 +328,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
             }
             wallCount = records.Count; openingCount = inGroup.Count;
+            WallHatch.Refresh(tr, db, space);
             return true;
         }
 
