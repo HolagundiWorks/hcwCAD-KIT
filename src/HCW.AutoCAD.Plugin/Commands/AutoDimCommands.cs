@@ -143,7 +143,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 made = sink.Count;
                 tr.Commit();
             }
-            int tiedA = DimAnchors.Associate(db, choice.Walls);
+            int tiedA = DimAnchors.Associate(db, choice.Walls.Concat(choice.Columns).Concat(Layers("AutoDimGridLayers", "AN-GRID;A-GRID")).ToList(), choice.Windows);
             Isolate(db, choice);
 
             ed.WriteMessage("\nAUTODIM: " + made + " dimension(s) on " + DimLayer + " at 1:" + _scale
@@ -306,7 +306,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 made = sink.Count;
                 tr.Commit();
             }
-            int tiedB = DimAnchors.Associate(db, choice.Walls);
+            int tiedB = DimAnchors.Associate(db, choice.Walls.Concat(choice.Columns).Concat(Layers("AutoDimGridLayers", "AN-GRID;A-GRID")).ToList(), choice.Windows);
             Isolate(db, choice);
             ed.WriteMessage("\nAUTODIMROOM: " + made + " dimension(s) in " + rooms.Count + " room(s) at 1:" + _scale
                 + (tiedB > 0 ? "; " + tiedB + " follow their walls when moved (HCWLIVE)" : "")

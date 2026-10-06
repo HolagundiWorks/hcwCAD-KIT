@@ -20,6 +20,8 @@ namespace HCW.AutoCAD.Plugin
             public Curve Curve;
             /// <summary>The block's effective name (the dynamic block's own name, not its anonymous copy).</summary>
             public string BlockName;
+            /// <summary>The block reference the line came from.</summary>
+            public ObjectId Source;
         }
 
         /// <summary>A line through the middle of a block's extents along its longer side, or null when it has no extents.</summary>
@@ -94,13 +96,13 @@ namespace HCW.AutoCAD.Plugin
                 if (deductions.Count == 0)
                 {
                     var fallback = ExtentsLine(br);
-                    if (fallback != null) into.Add(new Found { Curve = fallback, BlockName = name });
+                    if (fallback != null) into.Add(new Found { Curve = fallback, BlockName = name, Source = br.ObjectId });
                     return;
                 }
                 foreach (var curve in deductions)
                 {
                     var moved = curve.GetTransformedCopy(br.BlockTransform) as Curve;
-                    if (moved != null) into.Add(new Found { Curve = moved, BlockName = name });
+                    if (moved != null) into.Add(new Found { Curve = moved, BlockName = name, Source = br.ObjectId });
                 }
             }
         }

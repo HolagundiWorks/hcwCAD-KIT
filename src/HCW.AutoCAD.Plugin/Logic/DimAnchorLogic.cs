@@ -10,6 +10,19 @@ namespace HCW.AutoCAD.Plugin.Logic
         public long Handle;
         public int Index;
         public P2 Pt;
+        /// <summary>A point of a block (a door or window jamb): its offset from the block's insertion point and the block's rotation when the tie was made.</summary>
+        public bool Block;
+        public double Dx, Dy, Rot;
+    }
+
+    /// <summary>One end of a dimension tied to something: a vertex of a line or polyline, or a point carried by a block.</summary>
+    public class DimTie
+    {
+        public char Axis;
+        public long Handle;
+        public int Index;
+        public bool Block;
+        public double Dx, Dy, Rot;
     }
 
     /// <summary>
@@ -71,6 +84,41 @@ namespace HCW.AutoCAD.Plugin.Logic
             axis = p[1][0];
             return long.TryParse(p[2], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out handle)
                 && int.TryParse(p[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out index);
+        }
+    
+        public static string EncodeBlock(char axis, long handle, double dx, double dy, double rotation)
+        {
+            Func<double, string> n = v => v.ToString("R", CultureInfo.InvariantCulture);
+            return "B|" + axis + "|" + handle.ToString("X", CultureInfo.InvariantCulture) + "|" + n(dx) + "|" + n(dy) + "|" + n(rotation);
+        }
+
+        /// <summary>Reads either kind of tie: "A|axis|handle|index" for a vertex or "B|axis|handle|dx|dy|rotation" for a point carried by a block.</summary>
+        public static bool TryDecodeTie(string text, out DimTie tie)
+        {
+            tie = null;
+            var p = (text ?? "").Split('|');
+            if (p.Length < 2 || p[1].Length != 1 || "XYP".IndexOf(p[1][0]) < 0) return false;
+            if (p[0] == "A")
+            {
+                char a; long h; int i;
+                if (!TryDecode(text, out a, out h, out i)) return false;
+                tie = new DimTie { Axis = a, Handle = h, Index = i };
+                return true;
+            }
+            if (p[0] != "B" || p.Length != 6) return false;
+            long handle; double dx, dy, rot;
+            var st = NumberStyles.Float; var inv = CultureInfo.InvariantCulture;
+            if (!long.TryParse(p[2], NumberStyles.HexNumber, inv, out handle) || !double.TryParse(p[3], st, inv, out dx)
+                || !double.TryParse(p[4], st, inv, out dy) || !double.TryParse(p[5], st, inv, out rot)) return false;
+            tie = new DimTie { Axis = p[1][0], Handle = handle, Block = true, Dx = dx, Dy = dy, Rot = rot };
+            return true;
+        }
+
+        /// <summary>Where a block's carried point is now: the block's insertion point plus its offset turned by however much the block has turned since.</summary>
+        public static P2 BlockPoint(P2 insertion, double rotationNow, DimTie tie)
+        {
+            double turn = rotationNow - tie.Rot, c = Math.Cos(turn), s = Math.Sin(turn);
+            return new P2(insertion.X + tie.Dx * c - tie.Dy * s, insertion.Y + tie.Dx * s + tie.Dy * c);
         }
     }
 }

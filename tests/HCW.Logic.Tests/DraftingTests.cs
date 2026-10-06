@@ -3230,4 +3230,29 @@ namespace HCW.Logic.Tests
             Assert.Equal((Math.PI * 1200 / 2 + well) / 6, l.WalklineGoing, 9);
         }
     }
+
+    public class DimTieTests
+    {
+        [Fact]
+        public void BothKindsOfTieRoundTrip()
+        {
+            DimTie t;
+            Assert.True(DimAnchorLogic.TryDecodeTie(DimAnchorLogic.Encode('X', 0xAB, 2), out t));
+            Assert.False(t.Block); Assert.Equal('X', t.Axis); Assert.Equal(0xAB, t.Handle); Assert.Equal(2, t.Index);
+            Assert.True(DimAnchorLogic.TryDecodeTie(DimAnchorLogic.EncodeBlock('Y', 0x1F, 450.5, -30.25, 0.5), out t));
+            Assert.True(t.Block); Assert.Equal('Y', t.Axis); Assert.Equal(450.5, t.Dx); Assert.Equal(-30.25, t.Dy); Assert.Equal(0.5, t.Rot);
+            Assert.False(DimAnchorLogic.TryDecodeTie("B|X|1|2", out t));
+            Assert.False(DimAnchorLogic.TryDecodeTie("junk", out t));
+        }
+
+        [Fact]
+        public void ABlocksPointMovesWithItAndTurnsWithIt()
+        {
+            var tie = new DimTie { Block = true, Dx = 450, Dy = 0, Rot = 0 };
+            var moved = DimAnchorLogic.BlockPoint(new P2(1000, 2000), 0, tie);
+            Assert.Equal(1450, moved.X, 9); Assert.Equal(2000, moved.Y, 9);
+            var turned = DimAnchorLogic.BlockPoint(new P2(1000, 2000), Math.PI / 2, tie);
+            Assert.Equal(1000, turned.X, 9); Assert.Equal(2450, turned.Y, 9);
+        }
+    }
 }

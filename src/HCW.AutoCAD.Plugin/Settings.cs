@@ -129,6 +129,7 @@ namespace HCW.AutoCAD.Plugin
             Entry("RoomTableLayers", "ROOM-RECT;MEASURE-FLOOR;A-ROOM", "HCWROOMREPORT: when you press Enter to take everything in the space, the closed polylines on these layers (separated by semicolons) are the rooms. Outlines you select yourself count whatever their layer."),
             Entry("RoomTableUnit", "m", "HCWROOMREPORT: m writes lengths in metres to 2 places, mm in whole millimetres. Areas are always square metres."),
             Entry("RoomTableTextMm", "250", "HCWROOMREPORT: real-size text height of the table drawn in the drawing, in millimetres."),
+            Entry("AutoDimReanchorMm", "50", "Associative dimensions: when the wall (or other line) a dimension hangs on is erased and drawn again, its end is tied to the vertex standing within this distance of where it was, in millimetres. 0 turns re-tying off."),
             Entry("StairRailing", "1", "AECSTAIR section: 1 draws the handrail, its end posts and balusters, 0 leaves them out."),
             Entry("StairHandrailMm", "900", "AECSTAIR section: handrail height above the nosing line, in millimetres."),
             Entry("StairPostMm", "50", "AECSTAIR section: size of the handrail posts, in millimetres."),
