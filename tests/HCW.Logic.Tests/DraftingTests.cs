@@ -2332,4 +2332,113 @@ namespace HCW.Logic.Tests
             Assert.Equal(0, res.Joined[0].Path.Bulges[1], 9);
         }
     }
+
+    public class LiftDataTests
+    {
+        [Fact]
+        public void TableIsReadAndTheSmallestLiftThatCarriesTheLoadIsChosen()
+        {
+            var t = LiftTable.Parse(LiftTable.Default);
+            Assert.Equal(4, t.Count);
+            Assert.Equal(8, LiftTable.For(t, 7).Persons);
+            Assert.Equal(6, LiftTable.For(t, 6).Persons);
+            Assert.Null(LiftTable.For(t, 20));
+            Assert.Equal("1100x1400", t[0].CarText);
+            Assert.Equal(1800, t[0].ShaftW);
+        }
+
+        [Fact]
+        public void BadTableRowsAreSkipped()
+        {
+            var t = LiftTable.Parse("6=1100x1400:1800x1900:800; x=1:1:1; 8=bad; 10=1500x1500:2100x2000:900");
+            Assert.Equal(new[] { 6, 10 }, t.Select(l => l.Persons).ToArray());
+        }
+
+        private static LiftLayout Plan()
+        {
+            string e;
+            return LiftLayout.Build(1800, 2000, 230, 1100, 1400, 800, 30, out e);
+        }
+
+        [Fact]
+        public void SectionHeightsFollowTheFloorsPitAndOverhead()
+        {
+            string e;
+            var o = new LiftSectionOptions { Floors = 4, FloorHeight = 3000, PitDepth = 1400, Overhead = 4200, MachineRoom = false };
+            var g = LiftSection.Build(Plan(), o, out e);
+            Assert.Null(e);
+            var pts = g.Polys.SelectMany(p => p.Pts).ToList();
+            Assert.Equal(-1400 - 200, pts.Min(p => p.Y), 6);
+            Assert.Equal(9000 + 4200 + 200, pts.Max(p => p.Y), 6);
+            Assert.Equal(4, g.Polys.Count(p => p.Layer == "LEVEL"));
+            Assert.Contains(g.Dims, d => d.Text == "TRAVEL 9000");
+        }
+
+        [Fact]
+        public void MachineRoomSitsOnTheTopSlab()
+        {
+            string e;
+            var o = new LiftSectionOptions { MachineRoom = true, MachineRoomHeight = 2400 };
+            var with = LiftSection.Build(Plan(), o, out e);
+            o.MachineRoom = false;
+            var without = LiftSection.Build(Plan(), o, out e);
+            Func<GDrawing, double> top = g => g.Polys.SelectMany(p => p.Pts).Max(p => p.Y);
+            Assert.Equal(2400 + 200, top(with) - top(without), 6);
+        }
+
+        [Fact]
+        public void SectionRejectsImpossibleHeights()
+        {
+            string e;
+            Assert.Null(LiftSection.Build(Plan(), new LiftSectionOptions { FloorHeight = 2000 }, out e));
+            Assert.NotNull(e);
+            Assert.Null(LiftSection.Build(Plan(), new LiftSectionOptions { Overhead = 2000 }, out e));
+            Assert.Null(LiftSection.Build(Plan(), new LiftSectionOptions { Floors = 1 }, out e));
+        }
+    }
+
+    public class EscalatorTests
+    {
+        [Fact]
+        public void RunAndLengthComeFromRiseAndAngle()
+        {
+            var o = new EscalatorOptions { RiseMm = 4000, AngleDeg = 30, LandingMm = 2500 };
+            Assert.Equal(4000 / Math.Tan(Math.PI / 6), Escalator.Run(o), 6);
+            Assert.Equal(Escalator.Run(o) + 5000, Escalator.Length(o), 6);
+            Assert.Equal(8000, Escalator.Incline(o), 6);
+        }
+
+        [Fact]
+        public void ChecksCatchUnusualInputs()
+        {
+            Assert.Null(Escalator.Check(new EscalatorOptions()));
+            Assert.NotNull(Escalator.Check(new EscalatorOptions { AngleDeg = 45 }));
+            Assert.NotNull(Escalator.Check(new EscalatorOptions { AngleDeg = 35, RiseMm = 7000 }));
+            Assert.NotNull(Escalator.Check(new EscalatorOptions { LandingMm = 800 }));
+            Assert.NotNull(Escalator.Check(new EscalatorOptions { StepWidth = 2000 }));
+        }
+
+        [Fact]
+        public void PlanIsAsWideAsStepsPlusBothSides()
+        {
+            var o = new EscalatorOptions { StepWidth = 800, SideMm = 300 };
+            var g = Escalator.Plan(o);
+            var outline = g.Polys.First(p => p.Layer == "WALL");
+            Assert.Equal(1400, outline.Pts.Max(p => p.Y) - outline.Pts.Min(p => p.Y), 6);
+            Assert.Equal(Escalator.Length(o), outline.Pts.Max(p => p.X), 6);
+            Assert.True(g.Polys.Count(p => p.Layer == "TREAD") > 10);
+        }
+
+        [Fact]
+        public void ElevationRisesByTheRiseOverTheRun()
+        {
+            var o = new EscalatorOptions { RiseMm = 3600, AngleDeg = 30, LandingMm = 2000 };
+            var g = Escalator.Elevation(o);
+            var truss = g.Polys.First(p => p.Layer == "WALL").Pts;
+            Assert.Equal(3600, truss.Max(p => p.Y), 6);
+            Assert.Equal(-o.TrussDepth, truss.Min(p => p.Y), 6);
+            var slope = truss[2]; var start = truss[1];
+            Assert.Equal(Math.Tan(Math.PI / 6), (slope.Y - start.Y) / (slope.X - start.X), 6);
+        }
+    }
 }

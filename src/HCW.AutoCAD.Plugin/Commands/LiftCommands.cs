@@ -16,7 +16,7 @@ namespace HCW.AutoCAD.Plugin.Commands
     /// </summary>
     public class LiftCommands
     {
-        private const string LayerWall = "A-WALL", LayerDoor = "A-DOOR", LayerLift = "BP-LIFT", LayerText = "AN-TEXT";
+        private const string LayerWall = "A-WALL", LayerDoor = "A-DOOR", LayerLift = "BP-LIFT", LayerText = "AN-TEXT", LayerMachine = "A-LIFT-MR";
         private const double TextHeightMm = 250, FrontGapMm = 30;
 
         private static string _clear = "1800x2000";
@@ -24,12 +24,24 @@ namespace HCW.AutoCAD.Plugin.Commands
         private static string _car = "1100x1400";
         private static double _doorMm = 800;
         private static string _side = "Bottom";
+        private static bool _machine;
 
         [CommandMethod("HCWLIFT")]
         public void DrawLift()
         {
             var ed = Util.Ed;
             var db = Util.Db;
+
+            var table = LiftTable.Parse(Settings.Get("LiftTable", LiftTable.Default));
+            var pers = ed.GetInteger(new PromptIntegerOptions("\nCapacity in persons, to take the sizes from the lift table (Enter to type the sizes) <none>: ") { AllowNone = true, AllowNegative = false, AllowZero = true });
+            if (pers.Status == PromptStatus.OK && pers.Value > 0)
+            {
+                var spec = LiftTable.For(table, pers.Value);
+                if (spec == null) { ed.WriteMessage("\nHCWLIFT: the lift table (setting LiftTable) has no lift for " + pers.Value + " persons; its largest is " + (table.Count > 0 ? table[table.Count - 1].Persons.ToString() : "empty") + "."); return; }
+                _clear = spec.ShaftText; _car = spec.CarText; _doorMm = spec.DoorW;
+                ed.WriteMessage("\n" + spec.Persons + " persons: car " + spec.CarText + ", shaft " + spec.ShaftText + ", door " + spec.DoorW + " (Enter keeps each).");
+            }
+            else if (pers.Status != PromptStatus.None && pers.Status != PromptStatus.OK) return;
 
             double cw, cd, carW, carD;
             if (!AskSize(ed, "\nClear size of the shaft in mm, width x depth <" + _clear + ">: ", ref _clear, out cw, out cd)) return;
@@ -48,6 +60,12 @@ namespace HCW.AutoCAD.Plugin.Commands
             else if (sr.Status != PromptStatus.None) return;
             double turn = _side == "Right" ? Math.PI / 2 : _side == "Top" ? Math.PI : _side == "Left" ? 3 * Math.PI / 2 : 0;
 
+            var mro = new PromptKeywordOptions("\nDraw the machine room outline above the shaft [Yes/No] <" + (_machine ? "Yes" : "No") + ">: ", "Yes No") { AllowNone = true };
+            mro.Keywords.Default = _machine ? "Yes" : "No";
+            var mr = ed.GetKeywords(mro);
+            if (mr.Status == PromptStatus.OK) _machine = mr.StringResult == "Yes";
+            else if (mr.Status != PromptStatus.None) return;
+
             var ucs = ed.CurrentUserCoordinateSystem;
             var xAxis = ucs.CoordinateSystem3d.Xaxis;
             double angle = turn + Math.Atan2(xAxis.Y, xAxis.X);
@@ -57,12 +75,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                 var pr = ed.GetPoint(new PromptPointOptions("\nPick the centre of the lift shaft (Enter to finish): ") { AllowNone = true });
                 if (pr.Status != PromptStatus.OK) return;
                 var centre = pr.Value.TransformBy(ucs);
-                Place(db, layout, centre, angle, _clear.Replace(" ", ""));
+                Place(db, layout, centre, angle, _clear.Replace(" ", ""), _machine);
                 ed.WriteMessage("\nHCWLIFT: lift shaft " + cw + " x " + cd + " mm, door on the " + _side.ToLowerInvariant() + ".");
             }
         }
 
-        private static void Place(Database db, LiftLayout L, Point3d centre, double angle, string sizeLabel)
+        private static void Place(Database db, LiftLayout L, Point3d centre, double angle, string sizeLabel, bool machineRoom)
         {
             double mm = Util.MmToDrawingUnits(1.0);
             double cos = Math.Cos(angle), sin = Math.Sin(angle);
@@ -109,6 +127,14 @@ namespace HCW.AutoCAD.Plugin.Commands
                 loop(L.WallRing, LayerWall);
                 loop(L.Clear, LayerLift);
                 loop(L.Car, LayerDoor);
+                if (machineRoom)
+                {
+                    // The machine room sits on the roof over the shaft: wider than the shaft by a working margin all round, shown dashed.
+                    double m = Settings.GetDouble("LiftMachineMarginMm", 1000);
+                    double hw = L.ClearW / 2 + L.Wall + m, hd = L.ClearD / 2 + L.Wall + m;
+                    Util.EnsureLayer(tr, db, LayerMachine, 8, "DASHED");
+                    loop(new List<P2> { new P2(-hw, -hd), new P2(hw, -hd), new P2(hw, hd), new P2(-hw, hd) }, LayerMachine);
+                }
                 line(L.LandingDoorA, L.LandingDoorB, LayerDoor);
                 line(L.CarDoorA, L.CarDoorB, LayerDoor);
 
@@ -131,6 +157,70 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
             Util.EnsureLayer(tr, db, LayerLift, 141);
         }
+
+        private static int _floors = 4;
+        private static double _floorHeightMm = 3000, _pitMm = 1400, _overheadMm = 4200;
+        private static bool _machineSection = true;
+
+        /// <summary>
+        /// HCWLIFTSECTION draws a section through a lift shaft from the same sizes as the plan: the pit, the walls and door openings at each landing,
+        /// the car, the overhead and an optional machine room, with the pit, overhead and travel dimensioned.
+        /// </summary>
+        [CommandMethod("HCWLIFTSECTION")]
+        public void DrawSection()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            double cw, cd, carW, carD;
+            if (!AskSize(ed, "\nClear size of the shaft in mm, width x depth <" + _clear + ">: ", ref _clear, out cw, out cd)) return;
+            if (!AskSize(ed, "\nCar size in mm, width x depth <" + _car + ">: ", ref _car, out carW, out carD)) return;
+            string error;
+            var layout = LiftLayout.Build(cw, cd, _wallMm, carW, carD, _doorMm, FrontGapMm, out error);
+            if (layout == null) { ed.WriteMessage("\nHCWLIFTSECTION: " + error + "."); return; }
+
+            var f = ed.GetInteger(new PromptIntegerOptions("\nNumber of floors served <" + _floors + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = _floors, UseDefaultValue = true });
+            if (f.Status != PromptStatus.OK) return;
+            _floors = f.Value;
+            if (!AskNumber(ed, "\nFloor-to-floor height in mm <" + _floorHeightMm + ">: ", ref _floorHeightMm)) return;
+            if (!AskNumber(ed, "\nPit depth in mm <" + _pitMm + ">: ", ref _pitMm)) return;
+            if (!AskNumber(ed, "\nOverhead (top landing to underside of the slab) in mm <" + _overheadMm + ">: ", ref _overheadMm)) return;
+            var mro = new PromptKeywordOptions("\nDraw the machine room [Yes/No] <" + (_machineSection ? "Yes" : "No") + ">: ", "Yes No") { AllowNone = true };
+            mro.Keywords.Default = _machineSection ? "Yes" : "No";
+            var mr = ed.GetKeywords(mro);
+            if (mr.Status == PromptStatus.OK) _machineSection = mr.StringResult == "Yes";
+            else if (mr.Status != PromptStatus.None) return;
+
+            var o = new LiftSectionOptions
+            {
+                Floors = _floors, FloorHeight = _floorHeightMm, PitDepth = _pitMm, Overhead = _overheadMm, MachineRoom = _machineSection, Wall = _wallMm,
+                TextHeight = TextHeightMm / 2,
+            };
+            var drawing = LiftSection.Build(layout, o, out error);
+            if (drawing == null) { ed.WriteMessage("\nHCWLIFTSECTION: " + error + "."); return; }
+
+            var ucs = ed.CurrentUserCoordinateSystem;
+            double angle = Math.Atan2(ucs.CoordinateSystem3d.Xaxis.Y, ucs.CoordinateSystem3d.Xaxis.X);
+            var pr = ed.GetPoint("\nPick the inside face of the front wall at the lowest landing: ");
+            if (pr.Status != PromptStatus.OK) return;
+            var at = pr.Value.TransformBy(ucs);
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                new GDrawer(tr, db, space, SectionRoles, o.TextHeight).Draw(drawing, at, angle);
+                tr.Commit();
+            }
+            ed.WriteMessage("\nHCWLIFTSECTION: " + _floors + " floors, travel " + (_floors - 1) * _floorHeightMm + " mm, pit " + _pitMm + ", overhead " + _overheadMm + ".");
+        }
+
+        internal static readonly Dictionary<string, GDrawer.RoleLayer> SectionRoles = new Dictionary<string, GDrawer.RoleLayer>
+        {
+            { "WALL", new GDrawer.RoleLayer { Layer = "A-LIFT-SEC", Color = 7, Weight = LineWeight.LineWeight035 } },
+            { "DOOR", new GDrawer.RoleLayer { Layer = LayerDoor, Color = 4 } },
+            { "LEVEL", new GDrawer.RoleLayer { Layer = "A-LIFT-LVL", Color = 3 } },
+            { "TEXT", new GDrawer.RoleLayer { Layer = LayerText, Color = 7 } },
+            { "HATCH", new GDrawer.RoleLayer { Layer = "A-LIFT-HATCH", Color = 8 } },
+        };
 
         private static bool AskNumber(Editor ed, string prompt, ref double value)
         {
