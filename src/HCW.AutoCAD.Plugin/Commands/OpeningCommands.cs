@@ -523,9 +523,10 @@ namespace HCW.AutoCAD.Plugin.Commands
         public void MoveOpening()
         {
             var ed = Util.Ed;
-            string job = Util.AskMode("Edit openings", "Move", "Slide", "Replace", "Sync");
+            string job = Util.AskMode("Edit openings", "Move", "Slide", "Replace", "Convert", "Sync");
             if (job == null) return;
             if (job == "Slide") { SlideOpening(); return; }
+            if (job == "Convert") { ConvertBlocks(); return; }
             if (job == "Replace") { ReplaceOpening(); return; }
             if (job == "Sync") { SyncSchedule(); return; }
             int skipped;
@@ -722,6 +723,48 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
             if (door) { _doorMm = widthMm; _doorType = type; _doorHeightMm = hr.Value; } else { _windowMm = widthMm; _windowHeightMm = hr.Value; _windowSillMm = sill; }
             ed.WriteMessage("\nHCWOPENREPLACE: " + message);
+        }
+
+        /// <summary>
+        /// Swaps doors and windows that are other blocks (or gaps in the wall) for the blocks HCWDOOR and HCWWINDOW make, each keeping its
+        /// width, position and tag, so the take-off and the schedule read one component. If any cannot be placed, nothing changes.
+        /// </summary>
+        [CommandMethod("HCWOPENCONVERT")]
+        public void ConvertBlocks()
+        {
+            var ed = Util.Ed;
+            int skipped;
+            var infos = SelectOpenings(ed, "\nSelect the existing door and window blocks to replace with the wall and opening blocks: ", out skipped);
+            if (infos == null) return;
+            infos = infos.Where(i => i.Foreign).ToList();
+            if (infos.Count == 0) { ed.WriteMessage("\nHCWOPENCONVERT: none of that is a foreign block standing in a wall gap (blocks from the tools are already in use)."); return; }
+            if (skipped > 0) ed.WriteMessage("\n" + skipped + " other object(s) skipped.");
+
+            string message;
+            using (Util.Doc.LockDocument())
+            using (var tr = Util.Db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(Util.Db.CurrentSpaceId, OpenMode.ForWrite);
+                var olds = infos.Where(i => !i.Id.IsNull).Select(i => i.Id).ToList();
+                var tags = infos.Select(i => Heal(tr, space, i)).ToList();
+                foreach (var oid in olds)
+                {
+                    var ent = tr.GetObject(oid, OpenMode.ForWrite) as Entity;
+                    if (ent != null && !ent.IsErased) ent.Erase();
+                }
+                for (int k = 0; k < infos.Count; k++)
+                {
+                    var i = infos[k];
+                    var centre = new Point3d(i.Corners.Centre.X, i.Corners.Centre.Y, i.Z);
+                    if (!PlaceIn(tr, i.Door, centre, PreviousSide(i, centre), i.Corners.Flipped, i.WidthMm, ParamsOf(i), null, out message))
+                    {
+                        ed.WriteMessage("\nHCWOPENCONVERT: " + message + " Nothing was changed.");
+                        return;
+                    }
+                }
+                tr.Commit();
+            }
+            ed.WriteMessage("\nHCWOPENCONVERT: " + infos.Count + " block(s) replaced. Run HCWOPENSYNC to fill the door and window schedule.");
         }
 
         /// <summary>A point on the side the old door swung to, beyond the thickest wall, for use at a new position.</summary>
