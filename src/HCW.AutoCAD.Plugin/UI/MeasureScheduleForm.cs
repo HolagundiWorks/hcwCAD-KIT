@@ -43,7 +43,7 @@ namespace HCW.AutoCAD.Plugin.UI
             _floors = Grid("Floor", "FFL to FFL height (" + heightUnit + ")", "Ceiling height (" + heightUnit + ")", "Lintel bottom height (" + heightUnit + ")", "Slab thickness (" + heightUnit + ")");
             _openings = Grid("Name", "Door or window", "Type", "Length (" + heightUnit + ")", "Height (" + heightUnit + ")", "Sill (" + heightUnit + ")", "Lintel bottom (" + heightUnit + ")", "Block name", "Count", "Floor (blank = all)");
             SetupOpeningGrid();
-            _columns = Grid("Mark", "Width (" + heightUnit + ")", "Depth (" + heightUnit + ")", "Name", "Count");
+            _columns = Grid("Mark", "Width (" + heightUnit + ")", "Depth (" + heightUnit + ", 0 = round)", "Name", "Count", "Height (" + heightUnit + ", 0 = from levels)", "Floor (blank = first)");
             _maps = Grid("Deduction", "Measured length", "Schedule name");
             _maps.Columns[1].ReadOnly = true;
             _rates = Grid("Take-off", "Unit", "Rate");
@@ -57,7 +57,7 @@ namespace HCW.AutoCAD.Plugin.UI
 
             tabs.TabPages.Add(Page("Floors", _floors, "Each row is one floor. FFL to FFL is finished floor level to the next; lintel bottom is measured up from the FFL; the slab is the one under the floor. Sections, stairs, doors and windows take their heights from here. Wall paint uses the ceiling height."));
             tabs.TabPages.Add(Page("Doors and windows", _openings, "Name (W1), door or window, type (pick from the list), length and height. Length is the size along the wall that is deducted. Sill and lintel bottom are optional: a blank lintel bottom uses the floor's value. Block name links door and window blocks (with a line on MEASURE-DEDUCT) to this entry; separate several names with ;. " + BlockHint()));
-            tabs.TabPages.Add(Page("Columns", _columns, "Concrete columns of the same size share one mark."));
+            tabs.TabPages.Add(Page("Columns", _columns, "One line per column mark: section, height, floor and how many. Enter them here, or fill the sizes with HCWCOLSCHED. A height of 0 is worked out from the levels (floor to floor less the slab above). HCWCOLQTY gives the concrete and shuttering."));
             tabs.TabPages.Add(Page("Deduction map", _maps, "Each measured deduction (FB01-D1) maps to one schedule name (W1). The closest schedule length within 50 mm (2 in) is pre-filled."));
             tabs.TabPages.Add(Page("Rates", _rates, "Price per unit for each take-off (name as saved, for example WallPaint). Rated take-offs get a Bill sheet in the Excel export (MEXPORTX)."));
             Controls.Add(tabs);
@@ -139,7 +139,9 @@ namespace HCW.AutoCAD.Plugin.UI
                     Width = Num(row, 1),
                     Depth = Num(row, 2),
                     Name = Cell(row, 3),
-                    Count = Math.Max(1, (int)Num(row, 4))
+                    Count = Math.Max(1, (int)Num(row, 4)),
+                    Height = Num(row, 5),
+                    Floor = Cell(row, 6)
                 });
             }
             foreach (DataGridViewRow row in _maps.Rows)
@@ -308,7 +310,7 @@ namespace HCW.AutoCAD.Plugin.UI
         private void FillColumns(MeasureBook book)
         {
             foreach (var c in book.Columns)
-                _columns.Rows.Add(c.Mark, c.Width.ToString("0.###"), c.Depth.ToString("0.###"), c.Name, c.Count.ToString());
+                _columns.Rows.Add(c.Mark, c.Width.ToString("0.###"), c.Depth.ToString("0.###"), c.Name, c.Count.ToString(), c.Height > 0 ? c.Height.ToString("0.###") : "0", c.Floor ?? "");
         }
 
         private void FillMaps(MeasureBook book, IList<KeyValuePair<string, int>> labels)

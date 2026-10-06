@@ -215,7 +215,7 @@ namespace HCW.AutoCAD.Plugin
             foreach (var o in Openings)
                 yield return "O|" + Esc(o.Mark) + "|" + Esc(o.Kind) + "|" + Num(o.Width) + "|" + Num(o.Height) + "|" + Esc(o.Type) + "|" + o.Count.ToString(CultureInfo.InvariantCulture) + "|" + Num(o.LintelBottom) + "|" + Num(o.Sill) + "|" + Esc(o.BlockName) + "|" + Esc(o.Floor);
             foreach (var c in Columns)
-                yield return "C|" + Esc(c.Mark) + "|" + Num(c.Width) + "|" + Num(c.Depth) + "|" + Esc(c.Name) + "|" + c.Count.ToString(CultureInfo.InvariantCulture);
+                yield return "C|" + Esc(c.Mark) + "|" + Num(c.Width) + "|" + Num(c.Depth) + "|" + Esc(c.Name) + "|" + c.Count.ToString(CultureInfo.InvariantCulture) + "|" + Num(c.Height) + "|" + Esc(c.Floor);
             foreach (var m in Maps)
                 yield return "M|" + Esc(m.Label) + "|" + Esc(m.Mark);
             foreach (var r in Rates)
@@ -232,7 +232,7 @@ namespace HCW.AutoCAD.Plugin
             else if (p[0] == "O" && p.Length >= 7)
                 book.Openings.Add(new OpeningSpec { Mark = p[1], Kind = p[2], Width = D(p[3]), Height = D(p[4]), Type = p[5], Count = I(p[6]), LintelBottom = p.Length > 7 ? D(p[7]) : 0, Sill = p.Length > 8 ? D(p[8]) : 0, BlockName = p.Length > 9 ? p[9] : "", Floor = p.Length > 10 ? p[10] : "" });
             else if (p[0] == "C" && p.Length >= 6)
-                book.Columns.Add(new ColumnSpec { Mark = p[1], Width = D(p[2]), Depth = D(p[3]), Name = p[4], Count = I(p[5]) });
+                book.Columns.Add(new ColumnSpec { Mark = p[1], Width = D(p[2]), Depth = D(p[3]), Name = p[4], Count = I(p[5]), Height = p.Length > 6 ? D(p[6]) : 0, Floor = p.Length > 7 ? p[7] : "" });
             else if (p[0] == "P" && p.Length >= 4)
                 book.Rates.Add(new RateSpec { Takeoff = p[1], Unit = p[2], Rate = D(p[3]) });
             else if (p[0] == "M" && p.Length >= 3)
@@ -303,6 +303,10 @@ namespace HCW.AutoCAD.Plugin
             public double Depth = 0.45;
             public string Name = "Column";
             public int Count = 1;
+            /// <summary>Height of the column in schedule units; 0 takes it from the levels (floor to floor less the slab above).</summary>
+            public double Height = 0;
+            /// <summary>The floor the column stands on; blank is the first floor.</summary>
+            public string Floor = "";
             public int WidthRounded => MeasureCommands.RndSchedule(Width);
             public int DepthRounded => MeasureCommands.RndSchedule(Depth);
         }

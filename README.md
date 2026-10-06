@@ -740,3 +740,11 @@ Floor to floor height, ceiling height, lintel bottom and slab thickness for each
 ## Ribbon layout (hcwCAD-KIT tab)
 
 Walls & Openings; Structure (grid, columns, handrail, stairs, lift, escalator); Levels & Sections; Rooms & Areas (room labels, rooms from walls, poly area, area statement, room report); Take-off; Electrical; Symbols; Drawing & Text Tools; Notes. The Settings tab keeps layers, layer checks, BPLT, text checks and the plugin file.
+
+## Column table and quantities
+
+The column schedule is a table you can fill in: `HCWCOLQTY` > Edit opens the Columns tab of `MSCHED` with Mark, Width, Depth (0 = round, Width is the diameter), Name, Count, Height and Floor. `HCWCOLSCHED` fills in the sizes from the drawing and keeps any height or floor you entered for the same size. A height of 0 is worked out from the levels: floor to floor less the slab above (the roof slab for the top floor). `HCWCOLQTY` > Quantities gives concrete (section x height x number) and shuttering (perimeter x height x number) for each line and the total, saves them as the take-off "Columns" (written by `MEXPORT`) and can draw them as a table.
+
+## Stairs
+
+RCC stairs take the waist slab thickness as an input (`AECSTAIR`, `AECSTAIREDIT`, `AECSTAIRQTY`). The quantities (waist, steps and landing concrete, shuttering, finishes) and the bar estimate are saved as take-offs "Stair ST-nn" and "Stair ST-nn bars".

@@ -298,6 +298,64 @@ namespace HCW.AutoCAD.Plugin.Commands
             return id;
         }
 
+        /// <summary>
+        /// The column schedule as a table you fill in: Edit opens the schedule (MSCHED, Columns tab: mark, section, height, floor, number), and
+        /// Quantities works out the concrete and shuttering of each line, saves them as the take-off "Columns" and can draw them as a table.
+        /// A height of 0 is taken from the levels (floor to floor less the slab above).
+        /// </summary>
+        [CommandMethod("HCWCOLQTY")]
+        public void ColumnQuantities()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            string job = Util.AskMode("Column schedule", "Edit", "Quantities");
+            if (job == null) return;
+            if (job == "Edit") { new MeasureCommands().MSched(); return; }
+            if (!MeasureCommands.Prepare()) return;
+            double k = LevelStore.UnitMm;
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var book = MeasureBook.Load(tr, db);
+                if (book.Columns.Count == 0)
+                {
+                    ed.WriteMessage("\nHCWCOLQTY: the column schedule is empty. Choose Edit to enter the columns, or run HCWCOLSCHED to fill the sizes from the drawing.");
+                    return;
+                }
+                var levels = LevelStore.Load(tr, db);
+                var lines = new List<ColumnLine>();
+                int fromLevels = 0, noHeight = 0;
+                foreach (var c in book.Columns)
+                {
+                    bool round = c.Depth <= 0 || (c.Name ?? "").IndexOf("round", StringComparison.OrdinalIgnoreCase) >= 0 || (c.Name ?? "").IndexOf("circ", StringComparison.OrdinalIgnoreCase) >= 0;
+                    double h = c.Height * k;
+                    if (h <= 0) { h = ColumnQuantity.HeightFromLevels(levels, c.Floor); if (h > 0) fromLevels++; else noHeight++; }
+                    lines.Add(new ColumnLine { Mark = c.Mark, WidthMm = c.Width * k, DepthMm = round && c.Depth <= 0 ? 0 : c.Depth * k, Round = round, HeightMm = h, Count = Math.Max(1, c.Count), Floor = c.Floor ?? "" });
+                }
+                var rows = ColumnQuantity.Rows(lines);
+                MeasureBook.SaveTakeoff(tr, db, "Columns", ColumnQuantity.Headers, rows);
+                ed.WriteMessage("\n\nCOLUMN QUANTITIES");
+                foreach (var r in rows)
+                    ed.WriteMessage("\n  " + Util.Pad(r[0], 7) + Util.Pad(r[1], 14) + "h " + Util.Pad(r[2], 6) + "x" + Util.Pad(r[4], 4) + "  " + r[5] + " m3  " + r[6] + " m2");
+                if (fromLevels > 0) ed.WriteMessage("\n  " + fromLevels + " height(s) taken from the levels.");
+                if (noHeight > 0) ed.WriteMessage("\n  " + noHeight + " column line(s) have no height and no levels to take it from, so they count as zero.");
+                ed.WriteMessage("\n  Saved as the take-off \"Columns\"; MEXPORT writes it with the others.");
+
+                var at = ed.GetPoint("\nPick a point to draw the column quantity table (Enter to skip): ");
+                if (at.Status == PromptStatus.OK)
+                {
+                    double h = TagHeightMm * Util.MmToDrawingUnits(1.0);
+                    Util.EnsureHcwLayer(tr, db, LayerTag);
+                    var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                    MeasureCommands.DrawTable(tr, db, new Point3d(at.Value.X, at.Value.Y - 2.5 * h, 0), ColumnQuantity.Headers, rows, h, LayerTag);
+                    var title = new DBText { Height = h * 1.2, TextString = "COLUMN QUANTITIES", Layer = LayerTag, Position = new Point3d(at.Value.X, at.Value.Y - 1.2 * h, 0) };
+                    space.AppendEntity(title);
+                    tr.AddNewlyCreatedDBObject(title, true);
+                }
+                tr.Commit();
+            }
+        }
+
         [CommandMethod("HCWCOLSCHED")]
         public void ColumnSchedule()
         {
@@ -411,11 +469,15 @@ namespace HCW.AutoCAD.Plugin.Commands
                 {
                     double k = LevelStore.UnitMm;
                     var book = MeasureBook.Load(tr, db);
+                    var old = book.Columns.ToList();
                     book.Columns.Clear();
                     foreach (var r in rows)
                     {
                         var sz = cols.Select(c => c.Value).First(c => string.Equals(new ColumnSize { Round = c.Round, W = Math.Round(c.W), D = c.Round ? Math.Round(c.W) : Math.Round(c.D) }.Label, r.Label, StringComparison.Ordinal));
                         book.Columns.Add(new MeasureBook.ColumnSpec { Mark = r.Mark, Width = Math.Round(sz.W) / k, Depth = (sz.Round ? Math.Round(sz.W) : Math.Round(sz.D)) / k, Name = "Column", Count = r.Count });
+                        var last = book.Columns[book.Columns.Count - 1];
+                        var was = old.FirstOrDefault(o => Math.Abs(o.Width - last.Width) < 0.5 / k && Math.Abs(o.Depth - last.Depth) < 0.5 / k);
+                        if (was != null) { last.Height = was.Height; last.Floor = was.Floor; }
                     }
                     book.Save(tr, db);
                 }

@@ -90,3 +90,34 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class ColumnQuantityTests
+    {
+        [Fact]
+        public void RectangularColumnConcreteAndShuttering()
+        {
+            var c = new HCW.AutoCAD.Plugin.Logic.ColumnLine { WidthMm = 230, DepthMm = 450, HeightMm = 3000, Count = 4 };
+            Assert.Equal(0.23 * 0.45 * 3.0 * 4, HCW.AutoCAD.Plugin.Logic.ColumnQuantity.Concrete(c), 6);
+            Assert.Equal(2 * (0.23 + 0.45) * 3.0 * 4, HCW.AutoCAD.Plugin.Logic.ColumnQuantity.Shuttering(c), 6);
+        }
+
+        [Fact]
+        public void RoundColumnUsesDiameter()
+        {
+            var c = new HCW.AutoCAD.Plugin.Logic.ColumnLine { WidthMm = 400, DepthMm = 0, HeightMm = 3000, Count = 1 };
+            Assert.Equal(System.Math.PI * 0.2 * 0.2 * 3.0, HCW.AutoCAD.Plugin.Logic.ColumnQuantity.Concrete(c), 6);
+            Assert.Equal(System.Math.PI * 0.4 * 3.0, HCW.AutoCAD.Plugin.Logic.ColumnQuantity.Shuttering(c), 6);
+        }
+
+        [Fact]
+        public void HeightIsFloorToFloorLessTheSlabAbove()
+        {
+            var lv = new[] { new HCW.AutoCAD.Plugin.Logic.LevelRow { Name = "G", FflMm = 3150, SlabMm = 150 }, new HCW.AutoCAD.Plugin.Logic.LevelRow { Name = "1", FflMm = 3000, SlabMm = 120 } };
+            Assert.Equal(3030, HCW.AutoCAD.Plugin.Logic.ColumnQuantity.HeightFromLevels(lv, "G"));
+            Assert.Equal(2880, HCW.AutoCAD.Plugin.Logic.ColumnQuantity.HeightFromLevels(lv, "1"));
+            Assert.Equal(3030, HCW.AutoCAD.Plugin.Logic.ColumnQuantity.HeightFromLevels(lv, ""));
+        }
+    }
+}
