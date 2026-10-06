@@ -1,18 +1,31 @@
 # Handoff
 
-State of the work on 2026-10-06, for whoever picks it up next. Read [ROADMAP.md](ROADMAP.md) for the list of known limits; this file covers what was verified, what was not, and what to do first.
+State of the work on 2026-10-06 (updated after the structure summary and angled centre-line walls), for whoever picks it up next. Read [ROADMAP.md](ROADMAP.md) for the list of known limits; this file covers what was verified, what was not, and what to do first.
 
 ## Verified
 
 - `main` builds clean (0 warnings, 0 errors) against an AutoCAD 2022 install.
-- `dotnet test tests/HCW.Logic.Tests`: 512 passed, 0 failed, no analyzer warnings.
+- `dotnet test tests/HCW.Logic.Tests`: 519 passed, 0 failed, no analyzer warnings (last run on the commit that added angled centre-line walls).
 - The xUnit analyzer fixes (xUnit2012, xUnit2017, xUnit2029, xUnit2031) in `LogicTests.cs` and `DraftingTests.cs` are in this branch.
 
 ## Not verified
 
-- Nothing has been loaded into AutoCAD, BricsCAD or ZWCAD. The command layer (prompts, entity creation, live update events, jigs, ribbon) has only been compiled, never run. This includes the newest commands: `SHEETFIT`, the wall, opening and axis grid tools, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWROOMSET`, `HCWWALLHATCH`, lintels, the column schedule, `HCWSECTIONDRAW`, `HCWOPENCONVERT`, `HCWOPENHEIGHT`, `HCWOPENSCHED`, `HCWCOLQTY`.
+- Nothing has been loaded into AutoCAD, BricsCAD or ZWCAD. The command layer (prompts, entity creation, live update events, jigs, ribbon) has only been compiled, never run. This includes the newest commands: `SHEETFIT`, the wall, opening and axis grid tools, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWROOMSET`, `HCWWALLHATCH`, lintels, the column schedule, `HCWSECTIONDRAW`, `HCWOPENCONVERT`, `HCWOPENHEIGHT`, `HCWOPENSCHED`, `HCWCOLQTY`, `MQTYSUM`, the electrical schedule by room, `HCWLEVEL` Levels option, the area statement floors from levels, single-line walls at any angle in the auto dimensions.
 - The BricsCAD and ZWCAD projects were not built.
 - The installers (`build\Package-Installers.ps1`) were not built.
+
+## Added since the first handoff (all compiled and unit tested only)
+
+- Levels kept in the drawing with slab thickness (`HCWLEVELS`), `HCWSECTIONDRAW`, `HCWOPENHEIGHT`, `HCWOPENCONVERT`; stairs, lift, doors and windows default their heights from the levels.
+- Opening schedule on the Walls & Openings panel (`HCWOPENSCHED`), updated automatically after the door and window commands (`OpeningAutoSync`).
+- Walls draw a take-off line (`WallMeasureLines`), a wall hatch (`HCWWALLHATCH`, `WallHatch`), and every opening gets a lintel (`LintelAuto`). Windows are tagged `code/number`.
+- Column table with height and floor, `HCWCOLQTY`; `MQTYSUM` adds stair and column concrete and shuttering; room outlines also go on the floor and ceiling take-off layers (`RoomMeasureOutlines`).
+- `ELSCHEDULE` Room layout; `HCWLEVEL` Levels option; `HCWAREASTMT` takes floors from the levels and can reuse the outlines of the floor before.
+- Auto dimension reads single-line walls at any angle (faces only reach the wall-segment dimensions; chains and gap openings stay horizontal and vertical).
+- Ribbon regrouped (Walls & Openings, Structure, Levels & Sections, Rooms & Areas, Take-off, Electrical, Symbols, Drawing & Text Tools, Notes) and `HCWRIBBON` added.
+- `HCWLEGEND` no longer throws `eKeyNotFound`.
+
+Riskiest untested pieces: the wall hatch (region booleans on the joined walls, redrawn after every opening command), the lintel and window-tag changes inside `OpeningCommands.PlaceIn` (the path every door and window takes), and the section tool (crossings of the section line with the wall and column layers).
 
 ## Open problem: ribbon not loading
 
@@ -50,7 +63,7 @@ Output: `src\HCW.AutoCAD.Plugin\bin\x64\Release\hcwCAD-KIT.dll`. Close and reope
 ## What to do next
 
 1. Load the build in AutoCAD; if the ribbon does not appear, read the command line message or run `HCWRIBBON` (above).
-2. Run each new command on a real drawing and fix what breaks. Start with `SHEETFIT`, `HCWWALL` (hatch, measurement line), door and window insert (lintel, `W1/3` tags, schedule sync), `HCWAXIS`, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWSECTIONDRAW`.
+2. Run each new command on a real drawing and fix what breaks. Start with `SHEETFIT`, `HCWWALL` (hatch, measurement line), door and window insert (lintel, `W1/3` tags, schedule sync), `HCWAXIS`, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWSECTIONDRAW`, `HCWCOLQTY`, `MQTYSUM`. If the wall hatch or lintels cause trouble, settings `WallHatch`, `LintelAuto`, `WallMeasureLines` and `OpeningAutoSync` can be set to 0 to switch each off.
 3. Build and test the BricsCAD and ZWCAD projects (they need the host API DLLs).
 4. Build the installers with `build\Package-Installers.ps1` (Inno Setup 6 required) and test one install.
 5. Set the bylaw figures listed in the ROADMAP from the real rules.
