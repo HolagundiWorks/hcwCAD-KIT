@@ -135,6 +135,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         private static int PlaceCopies(Editor ed, Database db, PromptSelectionResult psr, List<KeyValuePair<Vector3d, decimal>> placements)
         {
             int made = 0;
+            var total = System.Diagnostics.Stopwatch.StartNew();
+            var phase = System.Diagnostics.Stopwatch.StartNew();
+            long captureMs = 0, copyMs = 0, commitMs = 0; int objects = 0;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -165,6 +168,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                     return 0;
                 }
 
+                objects = sources.Count;
+                captureMs = phase.ElapsedMilliseconds; phase.Restart();
                 var lookup = new Dictionary<ObjectId, Source>();
                 foreach (var src in sources) lookup[src.Id] = src;
 
@@ -186,8 +191,15 @@ namespace HCW.AutoCAD.Plugin.Commands
                         }
                     }
                 }
+                copyMs = phase.ElapsedMilliseconds; phase.Restart();
                 tr.Commit();
+                commitMs = phase.ElapsedMilliseconds;
             }
+            // One line so a real drawing shows where the time goes before the cloning is changed (setting CopyTiming = 0 hides it).
+            if (made > 0 && Settings.GetInt("CopyTiming", 1) != 0)
+                ed.WriteMessage("\nTiming: " + objects + " object(s) x " + placements.Count + " cop" + (placements.Count == 1 ? "y" : "ies") + " = " + made + " new, " + total.ElapsedMilliseconds
+                    + " ms (read " + captureMs + ", copy " + copyMs + ", commit " + commitMs + "; "
+                    + (made > 0 ? (copyMs / (double)made).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) : "0") + " ms per new object).");
             return made;
         }
 

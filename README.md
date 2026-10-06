@@ -769,3 +769,7 @@ The ribbon icons are IBM Carbon Design System artwork, included under the Apache
 ### Structure summary (`MQTYSUM`)
 
 Adds the concrete and shuttering of every saved stair take-off (`AECSTAIR`, `AECSTAIR` quantities) and the column take-off (`HCWCOLQTY`) into one table (Stairs, Columns, TOTAL), saved as the take-off "Structure summary" for `MEXPORT`. Run the element commands first; stair bar estimates are not included.
+
+### Copy and array timing
+
+`INCARRAY` and `INCCOPY` print a line after each run: `Timing: <objects> object(s) x <copies> copies = <new> new, <ms> ms (read, copy, commit; ms per new object)`. Run one on a large selection in your CAD program and send the line; it shows whether the cloning is worth changing. Setting `CopyTiming` = 0 hides it.

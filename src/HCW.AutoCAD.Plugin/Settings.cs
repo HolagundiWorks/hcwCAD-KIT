@@ -106,6 +106,7 @@ namespace HCW.AutoCAD.Plugin
             Entry("WallHatch", "1", "HCWWALL: 1 hatches the walls (all walls joined, doors and windows cut out) on A-WALL-HATCH and redraws it as walls and openings change; 0 turns it off."),
             Entry("WallHatchPattern", "ANSI31", "Wall hatch: the pattern name (ANSI31, ANSI37, SOLID ...)."),
             Entry("WallHatchSpacingMm", "60", "Wall hatch: line spacing on the drawing in millimetres (the pattern scale is worked out from it)."),
+            Entry("CopyTiming", "1", "INCARRAY and INCCOPY: 1 prints a timing line after each run (objects, copies, milliseconds for reading, copying and committing); 0 hides it."),
             Entry("WallJoinOnDraw", "1", "HCWWALL: 1 merges a new wall with the wall outlines it touches, 0 leaves each wall as its own outline."),
             Entry("LiftMachineMarginMm", "1000", "HCWLIFT: how far the machine room outline extends beyond the shaft wall on every side, in millimetres."),
             Entry("EscalatorAngleDeg", "30", "HCWESCALATOR: the angle offered first, in degrees (30, or 35 up to 6 m rise)."),
