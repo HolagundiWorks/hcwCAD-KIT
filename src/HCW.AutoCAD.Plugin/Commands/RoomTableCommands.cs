@@ -29,6 +29,18 @@ namespace HCW.AutoCAD.Plugin.Commands
             var ed = Util.Ed;
             var db = Util.Db;
 
+            // The older label-based room tools are the other sources of the same report.
+            string source = Util.AskMode("Read the rooms from", "Outlines", "Labels");
+            if (source == null) return;
+            if (source == "Labels")
+            {
+                string result = Util.AskMode("From the room labels", "Table", "Csv", "Total");
+                if (result == "Table") UI.RoomUnitSelector.Current.Table(ed, db);
+                else if (result == "Csv") UI.RoomUnitSelector.Current.Schedule(ed, db);
+                else if (result == "Total") UI.RoomUnitSelector.Current.Total(ed);
+                return;
+            }
+
             var psr = ed.GetSelection(
                 new PromptSelectionOptions { MessageForAdding = "\nSelect the rooms: outlines, names, area labels and dimensions (Enter = everything in this space): " },
                 new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "LWPOLYLINE,TEXT,MTEXT,DIMENSION") }));

@@ -217,7 +217,6 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWWALL", "Draw\nWall", "floorplan", "Draw wall faces from picked points, or from lines and polylines you select, at a thickness you give");
             AddLarge(src, "HCWCLEAN", "Clean\nLines", "clean", "Erase zero-length and duplicate lines and join lines that touch or overlap on one straight line");
             AddLarge(src, "HCWROOMWALLS", "Rooms from\nWalls", "area", "Pick a point inside a room and get its clear outline from the wall faces, with an optional name and area label");
-            AddLarge(src, "HCWROOMREPORT", "Room\nReport", "report--data", "Read room names, sizes, dimensions and areas from a selection into a table, saved as a take-off and exportable to CSV or Excel");
             AddLarge(src, "HCWCORNER", "Trim/Extend\nCorner", "add--alt", "Trim or extend two lines to meet at their corner, keeping the parts you click");
             AddLarge(src, "HCWWALLJOIN", "Join\nWalls", "copy--file", "Merge overlapping wall outlines so T and L junctions are clean");
             AddLarge(src, "HCWWALLEDIT", "Edit\nWall", "tag--edit", "Change the thickness or line position of a wall; joined walls are rebuilt and openings re-cut");
@@ -256,10 +255,7 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("INCARRAY", "Inc Array", "add--alt", "Array the selection and increment every number in the copied text, attributes and dimensions"),
                 ("INCCOPY", "Inc Copy", "copy", "Copy the selection to picked points, adding the increment to every number in each copy"),
                 ("RENUMBERLAYOUTS", "Renumber Layouts", "table-of-contents", "Renumber paper layouts in tab order, with a prefix, suffix and digit padding"),
-                ("AUTODIM", "Auto Dimension", "ruler", "Dimension chains around the plan: openings, structure, grid and overall"),
-                ("AUTODIMROOM", "Room Dimensions", "ruler", "Clear width and depth of each room, and door and window positions along its walls"),
-                ("AUTODIMWALL", "Wall Dimensions", "ruler", "Aligned dimension on each wall segment at any angle, and radius on arcs"),
-                ("AUTODIMCLEAR", "Clear Auto Dims", "clean", "Remove the dimensions the auto dimension tools made"),
+                ("AUTODIM", "Auto Dimension", "ruler", "Dimension the plan: chains around it, inside each room, on wall segments at any angle, or clear what these made"),
                 ("SHEETSET", "Sheet Set", "document--horizontal", "Make numbered sheets from a template layout, with each viewport at a scale and centred on a window"),
                 ("SHEETFIT", "Fit to Sheet", "document--view", "Place the title plate on a layout and fit the selected drawing into its paper-space area"),
                 ("WinLabel", "Window Label", "tag", "Label window blocks from their WNAME property"),
@@ -295,9 +291,7 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("HCWROOMSET", "Settings", "settings", "Show text height, layers, floor prefix and the detected unit"),
                 ("HCWROOMAUDIT", "Audit", "checkmark--outline", "Compare label and rectangle counts"),
                 ("HCWROOMCHECK", "Check Rects", "rule", "Verify room rectangles are closed"),
-                ("HCWROOMSCHEDULE", "Export CSV", "calendar", "Export the room labels in this drawing to CSV"),
-                ("HCWROOMTABLE", "Room Table", "table-of-contents", "Draw the room schedule as a table"),
-                ("HCWROOMTOTAL", "Total Area", "report--data", "Total area of the rooms labelled in this drawing"),
+                ("HCWROOMREPORT", "Room Report", "report--data", "Rooms as a table with names, sizes, dimensions and areas, from outlines or from room labels; saved as a take-off, drawn, exported to CSV or Excel, or totalled"),
                 ("HCWROOMHELP", "Help", "help", "How ROOM reads the drawing units"));
             return Wrap(src);
         }

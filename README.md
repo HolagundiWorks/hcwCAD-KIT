@@ -262,6 +262,8 @@ Commands that did closely related jobs share a button, and the command asks whic
 | `FIXTXT` | Separate overlapping text [Vertical/Horizontal] | `FIXTXTH` |
 | `HCWAUDIT` | Check [Layers/Overrides/Info/Counts] | `HCWAUDIT2`, `HCWINFO`, `HCWSCHEDULE` |
 | `MEXPORT` | Export as [Csv/Xlsx] | `MEXPORTX` |
+| `HCWROOMREPORT` | Read the rooms from [Outlines/Labels]; for Labels, [Table/Csv/Total] | `HCWROOMTABLE`, `HCWROOMSCHEDULE`, `HCWROOMTOTAL` |
+| `AUTODIM` | Dimension [Outside/Rooms/Walls/Clear] | `AUTODIMROOM`, `AUTODIMWALL`, `AUTODIMCLEAR` |
 
 ### Settings file
 

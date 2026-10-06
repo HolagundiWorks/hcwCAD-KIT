@@ -61,6 +61,12 @@ namespace HCW.AutoCAD.Plugin.Commands
             var ed = Util.Ed;
             var db = Util.Db;
 
+            string mode = Util.AskMode("Dimension", "Outside", "Rooms", "Walls", "Clear");
+            if (mode == null) return;
+            if (mode == "Rooms") { AutoDimRoom(); return; }
+            if (mode == "Walls") { AutoDimWall(); return; }
+            if (mode == "Clear") { Clear(); return; }
+
             var choice = AskLayers(ed, db, "Furniture is switched off with the other layers; Room Dimensions dimensions it.");
             if (choice == null) return;
             if (!AskKeyword(ed, "Sides", new[] { "All", "Top", "Bottom", "Left", "Right" }, ref _sides)) return;
