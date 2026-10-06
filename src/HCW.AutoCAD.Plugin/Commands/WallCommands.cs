@@ -224,6 +224,18 @@ namespace HCW.AutoCAD.Plugin.Commands
             return true;
         }
 
+        /// <summary>HCWWALLHATCH redraws the wall hatch from the wall objects and the doors and windows now in the drawing (after walls were moved or edited by hand).</summary>
+        [CommandMethod("HCWWALLHATCH")]
+        public void RefreshHatch()
+        {
+            var ed = Util.Ed;
+            if (Settings.GetInt("WallHatch", 1) == 0) { ed.WriteMessage("\nHCWWALLHATCH: the wall hatch is turned off (setting WallHatch = 0)."); return; }
+            int n = WallHatch.RefreshNow();
+            if (n < 0) ed.WriteMessage("\nHCWWALLHATCH: the walls could not be hatched; the wall shapes were not accepted. Nothing was changed.");
+            else if (n == 0) ed.WriteMessage("\nHCWWALLHATCH: no wall objects in this space to hatch. Walls drawn by hand need HCWWALLADOPT first.");
+            else ed.WriteMessage("\nHCWWALLHATCH: wall hatch redrawn on " + WallHatch.Layer + ".");
+        }
+
         [CommandMethod("HCWWALLJOIN")]
         public void JoinWalls()
         {

@@ -150,9 +150,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         /// <summary>Redraws the hatch in its own transaction (after the opening commands).</summary>
-        internal static void RefreshNow()
+        internal static int RefreshNow()
         {
-            if (Settings.GetInt("WallHatch", 1) == 0) return;
+            if (Settings.GetInt("WallHatch", 1) == 0) return 0;
             try
             {
                 using (Util.Doc.LockDocument())
@@ -160,10 +160,18 @@ namespace HCW.AutoCAD.Plugin.Commands
                 {
                     var space = (BlockTableRecord)tr.GetObject(Util.Db.CurrentSpaceId, OpenMode.ForWrite);
                     Refresh(tr, Util.Db, space);
+                    int n = 0;
+                    foreach (ObjectId id in space)
+                    {
+                        if (id.ObjectClass.DxfName != "HATCH") continue;
+                        var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                        if (ent != null && !ent.IsErased && ent.GetXDataForApplication(App) != null) n++;
+                    }
                     tr.Commit();
+                    return n;
                 }
             }
-            catch (System.Exception) { }
+            catch (System.Exception) { return -1; }
         }
     }
 }
