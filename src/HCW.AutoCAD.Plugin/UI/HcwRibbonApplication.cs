@@ -229,6 +229,8 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWRAIL", "Handrail", "rule--data-quality", "Draw a handrail in plan along a line or polyline, with posts at the corners and along each run");
             AddLarge(src, "HCWBALUSTRADE", "Balustrade", "floorplan", "Draw a balustrade in elevation along a line or polyline: handrail, posts and balusters with a largest gap, level or sloped to follow a flight");
             AddLarge(src, "HCWAXIS", "Axis\nGrid", "grid", "Draw a column grid from bay widths, with numbered and lettered bubbles");
+            AddLarge(src, "HCWAXISADD", "Add Grid\nLine", "add--alt", "Add a grid line parallel to one already drawn, with its bubbles and the next label");
+            AddLarge(src, "HCWAXISDEL", "Remove Grid\nLine", "add--alt", "Remove a grid line with its bubbles");
             AddLarge(src, "HCWCOLUMN", "Place\nColumns", "column", "Put a column of one size on every grid intersection, or those in a window");
             AddLarge(src, "HCWCOLSCHED", "Column\nSchedule", "table-of-contents", "Mark every column C1, C2 ... by size and draw the column schedule");
             return Wrap(src);

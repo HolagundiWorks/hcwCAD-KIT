@@ -109,6 +109,7 @@ namespace HCW.AutoCAD.Plugin
             Entry("EscalatorStepWidthMm", "1000", "HCWESCALATOR: the nominal step width offered first, in millimetres."),
             Entry("EscalatorLandingMm", "2500", "HCWESCALATOR: the flat landing length at each end, in millimetres."),
             Entry("EscalatorSideMm", "300", "HCWESCALATOR: balustrade and skirt width on each side of the steps, in millimetres."),
+            Entry("ColumnEdgeProjectMm", "0", "HCWCOLUMN: with edge columns set to Flush, how far the outer face stands outside the grid line, in millimetres (0 = on the line; half a wall thickness = flush with the wall face)."),
             Entry("StairRailing", "1", "AECSTAIR section: 1 draws the handrail, its end posts and balusters, 0 leaves them out."),
             Entry("StairHandrailMm", "900", "AECSTAIR section: handrail height above the nosing line, in millimetres."),
             Entry("StairPostMm", "50", "AECSTAIR section: size of the handrail posts, in millimetres."),

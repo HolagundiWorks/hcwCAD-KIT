@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -121,6 +122,145 @@ namespace HCW.AutoCAD.Plugin.Commands
                     return list;
                 }
                 ed.WriteMessage("\n" + error + ".");
+            }
+        }
+    
+        // ------------------------------------------------------------------ add and remove a grid line
+
+        private class Bubble { public Circle Ring; public DBText Label; }
+
+        /// <summary>The bubbles at the ends of a grid line: circles on the bubble layer centred on the line's extension, each with the text inside it.</summary>
+        private static List<Bubble> BubblesOf(Transaction tr, BlockTableRecord space, Line line)
+        {
+            var found = new List<Bubble>();
+            var a = new P2(line.StartPoint.X, line.StartPoint.Y); var b = new P2(line.EndPoint.X, line.EndPoint.Y);
+            double len = a.DistanceTo(b);
+            if (len < 1e-9) return found;
+            var u = (b - a) * (1.0 / len);
+            var circles = new List<Circle>(); var texts = new List<DBText>();
+            foreach (ObjectId id in space)
+            {
+                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null || ent.IsErased) continue;
+                var c = ent as Circle;
+                if (c != null && string.Equals(c.Layer, LayerBubble, StringComparison.OrdinalIgnoreCase)) circles.Add(c);
+                var t = ent as DBText;
+                if (t != null) texts.Add(t);
+            }
+            foreach (var c in circles)
+            {
+                var d = new P2(c.Center.X, c.Center.Y) - a;
+                double along = P2.Dot(d, u), across = Math.Abs(P2.Cross(u, d));
+                if (across > c.Radius * 0.5 || (along >= -1e-9 && along <= len + 1e-9) || Math.Min(Math.Abs(along), Math.Abs(along - len)) > 8 * c.Radius) continue;
+                var bub = new Bubble { Ring = c };
+                foreach (var t in texts)
+                {
+                    var tp = t.HorizontalMode == TextHorizontalMode.TextLeft && t.VerticalMode == TextVerticalMode.TextBase ? t.Position : t.AlignmentPoint;
+                    if (new P2(tp.X, tp.Y).DistanceTo(new P2(c.Center.X, c.Center.Y)) <= c.Radius) { bub.Label = t; break; }
+                }
+                found.Add(bub);
+            }
+            return found;
+        }
+
+        /// <summary>
+        /// HCWAXISADD adds a grid line parallel to one already drawn, as long as it and with bubbles at the same ends, labelled with the
+        /// next number or letter (or any label you give). Pick a point for the line, or press Enter and type a distance in millimetres
+        /// (positive to the left of the line looking from its start to its end).
+        /// </summary>
+        [CommandMethod("HCWAXISADD")]
+        public void AddLine()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            var o = new PromptEntityOptions("\nSelect the grid line to copy: ");
+            o.SetRejectMessage("\nSelect a grid line.");
+            o.AddAllowedClass(typeof(Line), true);
+            var er = ed.GetEntity(o);
+            if (er.Status != PromptStatus.OK) return;
+
+            var pp = ed.GetPoint(new PromptPointOptions("\nPick a point on the new grid line (Enter to type a distance): ") { AllowNone = true });
+            Point3d? through = null; double? distance = null;
+            if (pp.Status == PromptStatus.OK) through = pp.Value.TransformBy(ed.CurrentUserCoordinateSystem);
+            else if (pp.Status == PromptStatus.None)
+            {
+                var dr = ed.GetDouble(new PromptDoubleOptions("\nDistance in mm from that line (positive to its left, negative to its right): ") { AllowZero = false });
+                if (dr.Status != PromptStatus.OK) return;
+                distance = dr.Value;
+            }
+            else return;
+
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                var line = (Line)tr.GetObject(er.ObjectId, OpenMode.ForRead);
+                var a = new P2(line.StartPoint.X, line.StartPoint.Y); var b = new P2(line.EndPoint.X, line.EndPoint.Y);
+                double len = a.DistanceTo(b);
+                if (len < 1e-9) { ed.WriteMessage("\nHCWAXISADD: that line has no length."); return; }
+                var u = (b - a) * (1.0 / len);
+                var left = new P2(-u.Y, u.X);
+                double off = through.HasValue ? P2.Dot(new P2(through.Value.X, through.Value.Y) - a, left) : distance.Value * Util.MmToDrawingUnits(1.0);
+                if (Math.Abs(off) < Util.MmToDrawingUnits(1.0)) { ed.WriteMessage("\nHCWAXISADD: that is on the line itself."); return; }
+                var move = Matrix3d.Displacement(new Vector3d(left.X * off, left.Y * off, 0));
+
+                var bubbles = BubblesOf(tr, space, line);
+                string current = bubbles.Select(x => x.Label?.TextString).FirstOrDefault(t => !string.IsNullOrEmpty(t));
+                string next = current == null ? null : GridModel.NextLabel(current);
+                var lr = ed.GetString(new PromptStringOptions("\nLabel for the new line" + (next != null ? " <" + next + ">" : "") + ": ")
+                    { AllowSpaces = false, DefaultValue = next ?? "", UseDefaultValue = next != null });
+                if (lr.Status != PromptStatus.OK) return;
+                string label = lr.StringResult.Trim();
+
+                var copy = (Line)line.Clone();
+                copy.TransformBy(move);
+                space.AppendEntity(copy);
+                tr.AddNewlyCreatedDBObject(copy, true);
+                foreach (var bub in bubbles)
+                {
+                    var ring = (Circle)bub.Ring.Clone();
+                    ring.TransformBy(move);
+                    space.AppendEntity(ring);
+                    tr.AddNewlyCreatedDBObject(ring, true);
+                    if (bub.Label == null) continue;
+                    var text = (DBText)bub.Label.Clone();
+                    text.TransformBy(move);
+                    text.TextString = label;
+                    space.AppendEntity(text);
+                    tr.AddNewlyCreatedDBObject(text, true);
+                }
+                tr.Commit();
+                ed.WriteMessage("\nHCWAXISADD: grid line " + (label.Length > 0 ? label + " " : "") + "added " + Math.Round(Math.Abs(off) / Util.MmToDrawingUnits(1.0)) + " mm "
+                    + (off > 0 ? "to the left" : "to the right") + " with " + bubbles.Count + " bubble(s).");
+            }
+        }
+
+        /// <summary>HCWAXISDEL erases a grid line together with its bubbles and their labels. The other lines keep their labels.</summary>
+        [CommandMethod("HCWAXISDEL")]
+        public void RemoveLine()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            var o = new PromptEntityOptions("\nSelect the grid line to remove: ");
+            o.SetRejectMessage("\nSelect a grid line.");
+            o.AddAllowedClass(typeof(Line), true);
+            var er = ed.GetEntity(o);
+            if (er.Status != PromptStatus.OK) return;
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+                var line = (Line)tr.GetObject(er.ObjectId, OpenMode.ForWrite);
+                var bubbles = BubblesOf(tr, space, line);
+                string label = bubbles.Select(x => x.Label?.TextString).FirstOrDefault(t => !string.IsNullOrEmpty(t));
+                foreach (var bub in bubbles)
+                {
+                    bub.Ring.UpgradeOpen(); bub.Ring.Erase();
+                    if (bub.Label != null) { bub.Label.UpgradeOpen(); bub.Label.Erase(); }
+                }
+                line.Erase();
+                tr.Commit();
+                ed.WriteMessage("\nHCWAXISDEL: grid line " + (label ?? "") + " and " + bubbles.Count + " bubble(s) removed. The other lines keep their labels.");
             }
         }
     }

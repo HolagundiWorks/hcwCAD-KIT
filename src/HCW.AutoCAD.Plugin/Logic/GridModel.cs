@@ -65,6 +65,23 @@ namespace HCW.AutoCAD.Plugin.Logic
             return sb.ToString();
         }
 
+        /// <summary>The label that follows this one: 3 gives 4, B gives C, H gives J, Z gives AA. Null when the label is neither a number nor letters.</summary>
+        public static string NextLabel(string label)
+        {
+            label = (label ?? "").Trim().ToUpperInvariant();
+            int n;
+            if (int.TryParse(label, NumberStyles.Integer, CultureInfo.InvariantCulture, out n)) return (n + 1).ToString(CultureInfo.InvariantCulture);
+            if (label.Length == 0) return null;
+            int index = 0;
+            foreach (char c in label)
+            {
+                int k = Array.IndexOf(Letters, c);
+                if (k < 0) return null;
+                index = index * Letters.Length + k + 1;
+            }
+            return Letter(index);       // index is (position + 1), which is the next label's zero-based index
+        }
+
         /// <summary>1, 2, 3 … from start.</summary>
         public static string Number(int index, int start = 1) => (start + index).ToString(CultureInfo.InvariantCulture);
     }

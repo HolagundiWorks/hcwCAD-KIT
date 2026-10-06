@@ -2528,4 +2528,98 @@ namespace HCW.Logic.Tests
             public int GetHashCode(double v) => 0;
         }
     }
+
+    public class GridAndColumnOptionTests
+    {
+        [Theory]
+        [InlineData("1", "2")]
+        [InlineData("9", "10")]
+        [InlineData("A", "B")]
+        [InlineData("H", "J")]
+        [InlineData("N", "P")]
+        [InlineData("Z", "AA")]
+        [InlineData("AZ", "BA")]
+        public void NextLabelFollowsTheDrawingConvention(string from, string to) => Assert.Equal(to, GridModel.NextLabel(from));
+
+        [Fact]
+        public void NextLabelOfNonsenseIsNull()
+        {
+            Assert.Null(GridModel.NextLabel("I"));
+            Assert.Null(GridModel.NextLabel(""));
+            Assert.Null(GridModel.NextLabel("A-1"));
+        }
+
+        [Fact]
+        public void NextLabelMatchesLetterSequence()
+        {
+            for (int i = 0; i < 60; i++) Assert.Equal(GridModel.Letter(i + 1), GridModel.NextLabel(GridModel.Letter(i)));
+        }
+
+        [Fact]
+        public void BlockNamesRoundTrip()
+        {
+            var rect = new ColumnSize { W = 230, D = 450 };
+            var round = new ColumnSize { Round = true, W = 450, D = 450 };
+            Assert.Equal("HCW_COL_230x450", rect.BlockName);
+            Assert.Equal("HCW_COL_R450", round.BlockName);
+            Assert.Equal(230, ColumnSize.FromBlockName(rect.BlockName).W);
+            Assert.Equal(450, ColumnSize.FromBlockName(rect.BlockName).D);
+            Assert.True(ColumnSize.FromBlockName(round.BlockName).Round);
+            Assert.Null(ColumnSize.FromBlockName("DOOR"));
+            Assert.Null(ColumnSize.FromBlockName("HCW_COL_junk"));
+        }
+
+        private static List<GridPoint> Grid(int nx, int ny, double bay)
+        {
+            var l = new List<GridPoint>();
+            for (int i = 0; i < nx; i++) for (int j = 0; j < ny; j++) l.Add(new GridPoint { Pt = new P2(i * bay, j * bay), Angle = 0 });
+            return l;
+        }
+
+        [Fact]
+        public void EdgeColumnsMoveInwardsCornersBothWaysInteriorNot()
+        {
+            var g = Grid(3, 3, 4000);
+            var w = g.Select(_ => 300.0).ToList(); var d = g.Select(_ => 450.0).ToList();
+            var s = ColumnEdges.Shifts(g, w, d, 0, 1);
+            for (int k = 0; k < g.Count; k++)
+            {
+                var p = g[k].Pt;
+                double ex = p.X == 0 ? 150 : p.X == 8000 ? -150 : 0;
+                double ey = p.Y == 0 ? 225 : p.Y == 8000 ? -225 : 0;
+                Assert.Equal(ex, s[k].X, 6); Assert.Equal(ey, s[k].Y, 6);
+            }
+        }
+
+        [Fact]
+        public void ProjectionOutsideTheLineReducesTheShift()
+        {
+            var g = Grid(2, 2, 4000);
+            var s = ColumnEdges.Shifts(g, g.Select(_ => 300.0).ToList(), g.Select(_ => 300.0).ToList(), 115, 1);
+            Assert.Equal(35, s[0].X, 6);
+        }
+
+        [Fact]
+        public void ASingleLineInADirectionIsNotMoved()
+        {
+            var g = Grid(3, 1, 4000);
+            var s = ColumnEdges.Shifts(g, g.Select(_ => 300.0).ToList(), g.Select(_ => 300.0).ToList(), 0, 1);
+            Assert.Equal(0, s[0].Y, 9);
+            Assert.Equal(150, s[0].X, 9);
+            Assert.Equal(0, s[1].X, 9);
+        }
+
+        [Fact]
+        public void ShiftsFollowARotatedGrid()
+        {
+            double a = Math.PI / 6;
+            var g = new List<GridPoint>();
+            foreach (var (x, y) in new[] { (0.0, 0.0), (4000.0, 0.0) })
+                g.Add(new GridPoint { Pt = new P2(x * Math.Cos(a) - y * Math.Sin(a), x * Math.Sin(a) + y * Math.Cos(a)), Angle = a });
+            var s = ColumnEdges.Shifts(g, new[] { 300.0, 300.0 }, new[] { 300.0, 300.0 }, 0, 1);
+            Assert.Equal(150 * Math.Cos(a), s[0].X, 6);
+            Assert.Equal(150 * Math.Sin(a), s[0].Y, 6);
+            Assert.Equal(-150 * Math.Cos(a), s[1].X, 6);
+        }
+    }
 }

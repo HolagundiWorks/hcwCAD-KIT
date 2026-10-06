@@ -16,6 +16,23 @@ namespace HCW.AutoCAD.Plugin.Logic
             ? "Ø" + W.ToString("0.##", CultureInfo.InvariantCulture)
             : W.ToString("0.##", CultureInfo.InvariantCulture) + "x" + D.ToString("0.##", CultureInfo.InvariantCulture);
 
+        public const string BlockPrefix = "HCW_COL_";
+
+        /// <summary>The name of the column block for this size: HCW_COL_230x450, or HCW_COL_R450 for a round column.</summary>
+        public string BlockName => BlockPrefix + (Round
+            ? "R" + W.ToString("0.##", CultureInfo.InvariantCulture)
+            : W.ToString("0.##", CultureInfo.InvariantCulture) + "x" + D.ToString("0.##", CultureInfo.InvariantCulture));
+
+        /// <summary>The size a column block name stands for, or null when the name is not one of ours (an anonymous copy's name will not parse).</summary>
+        public static ColumnSize FromBlockName(string name)
+        {
+            if (name == null || !name.StartsWith(BlockPrefix, StringComparison.OrdinalIgnoreCase)) return null;
+            string rest = name.Substring(BlockPrefix.Length);
+            string error;
+            if (rest.Length > 1 && (rest[0] == 'R' || rest[0] == 'r')) return Parse("D" + rest.Substring(1), out error);
+            return Parse(rest, out error);
+        }
+
         public double Area => Round ? Math.PI * W * W / 4.0 : W * D;
 
         /// <summary>
@@ -130,6 +147,43 @@ namespace HCW.AutoCAD.Plugin.Logic
                 .ToList();
             for (int i = 0; i < groups.Count; i++) groups[i].Mark = "C" + (i + 1);
             return groups;
+        }
+        }
+
+    /// <summary>Moves columns at the edge of a grid so their outer face sits on the grid line (or a set distance outside it).</summary>
+    public static class ColumnEdges
+    {
+        /// <summary>
+        /// For each grid point, how far to move its column. The grid's own directions come from the first point's angle. A point on the lowest
+        /// or highest grid line of either direction is moved inwards by half the column size less outMm, the distance the outer face may stand
+        /// proud of the line (0 puts it on the line; half a wall thickness puts it flush with a wall face when the line is the wall's centre).
+        /// A direction with only one grid line is left alone. Columns of any size can be mixed; widths run along the grid's first direction.
+        /// </summary>
+        public static List<P2> Shifts(IList<GridPoint> pts, IList<double> widths, IList<double> depths, double outMm, double tol)
+        {
+            var res = pts.Select(p => new P2(0, 0)).ToList();
+            if (pts.Count == 0) return res;
+            double a = pts[0].Angle;
+            var e1 = new P2(Math.Cos(a), Math.Sin(a)); var e2 = new P2(-e1.Y, e1.X);
+            var u = pts.Select(p => P2.Dot(p.Pt, e1)).ToList();
+            var v = pts.Select(p => P2.Dot(p.Pt, e2)).ToList();
+            double u0 = u.Min(), u1 = u.Max(), v0 = v.Min(), v1 = v.Max();
+            for (int i = 0; i < pts.Count; i++)
+            {
+                double du = 0, dv = 0;
+                if (u1 - u0 > tol)
+                {
+                    if (Math.Abs(u[i] - u0) <= tol) du = widths[i] / 2 - outMm;
+                    else if (Math.Abs(u[i] - u1) <= tol) du = -(widths[i] / 2 - outMm);
+                }
+                if (v1 - v0 > tol)
+                {
+                    if (Math.Abs(v[i] - v0) <= tol) dv = depths[i] / 2 - outMm;
+                    else if (Math.Abs(v[i] - v1) <= tol) dv = -(depths[i] / 2 - outMm);
+                }
+                res[i] = e1 * du + e2 * dv;
+            }
+            return res;
         }
     }
 }

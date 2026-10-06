@@ -116,25 +116,78 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (points.Count == 0) { ed.WriteMessage("\nHCWCOLUMN: no grid intersection inside that window."); return; }
             }
 
+            var sizes = points.Select(_ => size).ToList();
+            var mo = new PromptKeywordOptions("\nDifferent sizes at chosen intersections [Yes/No] <No>: ", "Yes No") { AllowNone = true };
+            mo.Keywords.Default = "No";
+            var mr = ed.GetKeywords(mo);
+            if (mr.Status != PromptStatus.OK && mr.Status != PromptStatus.None) return;
+            if (mr.Status == PromptStatus.OK && mr.StringResult == "Yes" && !AskGroups(ed, points, sizes)) return;
+
+            var edgeOpt = new PromptKeywordOptions("\nColumns on the edge of the grid [Centred/Flush] <" + (_flush ? "Flush" : "Centred") + ">: ", "Centred Flush") { AllowNone = true };
+            edgeOpt.Keywords.Default = _flush ? "Flush" : "Centred";
+            var edgeRes = ed.GetKeywords(edgeOpt);
+            if (edgeRes.Status == PromptStatus.OK) _flush = edgeRes.StringResult == "Flush";
+            else if (edgeRes.Status != PromptStatus.None) return;
+            List<P2> shifts = null;
+            if (_flush)
+                shifts = ColumnEdges.Shifts(points, sizes.Select(z => z.W * mm).ToList(), sizes.Select(z => (z.Round ? z.W : z.D) * mm).ToList(),
+                    Settings.GetDouble("ColumnEdgeProjectMm", 0) * mm, mm * 0.5);
+
+            bool measureLayer = string.Equals(_layer, MeasureCommands.LayCol, StringComparison.OrdinalIgnoreCase);
+            if (!measureLayer)
+            {
+                var bo = new PromptKeywordOptions("\nDraw each column as [Outline/Block with mark] <" + (_blocks ? "Block" : "Outline") + ">: ", "Outline Block") { AllowNone = true };
+                bo.Keywords.Default = _blocks ? "Block" : "Outline";
+                var br = ed.GetKeywords(bo);
+                if (br.Status == PromptStatus.OK) _blocks = br.StringResult == "Block";
+                else if (br.Status != PromptStatus.None) return;
+            }
+            bool asBlocks = _blocks && !measureLayer;
+
             int placed = 0, skipped = 0;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                if (string.Equals(_layer, MeasureCommands.LayCol, StringComparison.OrdinalIgnoreCase)) Util.EnsureLayer(tr, db, MeasureCommands.LayCol, 2);
+                if (measureLayer) Util.EnsureLayer(tr, db, MeasureCommands.LayCol, 2);
                 else Util.EnsureHcwLayer(tr, db, LayerColumn);
                 if (_fill) Util.EnsureHcwLayer(tr, db, LayerFill);
+                if (asBlocks) Util.EnsureHcwLayer(tr, db, LayerTag);
                 var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
 
                 var existing = ExistingCentres(tr, space);
                 double skipR = SkipRadiusMm * mm;
-                double w = size.W * mm, d = size.D * mm;
 
-                foreach (var gp in points)
+                for (int k = 0; k < points.Count; k++)
                 {
-                    if (existing.Any(c => c.DistanceTo(gp.Pt) <= skipR)) { skipped++; continue; }
+                    var gp = points[k];
+                    var sz = sizes[k];
+                    var centre = shifts == null ? gp.Pt : gp.Pt + shifts[k];
+                    if (existing.Any(c => c.DistanceTo(centre) <= skipR)) { skipped++; continue; }
+                    double w = sz.W * mm, d = sz.D * mm;
+                    if (asBlocks)
+                    {
+                        var def = EnsureColumnBlock(tr, db, sz);
+                        var br = new BlockReference(new Point3d(centre.X, centre.Y, 0), def) { Layer = _layer, Rotation = gp.Angle };
+                        space.AppendEntity(br);
+                        tr.AddNewlyCreatedDBObject(br, true);
+                        var rec = (BlockTableRecord)tr.GetObject(def, OpenMode.ForRead);
+                        foreach (ObjectId eid in rec)
+                        {
+                            var ad = tr.GetObject(eid, OpenMode.ForRead) as AttributeDefinition;
+                            if (ad == null || ad.Constant) continue;
+                            var ar = new AttributeReference();
+                            ar.SetAttributeFromBlock(ad, br.BlockTransform);
+                            ar.TextString = "C?";
+                            br.AttributeCollection.AppendAttribute(ar);
+                            tr.AddNewlyCreatedDBObject(ar, true);
+                        }
+                        existing.Add(centre);
+                        placed++;
+                        continue;
+                    }
                     Entity outline;
-                    if (size.Round)
-                        outline = new Circle(new Point3d(gp.Pt.X, gp.Pt.Y, 0), Vector3d.ZAxis, w / 2.0);
+                    if (sz.Round)
+                        outline = new Circle(new Point3d(centre.X, centre.Y, 0), Vector3d.ZAxis, w / 2.0);
                     else
                     {
                         var pl = new Polyline();
@@ -142,8 +195,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                         var corners = new[] { new P2(-w / 2, -d / 2), new P2(w / 2, -d / 2), new P2(w / 2, d / 2), new P2(-w / 2, d / 2) };
                         for (int i = 0; i < 4; i++)
                         {
-                            double x = gp.Pt.X + corners[i].X * cos - corners[i].Y * sin;
-                            double y = gp.Pt.Y + corners[i].X * sin + corners[i].Y * cos;
+                            double x = centre.X + corners[i].X * cos - corners[i].Y * sin;
+                            double y = centre.Y + corners[i].X * sin + corners[i].Y * cos;
                             pl.AddVertexAt(i, new Point2d(x, y), 0, 0, 0);
                         }
                         pl.Closed = true;
@@ -153,13 +206,96 @@ namespace HCW.AutoCAD.Plugin.Commands
                     space.AppendEntity(outline);
                     tr.AddNewlyCreatedDBObject(outline, true);
                     if (_fill) AddFill(tr, space, outline.ObjectId);
-                    existing.Add(gp.Pt);
+                    existing.Add(centre);
                     placed++;
                 }
                 tr.Commit();
             }
-            ed.WriteMessage("\nHCWCOLUMN: " + placed + " column(s) " + size.Label + " mm on " + _layer
+            var distinct = sizes.Select(z => z.Label).Distinct().ToList();
+            ed.WriteMessage("\nHCWCOLUMN: " + placed + " column(s) " + string.Join(", ", distinct) + " mm on " + _layer
+                + (asBlocks ? " as blocks (run HCWCOLSCHED to fill the marks)" : "")
+                + (_flush ? ", edge columns flush" : "")
                 + (skipped > 0 ? ", " + skipped + " intersection(s) already had one." : "."));
+        }
+
+        private static bool _flush, _blocks;
+
+        /// <summary>Gives other sizes to the intersections inside windows you pick, one size after another until Enter.</summary>
+        private static bool AskGroups(Editor ed, List<GridPoint> points, List<ColumnSize> sizes)
+        {
+            var ucs = ed.CurrentUserCoordinateSystem;
+            while (true)
+            {
+                var r = ed.GetString(new PromptStringOptions("\nSize for the next group of intersections (Enter to finish): ") { AllowSpaces = true });
+                if (r.Status == PromptStatus.None || (r.Status == PromptStatus.OK && r.StringResult.Trim().Length == 0)) return true;
+                if (r.Status != PromptStatus.OK) return false;
+                string error;
+                var sz = ColumnSize.Parse(r.StringResult, out error);
+                if (sz == null) { ed.WriteMessage("\n" + error + "."); continue; }
+                var c1 = ed.GetPoint("\nFirst corner of the window round those intersections: ");
+                if (c1.Status != PromptStatus.OK) return false;
+                var c2 = ed.GetCorner("\nOpposite corner: ", c1.Value);
+                if (c2.Status != PromptStatus.OK) return false;
+                var a = c1.Value.TransformBy(ucs); var b = c2.Value.TransformBy(ucs);
+                double x0 = Math.Min(a.X, b.X), x1 = Math.Max(a.X, b.X), y0 = Math.Min(a.Y, b.Y), y1 = Math.Max(a.Y, b.Y);
+                int n = 0;
+                for (int i = 0; i < points.Count; i++)
+                    if (points[i].Pt.X >= x0 && points[i].Pt.X <= x1 && points[i].Pt.Y >= y0 && points[i].Pt.Y <= y1) { sizes[i] = sz; n++; }
+                ed.WriteMessage("\n" + n + " intersection(s) now " + sz.Label + ".");
+            }
+        }
+
+        /// <summary>The block for a column size: the outline centred on the origin on layer 0, an optional fill, and the MARK attribute above it.</summary>
+        private static ObjectId EnsureColumnBlock(Transaction tr, Database db, ColumnSize size)
+        {
+            var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+            string name = size.BlockName;
+            if (bt.Has(name)) return bt[name];
+            double mm = Util.MmToDrawingUnits(1.0);
+            double w = size.W * mm, d = size.D * mm;
+            bt.UpgradeOpen();
+            var def = new BlockTableRecord { Name = name };
+            var id = bt.Add(def);
+            tr.AddNewlyCreatedDBObject(def, true);
+            Entity outline;
+            if (size.Round) outline = new Circle(Point3d.Origin, Vector3d.ZAxis, w / 2);
+            else
+            {
+                var pl = new Polyline();
+                pl.AddVertexAt(0, new Point2d(-w / 2, -d / 2), 0, 0, 0);
+                pl.AddVertexAt(1, new Point2d(w / 2, -d / 2), 0, 0, 0);
+                pl.AddVertexAt(2, new Point2d(w / 2, d / 2), 0, 0, 0);
+                pl.AddVertexAt(3, new Point2d(-w / 2, d / 2), 0, 0, 0);
+                pl.Closed = true;
+                outline = pl;
+            }
+            def.AppendEntity(outline);
+            tr.AddNewlyCreatedDBObject(outline, true);
+            if (_fill)
+            {
+                try
+                {
+                    var hatch = new Hatch();
+                    def.AppendEntity(hatch);
+                    tr.AddNewlyCreatedDBObject(hatch, true);
+                    hatch.SetHatchPattern(HatchPatternType.PreDefined, "SOLID");
+                    hatch.Associative = false;
+                    hatch.AppendLoop(HatchLoopTypes.Outermost, new ObjectIdCollection { outline.ObjectId });
+                    hatch.EvaluateHatch(true);
+                }
+                catch (System.Exception) { }
+            }
+            double h = TagHeightMm * mm;
+            var att = new AttributeDefinition
+            {
+                Tag = "MARK", Prompt = "Column mark", TextString = "C?", Height = h, Layer = LayerTag,
+                HorizontalMode = TextHorizontalMode.TextMid, VerticalMode = TextVerticalMode.TextVerticalMid,
+                Position = new Point3d(0, (size.Round ? w : d) / 2 + 0.7 * h, 0),
+            };
+            att.AlignmentPoint = att.Position;
+            def.AppendEntity(att);
+            tr.AddNewlyCreatedDBObject(att, true);
+            return id;
         }
 
         [CommandMethod("HCWCOLSCHED")]
@@ -196,6 +332,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
 
                 var cols = new List<KeyValuePair<Extents3d, ColumnSize>>();
+                var blockOf = new Dictionary<int, BlockReference>();
                 int skipped = 0;
                 foreach (ObjectId id in space)
                 {
@@ -203,7 +340,16 @@ namespace HCW.AutoCAD.Plugin.Commands
                     if (ent == null || ent.IsErased || !IsColumnLayer(ent.Layer)) continue;
                     var circle = ent as Circle;
                     var pl = ent as Polyline;
-                    if (circle != null)
+                    var blk = ent as BlockReference;
+                    var blkSize = blk == null ? null : ColumnSize.FromBlockName(BlockOpenings.EffectiveName(tr, blk));
+                    if (blk != null)
+                    {
+                        if (blkSize == null) continue;
+                        var half = new Vector3d((blkSize.W * mm) / 2, ((blkSize.Round ? blkSize.W : blkSize.D) * mm) / 2, 0);
+                        blockOf[cols.Count] = blk;
+                        cols.Add(new KeyValuePair<Extents3d, ColumnSize>(new Extents3d(blk.Position - half, blk.Position + half), blkSize));
+                    }
+                    else if (circle != null)
                         cols.Add(new KeyValuePair<Extents3d, ColumnSize>(circle.GeometricExtents, new ColumnSize { Round = true, W = 2 * circle.Radius / mm, D = 2 * circle.Radius / mm }));
                     else if (pl != null && pl.Closed && pl.NumberOfVertices == 4 && Rectangle(pl, out double a, out double b))
                         cols.Add(new KeyValuePair<Extents3d, ColumnSize>(pl.GeometricExtents, new ColumnSize { W = Math.Max(a, b) / mm, D = Math.Min(a, b) / mm }));
@@ -218,9 +364,23 @@ namespace HCW.AutoCAD.Plugin.Commands
                 var rows = ColumnMarks.Assign(cols.Select(c => c.Value));
                 var markOf = rows.ToDictionary(r => r.Label, r => r.Mark);
                 Util.EnsureHcwLayer(tr, db, LayerTag);
-                foreach (var c in cols)
+                for (int ci = 0; ci < cols.Count; ci++)
                 {
+                    var c = cols[ci];
                     var rounded = new ColumnSize { Round = c.Value.Round, W = Math.Round(c.Value.W), D = c.Value.Round ? Math.Round(c.Value.W) : Math.Round(c.Value.D) };
+                    BlockReference mark;
+                    if (blockOf.TryGetValue(ci, out mark))
+                    {
+                        // A column block carries its own mark in the MARK attribute.
+                        foreach (ObjectId aid in mark.AttributeCollection)
+                        {
+                            var att = (AttributeReference)tr.GetObject(aid, OpenMode.ForRead);
+                            if (!string.Equals(att.Tag, "MARK", StringComparison.OrdinalIgnoreCase)) continue;
+                            att.UpgradeOpen();
+                            att.TextString = markOf[rounded.Label];
+                        }
+                        continue;
+                    }
                     var e = c.Key;
                     var tagAt = new Point3d((e.MinPoint.X + e.MaxPoint.X) / 2.0, e.MaxPoint.Y + 0.7 * h, 0);
                     var text = new DBText
@@ -270,6 +430,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             {
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                 if (ent == null || !IsColumnLayer(ent.Layer)) continue;
+                var blk = ent as BlockReference;
+                if (blk != null && ColumnSize.FromBlockName(BlockOpenings.EffectiveName(tr, blk)) != null) { res.Add(new P2(blk.Position.X, blk.Position.Y)); continue; }
                 if (!(ent is Circle) && !(ent is Polyline)) continue;
                 try
                 {
