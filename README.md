@@ -748,3 +748,7 @@ The column schedule is a table you can fill in: `HCWCOLQTY` > Edit opens the Col
 ## Stairs
 
 RCC stairs take the waist slab thickness as an input (`AECSTAIR`, `AECSTAIREDIT`, `AECSTAIRQTY`). The quantities (waist, steps and landing concrete, shuttering, finishes) and the bar estimate are saved as take-offs "Stair ST-nn" and "Stair ST-nn bars".
+
+## Lintels
+
+`HCWDOOR`, `HCWWINDOW` and everything that re-cuts an opening (move, slide, replace, convert, wall edit) now draw a lintel over each opening: a line on `MEASURE-LINTEL` as long as the opening plus the bearing at each end, which `MBML` measures as a concrete lintel, and a dashed outline as wide as the wall on `A-LINTEL`. They are tagged with the opening's centre and removed or redrawn with it. Settings: `LintelAuto` (0 turns it off) and `LintelBearingMm` (230). Openings cut before this version have no lintel; move or replace them to get one. The lintel depth and bottom height come from the levels and the opening's own LINTEL figure, not from the plan.

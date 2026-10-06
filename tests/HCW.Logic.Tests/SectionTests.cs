@@ -121,3 +121,18 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class LintelGeometryTests
+    {
+        [Fact]
+        public void LintelIsOpeningPlusBearingEachSideAndAsWideAsTheWall()
+        {
+            var r = HCW.AutoCAD.Plugin.Logic.LintelGeometry.Outline(new HCW.AutoCAD.Plugin.Logic.P2(1000, 500), new HCW.AutoCAD.Plugin.Logic.P2(1, 0), 900, 230, 230);
+            Assert.Equal(1360, HCW.AutoCAD.Plugin.Logic.LintelGeometry.Length(900, 230));
+            Assert.Equal(1000 - 680, r[0].X, 6); Assert.Equal(1000 + 680, r[1].X, 6);
+            Assert.Equal(500 - 115, r[0].Y, 6); Assert.Equal(500 + 115, r[2].Y, 6);
+        }
+    }
+}

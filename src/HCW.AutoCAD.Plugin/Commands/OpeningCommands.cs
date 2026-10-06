@@ -203,6 +203,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
             tag = tagOverride ?? NextTag(tr, space, door ? "D" : "W");
             InsertBlock(tr, space, blockName, new Point3d(place.Origin.X, place.Origin.Y, z), place.Angle, place.Sx, place.Sy, door ? LayerDoor : LayerWin, par);
+            AddLintel(tr, db, space, (p1a + p1b + p2a + p2b) * 0.25, plan.Dir, w, plan.Thickness, z);
 
             Util.EnsureHcwLayer(tr, db, LayerTag);
             var text = new DBText
@@ -436,6 +437,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             double tol = 2 * mm;                         // the block name rounds the wall thickness to a whole mm
             var c = info.Corners;
             double h = Util.MmToDrawingUnits(TagHeightMm);
+
+            EraseLintel(tr, space, (c.FaceAStart + c.FaceAEnd + c.FaceBStart + c.FaceBEnd) * 0.25, 10 * mm);
 
             string wallLayer = null;
             var pairs = new[] { new[] { c.FaceAStart, c.FaceBStart }, new[] { c.FaceAEnd, c.FaceBEnd } };
@@ -1095,6 +1098,65 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (tag == "SILL") att.TextString = Math.Round(par.SillMm).ToString();
                 else if (tag == "HEIGHT") att.TextString = Math.Round(par.HeightMm).ToString();
                 else if (tag == "LINTEL") att.TextString = Math.Round(par.SillMm + par.HeightMm).ToString();
+            }
+        }
+
+        // ---- lintels: every opening gets one, as a measurement line for the take-off and a dashed outline in plan ----
+
+        private const string LintelApp = "HCW_LINTEL";
+        private static string LayerLintel => Util.Out("A-LINTEL");
+
+        /// <summary>
+        /// A lintel over a new opening: a line on MEASURE-LINTEL (opening length plus the bearing each side, read by MBML as a concrete lintel)
+        /// and a dashed outline as wide as the wall. Both carry the opening's centre so they are removed with it. Setting LintelAuto = 0 leaves them out.
+        /// </summary>
+        private static void AddLintel(Transaction tr, Database db, BlockTableRecord space, P2 centre, P2 dir, double openingLen, double thickness, double z)
+        {
+            if (Settings.GetInt("LintelAuto", 1) == 0) return;
+            double bearing = Util.MmToDrawingUnits(Settings.GetDouble("LintelBearingMm", 230));
+            var box = LintelGeometry.Outline(centre, dir, openingLen, thickness, bearing);
+
+            Util.EnsureLayer(tr, db, MeasureCommands.LayLt, 40);
+            var apps = (RegAppTable)tr.GetObject(db.RegAppTableId, OpenMode.ForRead);
+            if (!apps.Has(LintelApp))
+            {
+                apps.UpgradeOpen();
+                var rec = new RegAppTableRecord { Name = LintelApp };
+                apps.Add(rec);
+                tr.AddNewlyCreatedDBObject(rec, true);
+            }
+            Func<ResultBuffer> tag = () => new ResultBuffer(new TypedValue((int)DxfCode.ExtendedDataRegAppName, LintelApp),
+                new TypedValue((int)DxfCode.ExtendedDataReal, centre.X), new TypedValue((int)DxfCode.ExtendedDataReal, centre.Y));
+
+            var u = dir * (1.0 / dir.Length);
+            var half = u * (LintelGeometry.Length(openingLen, bearing) / 2);
+            var line = new Line(new Point3d(centre.X - half.X, centre.Y - half.Y, z), new Point3d(centre.X + half.X, centre.Y + half.Y, z)) { Layer = MeasureCommands.LayLt };
+            space.AppendEntity(line); tr.AddNewlyCreatedDBObject(line, true);
+            line.XData = tag();
+
+            Util.EnsureHcwLayer(tr, db, LayerLintel);
+            var pl = new Polyline { Layer = LayerLintel, Closed = true, Elevation = z };
+            for (int i = 0; i < box.Length; i++) pl.AddVertexAt(i, new Point2d(box[i].X, box[i].Y), 0, 0, 0);
+            var lt = Util.LoadLinetype(tr, db, "HIDDEN");
+            if (lt != ObjectId.Null) pl.LinetypeId = lt;
+            space.AppendEntity(pl); tr.AddNewlyCreatedDBObject(pl, true);
+            pl.XData = tag();
+        }
+
+        /// <summary>Erases the lintel made with an opening (the entities tagged with its centre).</summary>
+        private static void EraseLintel(Transaction tr, BlockTableRecord space, P2 centre, double reach)
+        {
+            foreach (ObjectId id in space)
+            {
+                if (id.ObjectClass.DxfName != "LINE" && id.ObjectClass.DxfName != "LWPOLYLINE") continue;
+                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null || ent.IsErased) continue;
+                var rb = ent.GetXDataForApplication(LintelApp);
+                if (rb == null) continue;
+                var v = rb.AsArray().Where(t => t.TypeCode == (int)DxfCode.ExtendedDataReal).Select(t => (double)t.Value).ToList();
+                if (v.Count < 2 || new P2(v[0], v[1]).DistanceTo(centre) > reach) continue;
+                ent.UpgradeOpen();
+                ent.Erase();
             }
         }
 
