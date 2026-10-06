@@ -18,6 +18,14 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed; var db = Util.Db;
 
+            // The other ways of putting an area on a shape are the same job with a different result.
+            string how = Util.AskMode("Area", "Table", "Live", "Field", "Room", "Measure");
+            if (how == null) return;
+            if (how == "Live") { new DraftExtraCommands().AreaLabel(); return; }
+            if (how == "Field") { new DraftExtraCommands().AreaField(); return; }
+            if (how == "Room") { new HcwLayerCommands().HcwRoomArea(); return; }
+            if (how == "Measure") { new MeasureCommands().MAre(); return; }
+
             // Step 1 - drawing units
             string drawUnitName = db.Insunits switch
             {

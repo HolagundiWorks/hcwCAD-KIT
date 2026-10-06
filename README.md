@@ -263,6 +263,7 @@ Commands that did closely related jobs share a button, and the command asks whic
 | `HCWAUDIT` | Check [Layers/Overrides/Info/Counts] | `HCWAUDIT2`, `HCWINFO`, `HCWSCHEDULE` |
 | `MEXPORT` | Export as [Csv/Xlsx] | `MEXPORTX` |
 | `HCWROOMREPORT` | Read the rooms from [Outlines/Labels]; for Labels, [Table/Csv/Total] | `HCWROOMTABLE`, `HCWROOMSCHEDULE`, `HCWROOMTOTAL` |
+| `POLYAREA` | Area [Table/Live/Field/Room/Measure] | `AREALABEL` (`AT`), `AREAFIELD` (`A2F`), `RAREA`, `MAREA` (`MARE`) |
 | `AUTODIM` | Dimension [Outside/Rooms/Walls/Clear] | `AUTODIMROOM`, `AUTODIMWALL`, `AUTODIMCLEAR` |
 
 ### Settings file

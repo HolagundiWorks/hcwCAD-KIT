@@ -247,7 +247,7 @@ namespace HCW.AutoCAD.Plugin.UI
         private RibbonPanel BuildAreaTextPanel()
         {
             var src = NewSource("Area & Text Tools");
-            AddLarge(src, "POLYAREA", "Poly\nArea", "area--custom", "Number selected polylines and draw a running-total area table");
+            AddLarge(src, "POLYAREA", "Poly\nArea", "area--custom", "Put areas on shapes: numbered with a running-total table, numbered with a live table or file, a live area field, a room area label, or a take-off area");
             AddLarge(src, "HCWAREASTMT", "Area\nStatement", "report--data", "Building permit area statement: floor areas, net, FAR and ground cover, filled into the title block");
             AddLarge(src, "HCWLIVE", "Live\nUpdates", "reset", "Switch live updates on or off: labels, level marks, dimensions and the area statement follow your edits");
             AddLarge(src, "HCWSTYLES", "Text\nStyles", "text--font", "Create HCW-SITE, HCW-WORKING and HCW-DETAIL text and dimension styles");
@@ -266,9 +266,7 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("TXTDUP", "Find Duplicates", "copy--file", "Find or remove TEXT with the same content and position"),
                 ("DBCOUNT", "Count Blocks", "report", "Count blocks in this layout, including dynamic-block visibility states"),
                 ("DGRID", "Draw Grid", "grid", "Draw a row and column grid between two corners"),
-                ("AUTOLABEL", "Label Blocks", "tag--edit", "Number a chosen attribute on matching blocks in this layout"),
-                ("AREAFIELD", "Area Field", "area", "Place a live area field, or drop it into a table cell"),
-                ("AREALABEL", "Area Labels", "area--custom", "Number picked areas and list them in a live table or a file"));
+                ("AUTOLABEL", "Label Blocks", "tag--edit", "Number a chosen attribute on matching blocks in this layout"));
             return Wrap(src);
         }
 
