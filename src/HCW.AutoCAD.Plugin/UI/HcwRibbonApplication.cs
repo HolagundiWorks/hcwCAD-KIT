@@ -49,21 +49,21 @@ namespace HCW.AutoCAD.Plugin.UI
 
             var toolsTab = new RibbonTab { Title = "hcwCAD-KIT", Id = ToolsTabId };
             rc.Tabs.Add(toolsTab);
-            toolsTab.Panels.Add(BuildNotesPanel());
+            toolsTab.Panels.Add(BuildWallsPanel());
+            toolsTab.Panels.Add(BuildStructurePanel());
+            toolsTab.Panels.Add(BuildLevelsPanel());
             toolsTab.Panels.Add(BuildRoomToolsPanel());
             toolsTab.Panels.Add(BuildMeasurePanel());
             toolsTab.Panels.Add(BuildElectricalPanel());
-            toolsTab.Panels.Add(BuildStairPanel());
-            toolsTab.Panels.Add(BuildWallsPanel());
             toolsTab.Panels.Add(BuildSymbolsPanel());
             toolsTab.Panels.Add(BuildAreaTextPanel());
+            toolsTab.Panels.Add(BuildNotesPanel());
 
             var settingsTab = new RibbonTab { Title = "hcwCAD-KIT Settings", Id = SettingsTabId };
             rc.Tabs.Add(settingsTab);
             settingsTab.Panels.Add(BuildLayerPanel());
             settingsTab.Panels.Add(BuildLayerChecksPanel());
             settingsTab.Panels.Add(BuildBpltSetupPanel());
-            settingsTab.Panels.Add(BuildRoomChecksPanel());
             settingsTab.Panels.Add(BuildTextChecksPanel());
             settingsTab.Panels.Add(BuildPluginPanel());
 
@@ -150,13 +150,18 @@ namespace HCW.AutoCAD.Plugin.UI
         /// </summary>
         private RibbonPanel BuildRoomToolsPanel()
         {
-            var src = NewSource("Room Labels");
+            var src = NewSource("Rooms & Areas");
             AddLarge(src, "ROOM", "Room", "home", "Pick a room type, draw its rectangle from two corners, and place the label in the centre. Units follow the drawing.");
             AddLarge(src, "ROOMC", "Custom\nRoom", "tag--edit", "Type a room name, then pick two corners. Units follow the drawing.");
+            AddLarge(src, "HCWROOMWALLS", "Rooms from\nWalls", "area", "Pick a point inside a room and get its clear outline from the wall faces, with an optional name and area label; its floor and ceiling take-off outlines are drawn with it");
+            AddLarge(src, "POLYAREA", "Poly\nArea", "area--custom", "Put areas on shapes: numbered with a running-total table, numbered with a live table or file, a live area field, a room area label, or a take-off area");
+            AddLarge(src, "HCWAREASTMT", "Area\nStatement", "report--data", "Building permit area statement: floor areas, net, FAR and ground cover, filled into the title block");
+            AddLarge(src, "HCWROOMREPORT", "Room\nReport", "report--data", "Rooms as a table with names, sizes, dimensions and areas, from outlines or from room labels; saved as a take-off, drawn, exported to CSV or Excel, or totalled");
             AddSmallGroup(src,
                 ("RAREA", "Area Label", "area", "Add an area label at the centre of a selected polyline"),
                 ("RTAG", "Relabel", "tag--edit", "Change the room type of an existing label"),
-                ("HCWROOMSET", "Label Settings", "settings", "Room label settings: show them, text height, floor prefix, draw or skip the rectangle, hide the rectangles, layer, or reset"));
+                ("HCWROOMSET", "Label Settings", "settings", "Room label settings: show them, text height, floor prefix, draw or skip the rectangle, hide the rectangles, layer, or reset"),
+                ("HCWROOMHELP", "Help", "help", "How ROOM reads the drawing units"));
             return Wrap(src);
         }
 
@@ -182,15 +187,6 @@ namespace HCW.AutoCAD.Plugin.UI
             return Wrap(src);
         }
 
-        private RibbonPanel BuildStairPanel()
-        {
-            var src = NewSource("Stairs");
-            AddLarge(src, "AECSTAIR", "RCC\nStair", "floorplan", "Parametric RCC staircase: plan and section from one set of inputs (single, dog-legged, U or L)");
-            AddLarge(src, "AECSTAIRQTY", "Stair\nQuantities", "report--data", "Concrete, shuttering, finishes and steel of a staircase from its inputs, without drawing it");
-            AddLarge(src, "AECSTAIREDIT", "Edit\nStair", "tag--edit", "Change the inputs of a staircase made by AECSTAIR and redraw its plan and section");
-            return Wrap(src);
-        }
-
         private RibbonPanel BuildElectricalPanel()
         {
             var src = NewSource("Electrical");
@@ -212,7 +208,6 @@ namespace HCW.AutoCAD.Plugin.UI
             var src = NewSource("Walls & Openings");
             AddLarge(src, "HCWWALL", "Draw\nWall", "floorplan", "Draw wall faces from picked points, or from lines and polylines you select, at a thickness you give");
             AddLarge(src, "HCWCLEAN", "Clean\nLines", "clean", "Erase zero-length and duplicate lines and join lines that touch or overlap on one straight line");
-            AddLarge(src, "HCWROOMWALLS", "Rooms from\nWalls", "area", "Pick a point inside a room and get its clear outline from the wall faces, with an optional name and area label");
             AddLarge(src, "HCWCORNER", "Trim/Extend\nCorner", "add--alt", "Trim or extend two lines to meet at their corner, keeping the parts you click");
             AddLarge(src, "HCWWALLJOIN", "Join\nWalls", "copy--file", "Merge overlapping wall outlines so T and L junctions are clean");
             AddLarge(src, "HCWWALLEDIT", "Edit\nWall", "tag--edit", "Change the thickness or line position of a wall; joined walls are rebuilt and openings re-cut");
@@ -221,33 +216,47 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWWINDOW", "Window", "view", "Cut a window in a wall: pick the position");
             AddLarge(src, "HCWOPENMOVE", "Edit\nOpening", "move", "Move, slide, replace, convert or set heights of doors and windows, or sync the opening schedule from the blocks");
             AddLarge(src, "HCWOPENSCHED", "Opening\nSchedule", "table-of-contents", "Bring the door and window schedule up to date from the blocks and draw it as a table; the take-off deducts the same entries");
-            AddLarge(src, "HCWLIFT", "Lift\nShaft", "box", "Draw a lift shaft in plan from its sizes (walls with the door opening, clear shaft, car and doors), or a section through it");
-            AddLarge(src, "HCWESCALATOR", "Escalator", "floorplan", "Draw an escalator in plan and side elevation from its rise, angle, width and landings");
-            AddLarge(src, "HCWRAIL", "Handrail", "rule--data-quality", "Draw a handrail along a line or polyline, in plan (posts at the corners and along each run) or in elevation (posts and balusters)");
+            return Wrap(src);
+        }
+
+        private RibbonPanel BuildStructurePanel()
+        {
+            var src = NewSource("Structure");
             AddLarge(src, "HCWAXIS", "Axis\nGrid", "grid", "Draw a column grid from bay widths, with numbered and lettered bubbles; or add or remove a grid line");
             AddLarge(src, "HCWCOLUMN", "Place\nColumns", "column", "Put a column of one size on every grid intersection, or those in a window");
             AddLarge(src, "HCWCOLSCHED", "Column\nSchedule", "table-of-contents", "Mark every column C1, C2 ... by size and draw the column schedule");
+            AddLarge(src, "HCWRAIL", "Handrail", "rule--data-quality", "Draw a handrail along a line or polyline, in plan (posts at the corners and along each run) or in elevation (posts and balusters)");
+            AddLarge(src, "HCWLIFT", "Lift\nShaft", "box", "Draw a lift shaft in plan from its sizes (walls with the door opening, clear shaft, car and doors), or a section through it");
+            AddLarge(src, "HCWESCALATOR", "Escalator", "floorplan", "Draw an escalator in plan and side elevation from its rise, angle, width and landings");
+            AddLarge(src, "AECSTAIR", "RCC\nStair", "floorplan", "Parametric RCC staircase: plan and section from one set of inputs (single, dog-legged, U or L)");
+            AddLarge(src, "AECSTAIRQTY", "Stair\nQuantities", "report--data", "Concrete, shuttering, finishes and steel of a staircase from its inputs, without drawing it");
+            AddLarge(src, "AECSTAIREDIT", "Edit\nStair", "tag--edit", "Change the inputs of a staircase made by AECSTAIR and redraw its plan and section");
+            return Wrap(src);
+        }
+
+        private RibbonPanel BuildLevelsPanel()
+        {
+            var src = NewSource("Levels & Sections");
+            AddLarge(src, "HCWLEVELS", "Building\nLevels", "table-of-contents", "Show the floor to floor, ceiling, lintel and slab heights kept in the drawing (change them on the Floors tab of MSCHED); sections, stairs, doors, windows and wall paint use them");
+            AddLarge(src, "HCWLEVEL", "Level\nMark", "ruler", "Place level marks with their value: typed, or worked out from a datum by height");
+            AddLarge(src, "HCWLEVELSCHED", "Level\nSchedule", "table-of-contents", "Draw a schedule of the levels marked with HCWLEVEL");
+            AddLarge(src, "HCWSECTION", "Section\nMarker", "rule", "Draw a section line with a lettered head at each end, looking to the side you pick");
+            AddLarge(src, "HCWSECTIONDRAW", "Draw\nSection", "layers", "Draw a building section from the plan with the floor, slab and lintel heights kept in the drawing");
+            AddLarge(src, "HCWELEV", "Elevation\nMarker", "tag", "Place an elevation marker: elevation number over sheet number, pointing the way you look");
             return Wrap(src);
         }
 
         private RibbonPanel BuildSymbolsPanel()
         {
             var src = NewSource("Symbols");
-            AddLarge(src, "HCWLEVEL", "Level\nMark", "ruler", "Place level marks with their value: typed, or worked out from a datum by height");
             AddLarge(src, "HCWNORTH", "North\nArrow", "flag", "Place a north arrow, turned to the direction you pick");
-            AddLarge(src, "HCWELEV", "Elevation\nMarker", "tag", "Place an elevation marker: elevation number over sheet number, pointing the way you look");
-            AddLarge(src, "HCWLEVELSCHED", "Level\nSchedule", "table-of-contents", "Draw a schedule of the levels marked with HCWLEVEL");
-            AddLarge(src, "HCWSECTION", "Section\nMarker", "rule", "Draw a section line with a lettered head at each end, looking to the side you pick");
-            AddLarge(src, "HCWSECTIONDRAW", "Draw\nSection", "layers", "Draw a building section from the plan with the floor, slab and lintel heights kept in the drawing");
             AddLarge(src, "HCWSLOPE", "Slope\nArrow", "text--vertical-alignment", "Draw a slope arrow with its text, such as 1:100 or 2%");
             return Wrap(src);
         }
 
         private RibbonPanel BuildAreaTextPanel()
         {
-            var src = NewSource("Area & Text Tools");
-            AddLarge(src, "POLYAREA", "Poly\nArea", "area--custom", "Put areas on shapes: numbered with a running-total table, numbered with a live table or file, a live area field, a room area label, or a take-off area");
-            AddLarge(src, "HCWAREASTMT", "Area\nStatement", "report--data", "Building permit area statement: floor areas, net, FAR and ground cover, filled into the title block");
+            var src = NewSource("Drawing & Text Tools");
             AddLarge(src, "HCWLIVE", "Live\nUpdates", "reset", "Switch live updates on or off: labels, level marks, dimensions and the area statement follow your edits");
             AddLarge(src, "HCWSTYLES", "Text\nStyles", "text--font", "Create HCW-SITE, HCW-WORKING and HCW-DETAIL text and dimension styles");
             AddSmallGroup(src,
@@ -277,15 +286,6 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("HCWAUDIT", "Audit", "checkmark--outline", "Check the standard layers, colour and linetype overrides, layer info, object counts per layer, room labels against rectangles, room rectangles are closed, or text with explicit colours"),
                 ("HCWLAYERSTATE", "Layer State", "save", "Save or restore a named layer state"),
                 ("HCWPURGE", "Purge All", "clean", "Run PURGE All twice"));
-            return Wrap(src);
-        }
-
-        private RibbonPanel BuildRoomChecksPanel()
-        {
-            var src = NewSource("Room Checks");
-            AddSmallGroup(src,
-                ("HCWROOMREPORT", "Room Report", "report--data", "Rooms as a table with names, sizes, dimensions and areas, from outlines or from room labels; saved as a take-off, drawn, exported to CSV or Excel, or totalled"),
-                ("HCWROOMHELP", "Help", "help", "How ROOM reads the drawing units"));
             return Wrap(src);
         }
 

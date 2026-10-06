@@ -198,6 +198,7 @@ namespace HCW.AutoCAD.Plugin
             }
             btr.AppendEntity(pl);
             tr.AddNewlyCreatedDBObject(pl, true);
+            Commands.MeasureCommands.AddRoomOutlines(tr, Util.Db, btr, pl);
         }
 
         private void AddCenteredText(Transaction tr, BlockTableRecord btr, string text, Point3d center, double height, Matrix3d ucs)

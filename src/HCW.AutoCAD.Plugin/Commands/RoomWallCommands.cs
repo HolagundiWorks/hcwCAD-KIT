@@ -165,6 +165,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 pl.Layer = RectLayer;
                 space.AppendEntity(pl);
                 tr.AddNewlyCreatedDBObject(pl, true);
+                MeasureCommands.AddRoomOutlines(tr, db, space, pl);
 
                 if (name.Length > 0)
                 {

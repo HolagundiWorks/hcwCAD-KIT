@@ -729,3 +729,14 @@ Floor to floor height, ceiling height, lintel bottom and slab thickness for each
 ## Take-off lines with walls
 
 `HCWWALL` also draws each wall's centre line on the take-off layer (`MEASURE-LINEAR`), tagged with the wall's ID, so `MLIN`, `MBRK` and the wall paint take-off find it with no hand-drawn lines. Doors and windows made by the tools already carry their `MEASURE-DEDUCT` line. `HCWWALLEDIT` and a rebuild redraw the line with the wall. Walls adopted with `HCWWALLADOPT` get no line (they may already have your own). Settings: `WallMeasureLines` (0 turns it off) and `WallMeasureLayer` (`MEASURE-FULLBRICK`, `MEASURE-HALFBRICK`, `MEASURE-BEAM`, `MEASURE-LINTEL`). A line sits on the wall's drawn centre line, so with Left or Right line position it follows that edge.
+
+## Linked elements
+
+* `HCWCOLSCHED` also writes the column marks and sizes into the take-off book (MSCHED, Columns tab).
+* `HCWROOMWALLS` and the `ROOM` rectangles also draw the room outline on `MEASURE-FLOOR` and `MEASURE-CEILING`, ready for `MFLOOR` and `MCEIL` (setting `RoomMeasureOutlines`, 1 by default).
+* `HCWLIFT` section takes the number of floors and floor to floor height from the levels the first time it runs in a drawing.
+* Wall paint (`MPAINT`) already offers the ceiling heights of the floors in the levels.
+
+## Ribbon layout (hcwCAD-KIT tab)
+
+Walls & Openings; Structure (grid, columns, handrail, stairs, lift, escalator); Levels & Sections; Rooms & Areas (room labels, rooms from walls, poly area, area statement, room report); Take-off; Electrical; Symbols; Drawing & Text Tools; Notes. The Settings tab keeps layers, layer checks, BPLT, text checks and the plugin file.

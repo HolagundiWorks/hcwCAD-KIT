@@ -41,6 +41,24 @@ namespace HCW.AutoCAD.Plugin.Commands
         public const string LayLbl = "MEASURE-LABELS";
         public const string LayTbl = "MEASURE-TABLE";
 
+        /// <summary>
+        /// Copies of a room outline on the floor and ceiling take-off layers, so MFLOOR and MCEIL read the rooms the tools drew.
+        /// Off with the setting RoomMeasureOutlines = 0.
+        /// </summary>
+        internal static void AddRoomOutlines(Transaction tr, Database db, BlockTableRecord space, Polyline outline)
+        {
+            if (Settings.GetInt("RoomMeasureOutlines", 1) == 0) return;
+            Util.EnsureLayer(tr, db, LayFlor, 3);
+            Util.EnsureLayer(tr, db, LayCeil, 141);
+            foreach (var layer in new[] { LayFlor, LayCeil })
+            {
+                var copy = (Polyline)outline.Clone();
+                copy.Layer = layer;
+                space.AppendEntity(copy);
+                tr.AddNewlyCreatedDBObject(copy, true);
+            }
+        }
+
         /// <summary>Makes sure the table layer exists (used by other tools that draw tables).</summary>
         internal static void EnsureTableLayer(Transaction tr, Database db) => Util.EnsureLayer(tr, db, LayTbl, 4);
 

@@ -164,6 +164,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             Util.EnsureLayer(tr, db, LayerLift, 141);
         }
 
+        private static string _levelsFor;
         private static int _floors = 4;
         private static double _floorHeightMm = 3000, _pitMm = 1400, _overheadMm = 4200;
         private static bool _machineSection = true;
@@ -184,6 +185,12 @@ namespace HCW.AutoCAD.Plugin.Commands
             var layout = LiftLayout.Build(cw, cd, _wallMm, carW, carD, _doorMm, FrontGapMm, out error);
             if (layout == null) { ed.WriteMessage("\nHCWLIFTSECTION: " + error + "."); return; }
 
+            if (_levelsFor != Util.Doc.Name)
+            {
+                _levelsFor = Util.Doc.Name;
+                var lv = LevelStore.Load();
+                if (lv.Count > 0) { _floorHeightMm = Math.Round(lv[0].FflMm); _floors = Math.Max(2, lv.Count); ed.WriteMessage("\nFloors and floor-to-floor height taken from the levels in the drawing."); }
+            }
             var f = ed.GetInteger(new PromptIntegerOptions("\nNumber of floors served <" + _floors + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = _floors, UseDefaultValue = true });
             if (f.Status != PromptStatus.OK) return;
             _floors = f.Value;

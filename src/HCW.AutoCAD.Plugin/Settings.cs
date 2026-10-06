@@ -107,6 +107,7 @@ namespace HCW.AutoCAD.Plugin
             Entry("WallMeasureLines", "1", "HCWWALL: 1 also draws each wall's centre line on the take-off layer, so MLIN, MBRK and the wall paint see it; 0 leaves it out."),
             Entry("WallMeasureLayer", "MEASURE-LINEAR", "HCWWALL: the take-off layer the wall's measurement line goes on (MEASURE-LINEAR, MEASURE-FULLBRICK, MEASURE-HALFBRICK, MEASURE-BEAM or MEASURE-LINTEL)."),
             Entry("OpeningAutoSync", "1", "Doors and windows: 1 updates the opening schedule (the one MSCHED and the take-off use) after HCWDOOR, HCWWINDOW and the opening edit commands; 0 leaves it to HCWOPENSYNC."),
+            Entry("RoomMeasureOutlines", "1", "Rooms: 1 also draws each room outline on MEASURE-FLOOR and MEASURE-CEILING, so MFLOOR and MCEIL read the rooms; 0 leaves them out."),
             Entry("WallJoinOnDraw", "1", "HCWWALL: 1 merges a new wall with the wall outlines it touches, 0 leaves each wall as its own outline."),
             Entry("LiftTable", "6=1100x1400:1800x1900:800; 8=1350x1400:2000x1900:800; 10=1500x1500:2100x2000:900; 13=1800x1500:2400x2000:1000", "HCWLIFT: lift sizes by capacity, as persons=car:shaft:door in mm, separated by semicolons. The starting rows are typical; use your lift maker's."),
             Entry("LiftMachineMarginMm", "1000", "HCWLIFT: how far the machine room outline extends beyond the shaft wall on every side, in millimetres."),

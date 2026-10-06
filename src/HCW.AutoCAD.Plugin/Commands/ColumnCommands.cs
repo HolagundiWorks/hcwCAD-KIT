@@ -407,6 +407,18 @@ namespace HCW.AutoCAD.Plugin.Commands
                     foreach (var id in ids)
                         TitleBlockCommands.Tag((Entity)tr.GetObject(id, OpenMode.ForWrite), KindTable);
                 }
+                // The same marks go into the take-off book, so MSCHED and MCOL see the columns without being typed again.
+                {
+                    double k = LevelStore.UnitMm;
+                    var book = MeasureBook.Load(tr, db);
+                    book.Columns.Clear();
+                    foreach (var r in rows)
+                    {
+                        var sz = cols.Select(c => c.Value).First(c => string.Equals(new ColumnSize { Round = c.Round, W = Math.Round(c.W), D = c.Round ? Math.Round(c.W) : Math.Round(c.D) }.Label, r.Label, StringComparison.Ordinal));
+                        book.Columns.Add(new MeasureBook.ColumnSpec { Mark = r.Mark, Width = Math.Round(sz.W) / k, Depth = (sz.Round ? Math.Round(sz.W) : Math.Round(sz.D)) / k, Name = "Column", Count = r.Count });
+                    }
+                    book.Save(tr, db);
+                }
                 tr.Commit();
                 ed.WriteMessage("\nHCWCOLSCHED: " + cols.Count + " column(s) in " + rows.Count + " size(s): "
                     + string.Join(", ", rows.Select(r => r.Mark + " " + r.Label + " x" + r.Count)) + "."
