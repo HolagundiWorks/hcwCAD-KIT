@@ -1210,7 +1210,9 @@ namespace HCW.Logic.Tests
             Assert.Equal(2.4 * 1.2, q.LandingSoffit, 9);
             Assert.Equal(2.4 * 1.2, q.LandingFinish, 9);
             Assert.Equal(4 * slope, q.Skirting, 9);
-            Assert.Equal(q.Soffit + q.FlightSides + q.RiserShuttering + q.LandingSoffit, q.Shuttering, 9);
+            Assert.Equal(q.Soffit + q.FlightSides + q.RiserShuttering + q.LandingSoffit + q.LandingEdges, q.Shuttering, 9);
+            // landing 2.4 x 1.2: perimeter 7.2 less two flight joins of 1.2 = 4.8 m of edge, 150 thick
+            Assert.Equal(4.8 * 0.15, q.LandingEdges, 9);
             Assert.Equal(q.TreadFinish + q.RiserFinish + q.LandingFinish, q.Finishes, 9);
         }
 
@@ -1234,7 +1236,7 @@ namespace HCW.Logic.Tests
         public void RowsListEveryItemWithUnits()
         {
             var rows = Q(Single()).Rows();
-            Assert.Equal(14, rows.Count);
+            Assert.Equal(15, rows.Count);
             Assert.All(rows, r => Assert.Equal(StairQuantities.Headers.Length, r.Length));
             Assert.Contains(rows, r => r[0] == "CONCRETE TOTAL" && r[2] == "m3");
             Assert.Contains(rows, r => r[0] == "Skirting" && r[2] == "m");
@@ -1896,6 +1898,242 @@ namespace HCW.Logic.Tests
             var nets = ElectricalNet.Build(nodes, wires, 0.01);
             var len = CableLength.PerCircuit(nodes, nets, wires, new List<CircuitRow> { new CircuitRow { Board = "SB-01", Name = "L1", Points = { "GHOST" } } }, 1, 0, 0);
             Assert.Equal(0, len["SB-01/L1"]);
+        }
+    }
+}
+
+namespace HCW.Logic.Tests
+{
+    public class StairSectionDetailTests
+    {
+        private static StairSpec Dog() => new StairSpec
+        {
+            Kind = StairKind.DogLeg, Width = 1200, FloorHeight = 3000, TotalRisers = 20, FirstFlightRisers = 10, Going = 250,
+            LandingLength = 1200, WaistThickness = 150, LandingThickness = 150,
+        };
+
+        private static GDrawing Section(StairSpec s, Action<StairOptions> set)
+        {
+            var o = new StairOptions();
+            set(o);
+            return StairGeometry.Section(s, StairCalc.Calculate(s), o);
+        }
+
+        [Fact]
+        public void NothingIsAddedUnlessAsked()
+        {
+            var plain = Section(Dog(), o => { });
+            Assert.DoesNotContain(plain.Polys, p => p.Layer == "HEADROOM" || p.Layer == "RAIL" || p.Layer == "REBAR");
+            Assert.DoesNotContain(plain.Texts, t => t.Text.StartsWith("HANDRAIL") || t.Text.StartsWith("MAIN"));
+        }
+
+        [Fact]
+        public void HeadroomLineSitsAboveTheNosingsWithADimension()
+        {
+            var s = Dog();
+            var d = Section(s, o => { o.ShowHeadroom = true; o.Headroom = 2000; });
+            var lines = d.Polys.Where(p => p.Layer == "HEADROOM").ToList();
+            Assert.Equal(2, lines.Count);                                       // one per flight
+            double rise = 3000.0 / 20;
+            Assert.Equal(rise + 2000, lines[0].Pts[0].Y, 9);                    // above the first nosing
+            Assert.Equal(0, lines[0].Pts[0].X, 9);
+            Assert.Equal(10 * rise + 2000, lines[0].Pts[1].Y, 9);               // and the last
+            Assert.Equal(9 * 250.0, lines[0].Pts[1].X, 9);
+            Assert.Contains(d.Dims, x => x.Text == "HEADROOM 2000");
+        }
+
+        [Fact]
+        public void RailingHasPostsBalustersAndAHandrailOnEachFlight()
+        {
+            var s = Dog();
+            var d = Section(s, o => { o.ShowRailing = true; o.HandrailHeight = 900; o.BalustersPerTread = 3; });
+            var rail = d.Polys.Where(p => p.Layer == "RAIL").ToList();
+            int posts = rail.Count(p => p.Closed), segs = rail.Count(p => !p.Closed);
+            Assert.Equal(4, posts);                                              // two posts a flight
+            Assert.Equal(2 + 2 * 9 * 3, segs);                                   // a handrail and 9 treads x 3 balusters, per flight
+            // every baluster is vertical and reaches the handrail height above the pitch line
+            foreach (var b in rail.Where(p => !p.Closed && Math.Abs(p.Pts[0].X - p.Pts[1].X) < 1e-9))
+                Assert.True(b.Pts[1].Y > b.Pts[0].Y);
+            Assert.Contains(d.Texts, t => t.Text == "HANDRAIL 900");
+        }
+
+        [Fact]
+        public void HandrailRunsParallelToTheNosingLine()
+        {
+            var s = Dog();
+            var d = Section(s, o => { o.ShowRailing = true; o.HandrailHeight = 900; });
+            var h = d.Polys.First(p => p.Layer == "RAIL" && !p.Closed && Math.Abs(p.Pts[0].X - p.Pts[1].X) > 1);      // first flight's handrail
+            Assert.Equal(150 + 900, h.Pts[0].Y, 9);
+            Assert.Equal(10 * 150 + 900, h.Pts[1].Y, 9);
+            Assert.Equal(0.6, (h.Pts[1].Y - h.Pts[0].Y) / (h.Pts[1].X - h.Pts[0].X), 9);
+        }
+
+        [Fact]
+        public void RebarIsABarAndDotsAlongEachFlight()
+        {
+            var s = Dog();
+            var d = Section(s, o => { o.ShowRebar = true; });
+            var rebar = d.Polys.Where(p => p.Layer == "REBAR").ToList();
+            Assert.Equal(2, rebar.Count(p => !p.Closed));                        // a main bar per flight
+            var dots = rebar.Where(p => p.Closed).ToList();
+            Assert.True(dots.Count > 20);
+            Assert.All(dots, p => Assert.Equal(8, p.Pts.Count));
+            Assert.Contains(d.Texts, t => t.Text.StartsWith("MAIN 12 @ 150 C/C"));
+        }
+
+        [Fact]
+        public void SingleFlightGetsItsDetailsToo()
+        {
+            var s = new StairSpec { Kind = StairKind.Single, Width = 1200, FloorHeight = 1500, TotalRisers = 10, Going = 250 };
+            var d = Section(s, o => { o.ShowHeadroom = true; o.ShowRailing = true; o.ShowRebar = true; });
+            Assert.Single(d.Polys.Where(p => p.Layer == "HEADROOM"));
+            Assert.Equal(2, d.Polys.Count(p => p.Layer == "RAIL" && p.Closed));
+            Assert.Single(d.Polys.Where(p => p.Layer == "REBAR" && !p.Closed));
+        }
+    }
+}
+
+namespace HCW.Logic.Tests
+{
+    public class StairRoadmapTests
+    {
+        private static StairSpec L(bool winders = true, bool cut = false) => new StairSpec
+        {
+            Kind = StairKind.L, Width = 1200, FloorHeight = 3000, TotalRisers = 20, FirstFlightRisers = 8, Going = 250,
+            LandingLength = 1500, WaistThickness = 150, LandingThickness = 150, Winders = winders, CutSection = cut,
+        };
+
+        [Fact]
+        public void WindersTakeTwoExtraRisersAndHaveAWalklineGoing()
+        {
+            var s = L();
+            Assert.True(s.HasWinders);
+            Assert.Equal(2, s.WinderExtraRisers);
+            Assert.Equal(20 - 8 - 2, s.SecondFlightRisers);
+            var c = StairCalc.Calculate(s);
+            Assert.Equal(Math.PI * 1200 / 12, c.WinderGoing, 9);
+            Assert.Equal(1200, c.LandingLengthUsed);                         // the winder square, not the typed landing length
+            Assert.True(c.CanDraw);
+            Assert.Contains(c.Checks, k => k.Name == "Winders" && k.Ok);
+            // a stair that is not an L cannot have winders
+            Assert.False(new StairSpec { Kind = StairKind.DogLeg, Winders = true }.HasWinders);
+        }
+
+        [Fact]
+        public void TooNarrowAWinderGoingIsFlagged()
+        {
+            var s = L(); s.Width = 600;                                        // 157 mm on the walkline
+            var c = StairCalc.Calculate(s);
+            Assert.Contains(c.Checks, k => k.Name == "Winders" && !k.Ok);
+        }
+
+        [Fact]
+        public void WinderPlanHasTwoDividingLinesFromTheInnerCorner()
+        {
+            var s = L();
+            var c = StairCalc.Calculate(s);
+            var plain = StairGeometry.Plan(L(false), StairCalc.Calculate(L(false)), new StairOptions());
+            var d = StairGeometry.Plan(s, c, new StairOptions());
+            double L1 = c.FlightLengths[0];
+            var diag = d.Polys.Where(p => !p.Closed && p.Layer == "TREAD" && p.Pts.Count == 2 && Math.Abs(p.Pts[0].X - p.Pts[1].X) > 1 && Math.Abs(p.Pts[0].Y - p.Pts[1].Y) > 1).ToList();
+            Assert.Equal(2, diag.Count);
+            Assert.All(diag, p => Assert.True(p.Pts.Any(q => Math.Abs(q.X - L1) < 1e-9 && Math.Abs(q.Y - 1200) < 1e-9)));      // both start at the inner corner
+            Assert.Contains(d.Texts, t => t.Text.StartsWith("3 WINDERS"));
+            Assert.Contains(plain.Texts, t => t.Text.StartsWith("LANDING"));
+        }
+
+        [Fact]
+        public void WinderSectionIsOneSlabThatReachesTheTopLevel()
+        {
+            var s = L();
+            var c = StairCalc.Calculate(s);
+            var d = StairGeometry.Section(s, c, new StairOptions());
+            var slab = d.Polys.Where(p => p.Hatch).OrderByDescending(p => p.Pts.Count).First();
+            Assert.Equal(3000, slab.Pts.Max(p => p.Y), 9);
+            Assert.Contains(d.Texts, t => t.Text.StartsWith("3 WINDERS"));
+            Assert.Contains(d.Texts, t => t.Text.StartsWith("WINDERS "));        // its level
+            // 20 risers in all: risers are the vertical edges of the upper outline
+            int verticals = 0;
+            for (int i = 0; i + 1 < slab.Pts.Count; i++)
+                if (Math.Abs(slab.Pts[i].X - slab.Pts[i + 1].X) < 1e-9 && slab.Pts[i + 1].Y - slab.Pts[i].Y > 149 && slab.Pts[i + 1].Y - slab.Pts[i].Y < 151) verticals++;
+            Assert.Equal(20, verticals);
+        }
+
+        [Fact]
+        public void WinderQuantitiesAndBarsAreAddedForTheZone()
+        {
+            var s = L();
+            var c = StairCalc.Calculate(s);
+            var q = StairQuantities.Compute(s, c);
+            Assert.Equal(0, q.LandingConcrete);                                  // no flat landing
+            var flat = StairQuantities.Compute(L(false), StairCalc.Calculate(L(false)));
+            Assert.True(flat.LandingConcrete > 0);
+            double gw = c.WinderGoing / 1000;
+            double zoneSlope = Math.Sqrt(9 * gw * gw + 4 * 0.15 * 0.15);
+            double flights = 0;
+            for (int i = 0; i < 2; i++)
+            {
+                double run = c.FlightTreads[i] * 0.25, h = c.FlightRisers[i] * 0.15;
+                flights += 1.2 * 0.15 * Math.Sqrt(run * run + h * h);
+            }
+            Assert.Equal(flights + 1.2 * 0.15 * zoneSlope, q.WaistConcrete, 9);
+            var bars = StairRebar.Compute(s, c, new RebarOptions());
+            Assert.Contains(bars, b => b.Mark == "MW");
+            Assert.Contains(bars, b => b.Mark == "DW");
+            Assert.DoesNotContain(bars, b => b.Mark == "ML");
+        }
+
+        [Fact]
+        public void LandingWidthOverrideAppliesToDogLegAndU()
+        {
+            var dog = new StairSpec { Kind = StairKind.DogLeg, Width = 1200, FloorHeight = 3000, TotalRisers = 20, FirstFlightRisers = 10, LandingLength = 1200, LandingWidthOverride = 3000 };
+            Assert.Equal(3000, StairCalc.Calculate(dog).LandingWidth);
+            dog.LandingWidthOverride = 500;                                      // never narrower than one stair width
+            Assert.Equal(1200, StairCalc.Calculate(dog).LandingWidth);
+            dog.LandingWidthOverride = 0;
+            Assert.Equal(2400, StairCalc.Calculate(dog).LandingWidth);
+            var l = new StairSpec { Kind = StairKind.L, Width = 1200, FloorHeight = 3000, TotalRisers = 20, FirstFlightRisers = 10, LandingWidthOverride = 3000 };
+            Assert.Equal(1200, StairCalc.Calculate(l).LandingWidth);             // L ignores it
+            // the wider landing is drawn and counted
+            dog.LandingWidthOverride = 3000;
+            var q = StairQuantities.Compute(dog, StairCalc.Calculate(dog));
+            Assert.Equal(3.0 * 1.2 * 0.15, q.LandingConcrete, 9);
+            var plan = StairGeometry.Plan(dog, StairCalc.Calculate(dog), new StairOptions());
+            Assert.Contains(plan.Polys, p => p.Closed && p.Pts.Max(x => x.Y) == 3000);
+        }
+
+        [Fact]
+        public void LandingEdgeShutteringTakesOffTheWallLength()
+        {
+            var dog = new StairSpec { Kind = StairKind.DogLeg, Width = 1200, FloorHeight = 3000, TotalRisers = 20, FirstFlightRisers = 10, LandingLength = 1200 };
+            var c = StairCalc.Calculate(dog);
+            Assert.Equal(4.8 * 0.15, StairQuantities.Compute(dog, c).LandingEdges, 9);
+            Assert.Equal((4.8 - 2.4) * 0.15, StairQuantities.Compute(dog, c, 2400).LandingEdges, 9);
+            Assert.Equal(0, StairQuantities.Compute(dog, c, 99999).LandingEdges);
+        }
+
+        [Fact]
+        public void CutSectionShowsTheSecondFlightBeyond()
+        {
+            var cut = StairGeometry.Section(L(false, true), StairCalc.Calculate(L(false, true)), new StairOptions());
+            var dev = StairGeometry.Section(L(false, false), StairCalc.Calculate(L(false, false)), new StairOptions());
+            Assert.Contains(cut.Polys, p => p.Layer == "BEYOND" && p.Closed);
+            Assert.Equal(StairCalc.Calculate(L(false)).FlightRisers[1] - 1, cut.Polys.Count(p => p.Layer == "BEYOND" && !p.Closed));
+            Assert.Contains(cut.Texts, t => t.Text.StartsWith("FLIGHT 2 BEYOND"));
+            Assert.DoesNotContain(dev.Polys, p => p.Layer == "BEYOND");
+            Assert.True(cut.Extents().MaxX <= dev.Extents().MaxX);                   // not developed out in a line
+            // a cut section does not apply to other kinds
+            var dog = new StairSpec { Kind = StairKind.DogLeg, Width = 1200, FloorHeight = 3000, TotalRisers = 20, FirstFlightRisers = 10, CutSection = true };
+            Assert.DoesNotContain(StairGeometry.Section(dog, StairCalc.Calculate(dog), new StairOptions()).Polys, p => p.Layer == "BEYOND");
+        }
+
+        [Fact]
+        public void NewSpecFieldsSurviveSavingAndLoading()
+        {
+            var s = L(true, true); s.Kind = StairKind.L; s.LandingWidthOverride = 1800;
+            var back = StairSpec.FromLines(s.ToLines());
+            Assert.True(back.Winders); Assert.True(back.CutSection); Assert.Equal(1800, back.LandingWidthOverride);
+            Assert.False(StairSpec.FromLines(L(false).ToLines()).Winders);
         }
     }
 }

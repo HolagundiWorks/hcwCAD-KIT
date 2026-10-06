@@ -77,18 +77,72 @@ namespace HCW.AutoCAD.Plugin.Commands
             spec.PlanAngleDegrees = angle.Value * 180.0 / Math.PI;
             spec.SectionX = secPt.Value.X; spec.SectionY = secPt.Value.Y;
 
-            string id;
+            var floors = ed.GetInteger(new PromptIntegerOptions("\nNumber of floors, the same stair on each <" + _floorCount + ">: ")
+                { AllowNegative = false, AllowZero = false, LowerLimit = 1, UpperLimit = 30, DefaultValue = _floorCount, UseDefaultValue = true });
+            if (floors.Status != PromptStatus.OK) return;
+            _floorCount = floors.Value;
+
+            // Each further floor's plan goes above the last (in the drawing's Y), its section stacks on the one below at the floor height.
+            double planStep = 0;
+            if (_floorCount > 1)
+            {
+                var calc0 = StairCalc.Calculate(spec, Limits());
+                var opt0 = new StairOptions { TextHeight = Settings.GetDouble("StairTextMm", 2.5) * spec.PlotScale, DimOffset = Settings.GetDouble("StairDimOffsetMm", 10) * spec.PlotScale };
+                var box0 = StairGeometry.Plan(spec, calc0, opt0).Extents();
+                planStep = (Math.Abs(Math.Cos(spec.PlanAngleDegrees * Math.PI / 180)) * (box0.MaxY - box0.MinY)
+                    + Math.Abs(Math.Sin(spec.PlanAngleDegrees * Math.PI / 180)) * (box0.MaxX - box0.MinX) + 8 * opt0.DimOffset) * units.PerMm;
+            }
+
+            var ids = new List<string>();
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                id = NextId(tr, db);
-                Generate(tr, db, spec, id, units);
-                DrawingStore.Write(tr, db, StoreDictionary, id, spec.ToLines());
-                SaveQuantities(ed, tr, db, id, spec);
+                for (int k = 0; k < _floorCount; k++)
+                {
+                    var floor = Copy(spec);
+                    floor.StartLevel = spec.StartLevel + k * spec.FloorHeight;
+                    floor.PlanY = spec.PlanY + k * planStep;
+                    floor.SectionY = spec.SectionY + k * spec.FloorHeight * units.PerMm;
+                    string id = NextId(tr, db);
+                    Generate(tr, db, floor, id, units);
+                    DrawingStore.Write(tr, db, StoreDictionary, id, floor.ToLines());
+                    SaveQuantities(ed, tr, db, id, floor);
+                    ids.Add(id);
+                }
                 tr.Commit();
             }
             _last = Copy(spec);
-            ed.WriteMessage("\nAECSTAIR: " + id + " drawn (plan and section). Use AECSTAIREDIT to change it.");
+            ed.WriteMessage("\nAECSTAIR: " + string.Join(", ", ids) + (ids.Count > 1 ? " drawn, one per floor, levels rising by " + (spec.FloorHeight / units.MmPer).ToString("0.###", CultureInfo.InvariantCulture) + " " + units.Name + "." : " drawn (plan and section).")
+                + " Use AECSTAIREDIT to change one.");
+        }
+
+        private static int _floorCount = 1;
+
+        /// <summary>
+        /// AECSTAIRQTY works out the quantities and bar estimate of a staircase from its inputs alone, without drawing it: for a stair
+        /// made some other way. It asks the same questions as AECSTAIR, then a name, and saves the take-offs "Stair NAME" and "Stair NAME bars".
+        /// </summary>
+        [CommandMethod("AECSTAIRQTY")]
+        public void AecStairQuantities()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            if (!MeasureCommands.Prepare()) return;
+            var units = GetUnits();
+            var spec = Copy(_last);
+            if (!AskAndCheck(ed, spec, units, false)) return;
+
+            var nr = ed.GetString(new PromptStringOptions("\nName for these quantities <Manual>: ") { AllowSpaces = true, DefaultValue = "Manual", UseDefaultValue = true });
+            if (nr.Status != PromptStatus.OK) return;
+            string name = nr.StringResult.Trim().Replace("|", "").Length > 0 ? nr.StringResult.Trim().Replace("|", "") : "Manual";
+
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                SaveQuantities(ed, tr, db, name, spec);
+                tr.Commit();
+            }
+            _last = Copy(spec);
         }
 
         [CommandMethod("AECSTAIREDIT")]
@@ -141,7 +195,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var calc = StairCalc.Calculate(spec, Limits());
             if (!calc.CanDraw) return;
-            var q = StairQuantities.Compute(spec, calc);
+            var q = StairQuantities.Compute(spec, calc, Settings.GetDouble("StairLandingWallEdgeMm", 0));
             var rows = q.Rows();
             MeasureBook.SaveTakeoff(tr, db, "Stair " + id, StairQuantities.Headers, rows);
             ed.WriteMessage("\n\nQUANTITIES (" + id + ")");
@@ -151,12 +205,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             ed.WriteMessage("\n  Saved as the take-off \"Stair " + id + "\"; MEXPORT writes it with the others.");
 
             // reinforcement estimate and bar schedule
-            var bars = StairRebar.Compute(spec, calc, new RebarOptions
-            {
-                MainDia = Settings.GetDouble("StairMainBarDia", 12), MainSpacing = Settings.GetDouble("StairMainBarSpacing", 150),
-                DistDia = Settings.GetDouble("StairDistBarDia", 8), DistSpacing = Settings.GetDouble("StairDistBarSpacing", 200),
-                Cover = Settings.GetDouble("StairCover", 25), AnchorageDiameters = Settings.GetDouble("StairAnchorageDia", 40),
-            });
+            var bars = StairRebar.Compute(spec, calc, RebarFromSettings());
             MeasureBook.SaveTakeoff(tr, db, "Stair " + id + " bars", StairRebar.Headers, StairRebar.Rows(bars, q.Concrete));
             double kg = StairRebar.TotalWeight(bars);
             ed.WriteMessage("\n  Reinforcement estimate " + kg.ToString("0.0", CultureInfo.InvariantCulture) + " kg ("
@@ -232,9 +281,24 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
 
             if (!Number(ed, "Tread / going", s.Going, u, out v)) return false; s.Going = v;
-            if (s.TwoFlights)
+            if (s.Kind == StairKind.L)
+            {
+                var wo = new PromptKeywordOptions("\nLanding or winders [Landing/Winders] <" + (s.Winders ? "Winders" : "Landing") + ">: ") { AllowNone = true };
+                wo.Keywords.Add("Landing");
+                wo.Keywords.Add("Winders");
+                var wr = ed.GetKeywords(wo);
+                if (wr.Status == PromptStatus.OK) s.Winders = wr.StringResult == "Winders";
+                else if (wr.Status != PromptStatus.None) return false;
+            }
+            else s.Winders = false;
+            if (s.TwoFlights && !s.HasWinders)
             {
                 if (!Number(ed, "Landing length", s.LandingLength, u, out v)) return false; s.LandingLength = v;
+            }
+            if (s.Kind == StairKind.DogLeg || s.Kind == StairKind.U)
+            {
+                if (!Number(ed, "Landing width (0 = the width of both flights)", s.LandingWidthOverride, u, out v, true)) return false;
+                s.LandingWidthOverride = Math.Max(0, v);
             }
             if (!Number(ed, "Waist slab thickness", s.WaistThickness, u, out v)) return false; s.WaistThickness = v;
             if (!Number(ed, "Landing / floor slab thickness", s.LandingThickness, u, out v)) return false; s.LandingThickness = v;
@@ -251,6 +315,16 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (w.Status == PromptStatus.OK) s.OpenWell = w.StringResult == "Open";
                 else if (w.Status != PromptStatus.None) return false;
             }
+            if (s.Kind == StairKind.L)
+            {
+                var cut = new PromptKeywordOptions("\nSection [Developed/Cut] <" + (s.CutSection ? "Cut" : "Developed") + ">: ") { AllowNone = true };
+                cut.Keywords.Add("Developed");
+                cut.Keywords.Add("Cut");
+                var cr = ed.GetKeywords(cut);
+                if (cr.Status == PromptStatus.OK) s.CutSection = cr.StringResult == "Cut";
+                else if (cr.Status != PromptStatus.None) return false;
+            }
+            else s.CutSection = false;
             if (s.TwoFlights)
             {
                 var turn = new PromptKeywordOptions("\nSecond flight turns [Left/Right] <" + (s.TurnLeft ? "Left" : "Right") + ">: ") { AllowNone = true };
@@ -295,6 +369,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             ed.WriteMessage(row("Pitch", c.Pitch.ToString("0.0", CultureInfo.InvariantCulture) + " deg"));
             for (int i = 0; i < c.FlightRisers.Length; i++)
                 ed.WriteMessage(row("Flight " + (i + 1), c.FlightRisers[i] + " risers, " + c.FlightTreads[i] + " treads, length " + u.Fmt(c.FlightLengths[i])));
+            if (s.HasWinders) ed.WriteMessage(row("Winders", "3 treads, going " + u.Fmt(c.WinderGoing) + " on the walkline"));
             if (s.TwoFlights)
                 ed.WriteMessage(row("Intermediate level", StairFormat.Level(c.LandingLevel, u.Imperial)));
             ed.WriteMessage(row("Levels", StairFormat.Level(c.BottomLevel, u.Imperial) + " to " + StairFormat.Level(c.TopLevel, u.Imperial)));
@@ -313,7 +388,15 @@ namespace HCW.AutoCAD.Plugin.Commands
             {
                 TextHeight = Settings.GetDouble("StairTextMm", 2.5) * spec.PlotScale,
                 DimOffset = Settings.GetDouble("StairDimOffsetMm", 10) * spec.PlotScale,
-                Imperial = u.Imperial
+                Imperial = u.Imperial,
+                ShowHeadroom = Settings.GetInt("StairHeadroomLine", 1) != 0,
+                Headroom = Settings.GetDouble("StairHeadroomMm", 2000),
+                ShowRailing = Settings.GetInt("StairRailing", 1) != 0,
+                HandrailHeight = Settings.GetDouble("StairHandrailMm", 900),
+                PostSize = Settings.GetDouble("StairPostMm", 50),
+                BalustersPerTread = Math.Max(1, Settings.GetInt("StairBalustersPerTread", 2)),
+                ShowRebar = Settings.GetInt("StairRebarDrawing", 0) != 0,
+                Rebar = RebarFromSettings(),
             };
             var plan = StairGeometry.Plan(spec, calc, opt);
             var section = StairGeometry.Section(spec, calc, opt);
@@ -329,6 +412,13 @@ namespace HCW.AutoCAD.Plugin.Commands
             maker.Draw(plan, planPt, a, "PLAN");
             maker.Draw(section, sectionPt, 0, "SECTION");
         }
+
+        private static RebarOptions RebarFromSettings() => new RebarOptions
+        {
+            MainDia = Settings.GetDouble("StairMainBarDia", 12), MainSpacing = Settings.GetDouble("StairMainBarSpacing", 150),
+            DistDia = Settings.GetDouble("StairDistBarDia", 8), DistSpacing = Settings.GetDouble("StairDistBarSpacing", 200),
+            Cover = Settings.GetDouble("StairCover", 25), AnchorageDiameters = Settings.GetDouble("StairAnchorageDia", 40),
+        };
 
         /// <summary>Turns the geometry (real millimetres) into entities in the current space, tagged with the stair's ID.</summary>
         private class Maker
@@ -356,7 +446,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 _dimStyle = styles.Has(wanted) ? styles[wanted] : db.Dimstyle;
                 _space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
 
-                foreach (var role in new[] { "PLAN", "TREAD", "NOSING", "ARROW", "WELL", "TEXT", "SECTION", "LEVEL", "HATCH" })
+                foreach (var role in new[] { "PLAN", "TREAD", "NOSING", "ARROW", "WELL", "TEXT", "SECTION", "LEVEL", "HATCH", "HEADROOM", "RAIL", "REBAR", "BEYOND" })
                     Util.EnsureLayer(tr, db, LayerFor(role), ColorFor(role), "Continuous", role == "SECTION" ? LineWeight.LineWeight035 : LineWeight.LineWeight000);
                 Util.EnsureLayer(tr, db, "AN-DIMS", 8);
             }
@@ -366,10 +456,13 @@ namespace HCW.AutoCAD.Plugin.Commands
             {
                 switch (role)
                 {
-                    case "TREAD": case "NOSING": case "HATCH": return 8;
+                    case "TREAD": case "NOSING": case "HATCH": case "BEYOND": return 8;
                     case "ARROW": case "LEVEL": return 3;
                     case "WELL": return 5;
                     case "PLAN": return 4;
+                    case "HEADROOM": return 1;
+                    case "RAIL": return 6;
+                    case "REBAR": return 30;
                     default: return 7;
                 }
             }

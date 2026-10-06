@@ -58,9 +58,24 @@ namespace HCW.AutoCAD.Plugin.Logic
                     Nos = Count(slope - 2 * cover, o.DistSpacing), Length = Math.Max(0, width - 2 * cover) * mm,
                 });
             }
-            if (s.TwoFlights)
+            if (s.HasWinders)
             {
-                double lw = c.LandingWidth, ll = s.LandingLength;
+                double gw = c.WinderGoing;
+                double slope = Math.Sqrt(3 * gw * 3 * gw + 2 * c.Rise * 2 * c.Rise);
+                rows.Add(new BarRow
+                {
+                    Mark = "MW", Description = "Winders main", Dia = o.MainDia,
+                    Nos = Count(width - 2 * cover, o.MainSpacing), Length = (slope + 2 * o.AnchorageDiameters * o.MainDia) * mm,
+                });
+                rows.Add(new BarRow
+                {
+                    Mark = "DW", Description = "Winders distribution", Dia = o.DistDia,
+                    Nos = Count(slope - 2 * cover, o.DistSpacing), Length = Math.Max(0, width - 2 * cover) * mm,
+                });
+            }
+            else if (s.TwoFlights)
+            {
+                double lw = c.LandingWidth, ll = c.LandingLengthUsed;
                 rows.Add(new BarRow
                 {
                     Mark = "ML", Description = "Landing main", Dia = o.MainDia,

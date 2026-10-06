@@ -12,21 +12,22 @@ namespace HCW.AutoCAD.Plugin.Logic
     /// Each flight is a waist slab of the given thickness (measured square to the slope) along the slope, with a triangular
     /// step on every riser. The slope length is worked from the flight's run (treads x going) and its height (risers x rise).
     /// The landing is a flat slab of the landing width x length x thickness. Shuttering is the soffit, both sides of each flight
-    /// (waist and steps) and the risers; the free edges of the landing are not included. Finishes are the treads, the risers and
+    /// (waist and steps), the risers and the free edges of the landing (its perimeter less the two places the flights join it and the length against walls you give).
+    /// Winders are worked as one slab across the stair width: three treads at their going on the walkline and two risers. Finishes are the treads, the risers and
     /// the landing top. Skirting is both sides of each flight along the slope.
     /// </summary>
     public class StairQuantities
     {
         public double WaistConcrete, StepsConcrete, LandingConcrete;
-        public double Soffit, FlightSides, RiserShuttering, LandingSoffit;
+        public double Soffit, FlightSides, RiserShuttering, LandingSoffit, LandingEdges;
         public double TreadFinish, RiserFinish, LandingFinish;
         public double Skirting;
 
         public double Concrete => WaistConcrete + StepsConcrete + LandingConcrete;
-        public double Shuttering => Soffit + FlightSides + RiserShuttering + LandingSoffit;
+        public double Shuttering => Soffit + FlightSides + RiserShuttering + LandingSoffit + LandingEdges;
         public double Finishes => TreadFinish + RiserFinish + LandingFinish;
 
-        public static StairQuantities Compute(StairSpec s, StairCalc c)
+        public static StairQuantities Compute(StairSpec s, StairCalc c, double landingWallEdgeMm = 0)
         {
             var q = new StairQuantities();
             const double mm = 0.001;
@@ -50,12 +51,30 @@ namespace HCW.AutoCAD.Plugin.Logic
                 q.Skirting += 2.0 * slope;
             }
 
-            if (s.TwoFlights)
+            if (s.HasWinders)
             {
-                double area = c.LandingWidth * mm * s.LandingLength * mm;
+                // the winders are three treads and two risers on one slab across the stair width, at their going on the walkline
+                double gw = c.WinderGoing * mm;
+                double slope = Math.Sqrt(3 * gw * 3 * gw + 2 * rise * 2 * rise);
+                double stepArea = 0.5 * gw * rise * 2;
+                q.WaistConcrete += width * waist * slope;
+                q.StepsConcrete += stepArea * width;
+                q.Soffit += width * slope;
+                q.FlightSides += 2.0 * (waist * slope + stepArea);
+                q.RiserShuttering += width * rise * 2;
+                q.TreadFinish += width * gw * 3;
+                q.RiserFinish += width * rise * 2;
+            }
+            else if (s.TwoFlights)
+            {
+                double lw = c.LandingWidth * mm, ll = c.LandingLengthUsed * mm;
+                double area = lw * ll;
                 q.LandingConcrete = area * s.LandingThickness * mm;
                 q.LandingSoffit = area;
                 q.LandingFinish = area;
+                // free edges: the perimeter less the two places the flights join it and the length against walls (given, not guessed)
+                double free = Math.Max(0, 2 * (lw + ll) - 2 * width - Math.Max(0, landingWallEdgeMm) * mm);
+                q.LandingEdges = free * s.LandingThickness * mm;
             }
             return q;
         }
@@ -75,7 +94,8 @@ namespace HCW.AutoCAD.Plugin.Logic
                 new[] { "Shuttering - soffit", f(Soffit), "m2", "width x slope length" },
                 new[] { "Shuttering - flight sides", f(FlightSides), "m2", "both sides, waist and steps" },
                 new[] { "Shuttering - risers", f(RiserShuttering), "m2", "width x rise x risers" },
-                new[] { "Shuttering - landing soffit", f(LandingSoffit), "m2", "landing area; edges not included" },
+                new[] { "Shuttering - landing soffit", f(LandingSoffit), "m2", "landing area" },
+                new[] { "Shuttering - landing edges", f(LandingEdges), "m2", "free edges x thickness: perimeter less the flight joins and the wall edge" },
                 new[] { "SHUTTERING TOTAL", f(Shuttering), "m2", "" },
                 new[] { "Finish - treads", f(TreadFinish), "m2", "width x going x treads" },
                 new[] { "Finish - risers", f(RiserFinish), "m2", "width x rise x risers" },

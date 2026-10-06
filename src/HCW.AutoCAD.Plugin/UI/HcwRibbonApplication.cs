@@ -189,6 +189,7 @@ namespace HCW.AutoCAD.Plugin.UI
         {
             var src = NewSource("Stairs");
             AddLarge(src, "AECSTAIR", "RCC\nStair", "floorplan", "Parametric RCC staircase: plan and section from one set of inputs (single, dog-legged, U or L)");
+            AddLarge(src, "AECSTAIRQTY", "Stair\nQuantities", "report--data", "Concrete, shuttering, finishes and steel of a staircase from its inputs, without drawing it");
             AddLarge(src, "AECSTAIREDIT", "Edit\nStair", "tag--edit", "Change the inputs of a staircase made by AECSTAIR and redraw its plan and section");
             return Wrap(src);
         }

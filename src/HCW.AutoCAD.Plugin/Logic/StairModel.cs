@@ -36,6 +36,12 @@ namespace HCW.AutoCAD.Plugin.Logic
         public bool OpenWell = true;
         /// <summary>Whether the second flight (or the turn of an L) lies to the left of the first, looking up the stair.</summary>
         public bool TurnLeft = true;
+        /// <summary>L staircase: three winders (kite treads that turn the corner) take the place of the landing. The landing square is then the stair width.</summary>
+        public bool Winders;
+        /// <summary>Dog-leg and U: the landing width when it is not the width of both flights (and the well). 0 takes the width from the flights. Never less than one stair width.</summary>
+        public double LandingWidthOverride;
+        /// <summary>L staircase: draw the section as cut along the first flight (the second flight is seen beyond) instead of developed in a straight line.</summary>
+        public bool CutSection;
 
         // where it was drawn, so AECSTAIREDIT can redraw it in the same place
         public double PlanX, PlanY, PlanAngleDegrees;
@@ -43,7 +49,10 @@ namespace HCW.AutoCAD.Plugin.Logic
         public double PlotScale = 50;
 
         public bool TwoFlights => Kind != StairKind.Single;
-        public int SecondFlightRisers => TwoFlights ? TotalRisers - FirstFlightRisers : 0;
+        public bool HasWinders => Kind == StairKind.L && Winders;
+        /// <summary>The risers the winders add to the two flights: three winder treads are reached by three risers, the first of which is the top riser of flight 1.</summary>
+        public int WinderExtraRisers => HasWinders ? 2 : 0;
+        public int SecondFlightRisers => TwoFlights ? TotalRisers - FirstFlightRisers - WinderExtraRisers : 0;
         public double Rise => TotalRisers > 0 ? FloorHeight / TotalRisers : 0;
 
         /// <summary>The number of risers giving a rise closest to the preferred one (at least 2 per flight).</summary>
@@ -68,6 +77,7 @@ namespace HCW.AutoCAD.Plugin.Logic
             add("WaistThickness", d(WaistThickness)); add("LandingThickness", d(LandingThickness));
             add("StartLevel", d(StartLevel)); add("Nosing", d(Nosing));
             add("WellWidth", d(WellWidth)); add("OpenWell", OpenWell ? "1" : "0"); add("TurnLeft", TurnLeft ? "1" : "0");
+            add("Winders", Winders ? "1" : "0"); add("LandingWidth", d(LandingWidthOverride)); add("CutSection", CutSection ? "1" : "0");
             add("PlanX", d(PlanX)); add("PlanY", d(PlanY)); add("PlanAngle", d(PlanAngleDegrees));
             add("SectionX", d(SectionX)); add("SectionY", d(SectionY)); add("PlotScale", d(PlotScale));
             return lines;
@@ -103,6 +113,9 @@ namespace HCW.AutoCAD.Plugin.Logic
                     case "WellWidth": s.WellWidth = d(v, s.WellWidth); break;
                     case "OpenWell": s.OpenWell = v != "0"; break;
                     case "TurnLeft": s.TurnLeft = v != "0"; break;
+                    case "Winders": s.Winders = v == "1"; break;
+                    case "LandingWidth": s.LandingWidthOverride = d(v, 0); break;
+                    case "CutSection": s.CutSection = v == "1"; break;
                     case "PlanX": s.PlanX = d(v, 0); break;
                     case "PlanY": s.PlanY = d(v, 0); break;
                     case "PlanAngle": s.PlanAngleDegrees = d(v, 0); break;
@@ -148,6 +161,10 @@ namespace HCW.AutoCAD.Plugin.Logic
         public double TopLevel;
         public double BottomLevel;
         public double LandingWidth;
+        /// <summary>The landing length used: the winder square (the stair width) when winders replace the landing.</summary>
+        public double LandingLengthUsed;
+        /// <summary>Going of a winder along the walkline, half a stair width from the inner corner: a quarter circle shared by three winders.</summary>
+        public double WinderGoing;
         public double Pitch;   // degrees
         public List<StairCheck> Checks = new List<StairCheck>();
         public bool CanDraw => Checks.All(c => !c.Error);
@@ -169,6 +186,9 @@ namespace HCW.AutoCAD.Plugin.Logic
             c.LandingWidth = s.Kind == StairKind.DogLeg ? 2 * s.Width
                 : s.Kind == StairKind.U ? 2 * s.Width + s.WellWidth
                 : s.Kind == StairKind.L ? s.Width : 0;
+            if ((s.Kind == StairKind.DogLeg || s.Kind == StairKind.U) && s.LandingWidthOverride > 0) c.LandingWidth = Math.Max(s.Width, s.LandingWidthOverride);
+            c.LandingLengthUsed = s.HasWinders ? s.Width : s.LandingLength;
+            c.WinderGoing = s.HasWinders ? Math.PI * s.Width / 12.0 : 0;
 
             Action<string, string, bool, bool> add = (n, v, ok, err) => c.Checks.Add(new StairCheck { Name = n, Value = v, Ok = ok, Error = err });
             Func<double, string> mm = v => v.ToString("0.#", CultureInfo.InvariantCulture) + " mm";
@@ -179,7 +199,7 @@ namespace HCW.AutoCAD.Plugin.Logic
             if (s.TwoFlights)
             {
                 bool split = r1 >= 2 && r2 >= 2;
-                add("Flight split", r1 + " + " + r2 + " risers", split, !split);
+                add("Flight split", s.HasWinders ? r1 + " + 2 winder + " + r2 + " risers" : r1 + " + " + r2 + " risers", split, !split);
                 if (!split) return c;
             }
             if (!valid) return c;
@@ -192,7 +212,12 @@ namespace HCW.AutoCAD.Plugin.Logic
                 add("Flight distribution", r1 + " / " + r2, Math.Abs(r1 - r2) <= 1, false);
             add("FFL closure", (s.TotalRisers * c.Rise).ToString("0.###", CultureInfo.InvariantCulture) + " = " + s.FloorHeight.ToString("0.###", CultureInfo.InvariantCulture),
                 Math.Abs(s.TotalRisers * c.Rise - s.FloorHeight) < 0.01, false);
-            if (s.TwoFlights)
+            if (s.HasWinders)
+            {
+                add("Winders", "3 winders, going " + mm(c.WinderGoing) + " on the walkline", c.WinderGoing >= limits.MinGoing, false);
+                add("Winder level", StairFormat.Level(c.LandingLevel, false) + " to " + StairFormat.Level(c.LandingLevel + 2 * c.Rise, false), true, false);
+            }
+            else if (s.TwoFlights)
             {
                 add("Landing length", mm(s.LandingLength) + " (width " + mm(s.Width) + ")", s.LandingLength >= s.Width, false);
                 add("Landing level", StairFormat.Level(c.LandingLevel, false), true, false);
