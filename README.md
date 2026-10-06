@@ -724,3 +724,7 @@ Floor to floor height, ceiling height, lintel bottom and slab thickness for each
 * `HCWDOOR` and `HCWWINDOW` default their heights to the first floor's lintel bottom the first time they run in a drawing.
 * `HCWOPENHEIGHT` applies the same levels to doors and windows already drawn.
 * Columns are drawn full height in the section (floor to the slab above). Column height is not stored on the plan block.
+
+## Take-off lines with walls
+
+`HCWWALL` also draws each wall's centre line on the take-off layer (`MEASURE-LINEAR`), tagged with the wall's ID, so `MLIN`, `MBRK` and the wall paint take-off find it with no hand-drawn lines. Doors and windows made by the tools already carry their `MEASURE-DEDUCT` line. `HCWWALLEDIT` and a rebuild redraw the line with the wall. Walls adopted with `HCWWALLADOPT` get no line (they may already have your own). Settings: `WallMeasureLines` (0 turns it off) and `WallMeasureLayer` (`MEASURE-FULLBRICK`, `MEASURE-HALFBRICK`, `MEASURE-BEAM`, `MEASURE-LINTEL`). A line sits on the wall's drawn centre line, so with Left or Right line position it follows that edge.

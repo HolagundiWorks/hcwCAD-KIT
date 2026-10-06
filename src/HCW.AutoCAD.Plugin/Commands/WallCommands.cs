@@ -59,6 +59,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     if (loops.Count == 0) { skipped++; continue; }
                     var rec = new WallRecord { Id = WallStore.NextId(tr, db), ThicknessMm = _thicknessMm, Justify = _justify, Closed = c.Closed, Z = c.Z, Points = c.Points };
                     WallStore.Save(tr, db, rec);
+                    WallStore.DrawMeasure(tr, db, space, rec);
                     newIds.Add(rec.Id);
                     foreach (var loop in loops)
                     {
@@ -118,6 +119,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 tr.Commit();
             }
             ed.WriteMessage("\nHCWWALL: " + made + " wall outline(s) on " + WallLayer + ", " + _thicknessMm + " mm thick."
+                + (WallStore.MeasureLayer != null ? " Take-off line(s) on " + WallStore.MeasureLayer + "." : "")
                 + (merged > 0 ? " Joined into " + merged + " outline(s)." : "")
                 + (skipped > 0 ? " " + skipped + " line(s) too short to make a wall." : ""));
         }
@@ -302,9 +304,11 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
 
             var fresh = new List<Polyline>();
+            WallStore.EraseMeasure(tr, space, records.Select(r => r.Id).ToList());
             foreach (var r in records)
             {
                 WallStore.Save(tr, db, r);
+                WallStore.DrawMeasure(tr, db, space, r);
                 foreach (var loop in r.Outlines(mm)) fresh.Add(Outline(tr, db, space, loop, r.Z, new[] { r.Id }));
             }
             int jm, jk, jb;
