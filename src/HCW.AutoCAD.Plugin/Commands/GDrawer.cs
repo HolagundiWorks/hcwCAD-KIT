@@ -24,10 +24,23 @@ namespace HCW.AutoCAD.Plugin.Commands
         private readonly double _k;
         private readonly double _textHeightMm;
 
+        /// <summary>Applied to every entity before it is added (a UCS), when the drawing is laid out in the current user coordinate system.</summary>
+        public Matrix3d? Ucs;
+        /// <summary>Called for every entity before it is added, with the part name, so the caller can tag what it draws.</summary>
+        public Action<Entity, string> Tag;
+        /// <summary>Name of the part being drawn (PLAN, SECTION ...), handed to <see cref="Tag"/>.</summary>
+        public string Part = "";
+        /// <summary>Hatch pattern scale in sheet millimetres times the drawing scale (the hatch is drawn with PatternScale = this x mm / 3.175).</summary>
+        public double HatchScale = 20;
+        public bool Hatching = true;
+        /// <summary>Dimension style for the dimensions; the drawing's current style when not set.</summary>
+        public ObjectId? DimStyle;
+
         public GDrawer(Transaction tr, Database db, BlockTableRecord space, Dictionary<string, RoleLayer> roles, double textHeightMm)
         {
             _tr = tr; _db = db; _space = space; _roles = roles; _k = Util.MmToDrawingUnits(1.0); _textHeightMm = textHeightMm;
             foreach (var r in roles.Values) Util.EnsureLayer(tr, db, r.Layer, r.Color, "Continuous", r.Weight);
+            Util.EnsureLayer(tr, db, "AN-DIMS", 8);
         }
 
         private string LayerOf(string role)
@@ -46,9 +59,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             {
                 var pl = new Polyline { Layer = LayerOf(poly.Layer), Closed = poly.Closed, Elevation = origin.Z };
                 for (int i = 0; i < poly.Pts.Count; i++) { var p = at(poly.Pts[i]); pl.AddVertexAt(i, new Point2d(p.X, p.Y), 0, 0, 0); }
-                _space.AppendEntity(pl);
-                _tr.AddNewlyCreatedDBObject(pl, true);
-                if (poly.Hatch) TryHatch(pl);
+                Add(pl);
+                if (poly.Hatch && Hatching) TryHatch(pl);
             }
             foreach (var t in d.Texts)
             {
@@ -61,17 +73,23 @@ namespace HCW.AutoCAD.Plugin.Commands
                     text.AlignmentPoint = p;
                 }
                 else text.Position = p;
-                _space.AppendEntity(text);
-                _tr.AddNewlyCreatedDBObject(text, true);
+                Add(text);
             }
             foreach (var dim in d.Dims)
             {
-                var ad = new AlignedDimension(at(dim.A), at(dim.B), at(dim.Line), dim.Text, _db.Dimstyle) { Layer = "AN-DIMS" };
+                var ad = new AlignedDimension(at(dim.A), at(dim.B), at(dim.Line), dim.Text, DimStyle ?? _db.Dimstyle) { Layer = "AN-DIMS" };
                 double h = _textHeightMm * _k;
                 ad.Dimscale = 1; ad.Dimtxt = h; ad.Dimasz = h; ad.Dimexe = 0.6 * h; ad.Dimexo = 0.6 * h; ad.Dimgap = 0.4 * h;
-                _space.AppendEntity(ad);
-                _tr.AddNewlyCreatedDBObject(ad, true);
+                Add(ad);
             }
+        }
+
+        private void Add(Entity ent)
+        {
+            if (Tag != null) Tag(ent, Part);
+            if (Ucs.HasValue) ent.TransformBy(Ucs.Value);
+            _space.AppendEntity(ent);
+            _tr.AddNewlyCreatedDBObject(ent, true);
         }
 
         private static double Readable(double rotation)
@@ -88,10 +106,11 @@ namespace HCW.AutoCAD.Plugin.Commands
             try
             {
                 var hatch = new Hatch { Layer = LayerOf("HATCH") };
+                if (Tag != null) Tag(hatch, Part);
                 _space.AppendEntity(hatch);
                 _tr.AddNewlyCreatedDBObject(hatch, true);
                 hatch.SetHatchPattern(HatchPatternType.PreDefined, "ANSI31");
-                hatch.PatternScale = 20.0 * _k / 3.175;
+                hatch.PatternScale = HatchScale * _k / 3.175;
                 hatch.Associative = true;
                 hatch.AppendLoop(HatchLoopTypes.Default, new ObjectIdCollection { outline.ObjectId });
                 hatch.EvaluateHatch(true);

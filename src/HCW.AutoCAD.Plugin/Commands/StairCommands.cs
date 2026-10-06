@@ -402,15 +402,12 @@ namespace HCW.AutoCAD.Plugin.Commands
             var section = StairGeometry.Section(spec, calc, opt);
 
             var ucs = Util.Ed.CurrentUserCoordinateSystem;
-            double k = u.PerMm;
             double a = spec.PlanAngleDegrees * Math.PI / 180.0;
-            double ca = Math.Cos(a), sa = Math.Sin(a);
-            Func<PlanPoint, Point3d> planPt = p => new Point3d(spec.PlanX + (p.X * ca - p.Y * sa) * k, spec.PlanY + (p.X * sa + p.Y * ca) * k, 0);
-            Func<PlanPoint, Point3d> sectionPt = p => new Point3d(spec.SectionX + p.X * k, spec.SectionY + p.Y * k, 0);
-
-            var maker = new Maker(tr, db, id, ucs, k, spec.PlotScale, opt.TextHeight);
-            maker.Draw(plan, planPt, a, "PLAN");
-            maker.Draw(section, sectionPt, 0, "SECTION");
+            var drawer = MakeDrawer(tr, db, id, ucs, spec.PlotScale, opt.TextHeight);
+            drawer.Part = "PLAN";
+            drawer.Draw(plan, new Point3d(spec.PlanX, spec.PlanY, 0), a);
+            drawer.Part = "SECTION";
+            drawer.Draw(section, new Point3d(spec.SectionX, spec.SectionY, 0), 0);
         }
 
         private static RebarOptions RebarFromSettings() => new RebarOptions
@@ -420,138 +417,53 @@ namespace HCW.AutoCAD.Plugin.Commands
             Cover = Settings.GetDouble("StairCover", 25), AnchorageDiameters = Settings.GetDouble("StairAnchorageDia", 40),
         };
 
-        /// <summary>Turns the geometry (real millimetres) into entities in the current space, tagged with the stair's ID.</summary>
-        private class Maker
+        private static readonly string[] Roles = { "PLAN", "TREAD", "NOSING", "ARROW", "WELL", "TEXT", "SECTION", "LEVEL", "HATCH", "HEADROOM", "RAIL", "REBAR", "BEYOND" };
+
+        private static short ColorFor(string role)
         {
-            private readonly Transaction _tr;
-            private readonly BlockTableRecord _space;
-            private readonly string _id;
-            private readonly Matrix3d _ucs;
-            private readonly double _k, _scale, _textHeight;
-            private readonly ObjectId _dimStyle;
-
-            public Maker(Transaction tr, Database db, string id, Matrix3d ucs, double k, double scale, double textHeight)
+            switch (role)
             {
-                _tr = tr; _id = id; _ucs = ucs; _k = k; _scale = scale; _textHeight = textHeight;
-                var apps = (RegAppTable)tr.GetObject(db.RegAppTableId, OpenMode.ForRead);
-                if (!apps.Has(AppName))
-                {
-                    apps.UpgradeOpen();
-                    var rec = new RegAppTableRecord { Name = AppName };
-                    apps.Add(rec);
-                    tr.AddNewlyCreatedDBObject(rec, true);
-                }
-                var styles = (DimStyleTable)tr.GetObject(db.DimStyleTableId, OpenMode.ForRead);
-                string wanted = Settings.Get("StairDimStyle", "HCW-WORKING");
-                _dimStyle = styles.Has(wanted) ? styles[wanted] : db.Dimstyle;
-                _space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
-
-                foreach (var role in new[] { "PLAN", "TREAD", "NOSING", "ARROW", "WELL", "TEXT", "SECTION", "LEVEL", "HATCH", "HEADROOM", "RAIL", "REBAR", "BEYOND" })
-                    Util.EnsureLayer(tr, db, LayerFor(role), ColorFor(role), "Continuous", role == "SECTION" ? LineWeight.LineWeight035 : LineWeight.LineWeight000);
-                Util.EnsureLayer(tr, db, "AN-DIMS", 8);
+                case "TREAD": case "NOSING": case "HATCH": case "BEYOND": return 8;
+                case "ARROW": case "LEVEL": return 3;
+                case "WELL": return 5;
+                case "PLAN": return 4;
+                case "HEADROOM": return 1;
+                case "RAIL": return 6;
+                case "REBAR": return 30;
+                default: return 7;
             }
+        }
 
-            private static string LayerFor(string role) => "AECSTAIR-" + (role == "SECTION" ? "RCC" : role);
-            private static short ColorFor(string role)
+        /// <summary>The shared drawer, set up for stairs: AECSTAIR-* layers by role, every object tagged with the stair's ID and part, the stair's dimension style.</summary>
+        private static GDrawer MakeDrawer(Transaction tr, Database db, string id, Matrix3d ucs, double scale, double textHeight)
+        {
+            var apps = (RegAppTable)tr.GetObject(db.RegAppTableId, OpenMode.ForRead);
+            if (!apps.Has(AppName))
             {
-                switch (role)
-                {
-                    case "TREAD": case "NOSING": case "HATCH": case "BEYOND": return 8;
-                    case "ARROW": case "LEVEL": return 3;
-                    case "WELL": return 5;
-                    case "PLAN": return 4;
-                    case "HEADROOM": return 1;
-                    case "RAIL": return 6;
-                    case "REBAR": return 30;
-                    default: return 7;
-                }
+                apps.UpgradeOpen();
+                var rec = new RegAppTableRecord { Name = AppName };
+                apps.Add(rec);
+                tr.AddNewlyCreatedDBObject(rec, true);
             }
-
-            private void Tag(Entity ent, string part)
+            var styles = (DimStyleTable)tr.GetObject(db.DimStyleTableId, OpenMode.ForRead);
+            string wanted = Settings.Get("StairDimStyle", "HCW-WORKING");
+            var roles = Roles.ToDictionary(r => r, r => new GDrawer.RoleLayer
             {
-                ent.XData = new ResultBuffer(
+                Layer = "AECSTAIR-" + (r == "SECTION" ? "RCC" : r), Color = ColorFor(r),
+                Weight = r == "SECTION" ? LineWeight.LineWeight035 : LineWeight.LineWeight000,
+            });
+            var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+            return new GDrawer(tr, db, space, roles, textHeight)
+            {
+                Ucs = ucs,
+                HatchScale = 2.0 * scale,
+                Hatching = Settings.GetInt("StairHatch", 1) != 0,
+                DimStyle = styles.Has(wanted) ? styles[wanted] : db.Dimstyle,
+                Tag = (ent, part) => ent.XData = new ResultBuffer(
                     new TypedValue((int)DxfCode.ExtendedDataRegAppName, AppName),
-                    new TypedValue((int)DxfCode.ExtendedDataAsciiString, _id),
-                    new TypedValue((int)DxfCode.ExtendedDataAsciiString, part));
-            }
-
-            private ObjectId Add(Entity ent, string part)
-            {
-                Tag(ent, part);
-                ent.TransformBy(_ucs);
-                var id = _space.AppendEntity(ent);
-                _tr.AddNewlyCreatedDBObject(ent, true);
-                return id;
-            }
-
-            public void Draw(GDrawing d, Func<PlanPoint, Point3d> at, double rotation, string part)
-            {
-                foreach (var poly in d.Polys)
-                {
-                    var pl = new Polyline { Layer = LayerFor(poly.Layer), Closed = poly.Closed };
-                    for (int i = 0; i < poly.Pts.Count; i++)
-                    {
-                        var p = at(poly.Pts[i]);
-                        pl.AddVertexAt(i, new Point2d(p.X, p.Y), 0, 0, 0);
-                    }
-                    var id = Add(pl, part);
-                    if (poly.Hatch) TryHatch(id, part);
-                }
-                foreach (var t in d.Texts)
-                {
-                    var p = at(new PlanPoint(t.X, t.Y));
-                    var text = new DBText
-                    {
-                        Height = t.Height * _k, TextString = t.Text, Layer = LayerFor("TEXT"),
-                        Rotation = Readable(t.Rotation + rotation)
-                    };
-                    if (t.Centre)
-                    {
-                        text.HorizontalMode = TextHorizontalMode.TextCenter;
-                        text.VerticalMode = TextVerticalMode.TextVerticalMid;
-                        text.AlignmentPoint = p;
-                    }
-                    else text.Position = p;
-                    Add(text, part);
-                }
-                foreach (var dim in d.Dims)
-                {
-                    var a = at(dim.A); var b = at(dim.B); var line = at(dim.Line);
-                    var ad = new AlignedDimension(a, b, line, dim.Text, _dimStyle) { Layer = "AN-DIMS" };
-                    double h = _textHeight * _k;
-                    ad.Dimscale = 1;
-                    ad.Dimtxt = h; ad.Dimasz = h; ad.Dimexe = 0.6 * h; ad.Dimexo = 0.6 * h; ad.Dimgap = 0.4 * h;
-                    Add(ad, part);
-                }
-            }
-
-            /// <summary>Text reads left to right or upwards, never upside down.</summary>
-            private static double Readable(double rotation)
-            {
-                double r = rotation % (2 * Math.PI);
-                if (r < 0) r += 2 * Math.PI;
-                if (r > Math.PI / 2 + 1e-6 && r <= 3 * Math.PI / 2 + 1e-6) r -= Math.PI;
-                return r;
-            }
-
-            /// <summary>Concrete hatch inside a closed outline. Skipped quietly when the host will not make it.</summary>
-            private void TryHatch(ObjectId outline, string part)
-            {
-                if (Settings.GetInt("StairHatch", 1) == 0) return;
-                try
-                {
-                    var hatch = new Hatch { Layer = LayerFor("HATCH") };
-                    Tag(hatch, part);
-                    _space.AppendEntity(hatch);
-                    _tr.AddNewlyCreatedDBObject(hatch, true);
-                    hatch.SetHatchPattern(HatchPatternType.PreDefined, "ANSI31");
-                    hatch.PatternScale = 2.0 * _scale * _k / 3.175;
-                    hatch.Associative = true;
-                    hatch.AppendLoop(HatchLoopTypes.Default, new ObjectIdCollection { outline });
-                    hatch.EvaluateHatch(true);
-                }
-                catch { }
-            }
+                    new TypedValue((int)DxfCode.ExtendedDataAsciiString, id),
+                    new TypedValue((int)DxfCode.ExtendedDataAsciiString, part)),
+            };
         }
 
         // ------------------------------------------------------------------ IDs, tags, erasing

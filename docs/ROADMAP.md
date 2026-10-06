@@ -22,14 +22,8 @@ These are limits of what was built, or items that need something the plugin cann
 - **Winders** are for L and U stairs. Dog-leg stairs keep landings, and the winder slab is worked along the walkline, not as exact kite areas.
 - **Deduction matching.** Index walls by bounding box for very large selections (a box test already rejects most pairs).
 
-## Overlaps still worth merging
-
-Found in an audit of every command; each needs a decision on behaviour before it is merged:
-
-- **Drawing a result in the drawing:** the stair drawing code in `StairCommands` repeats what `GDrawer` does for lifts, escalators and balustrades (layers by role, text, dimensions, hatch); the stair version also tags every object with its ID, which `GDrawer` would need a hook for.
-- **Number increment:** `INCARRAY` and `INCCOPY` differ only in how the copies are placed.
-
 ## Quality
 
+- An audit of every command found overlaps; all are now merged behind one command each (see the README table), and the stair, lift, escalator and balustrade drawings share one drawer (`GDrawer`).
 - Move more pure logic (schedule maths, table layout) into `src/HCW.AutoCAD.Plugin/Logic` and cover it with tests.
 - Build the BricsCAD and ZWCAD projects in CI. They need the host API DLLs, which are not on public runners.

@@ -24,6 +24,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed;
             var db = Util.Db;
+            string how = Util.AskMode("Place the copies by", "Array", "Picks");
+            if (how == null) return;
+            if (how == "Picks") { IncCopy(); return; }
             if (!AskIncrement(ed)) return;
 
             var filter = new SelectionFilter(new[]

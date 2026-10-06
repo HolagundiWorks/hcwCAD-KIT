@@ -248,8 +248,7 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWLIVE", "Live\nUpdates", "reset", "Switch live updates on or off: labels, level marks, dimensions and the area statement follow your edits");
             AddLarge(src, "HCWSTYLES", "Text\nStyles", "text--font", "Create HCW-SITE, HCW-WORKING and HCW-DETAIL text and dimension styles");
             AddSmallGroup(src,
-                ("INCARRAY", "Inc Array", "add--alt", "Array the selection and increment every number in the copied text, attributes and dimensions"),
-                ("INCCOPY", "Inc Copy", "copy", "Copy the selection to picked points, adding the increment to every number in each copy"),
+                ("INCARRAY", "Inc Copy", "add--alt", "Copy the selection along a vector as an array, or to points you pick, adding the increment to every number in each copy (text, attributes, dimensions)"),
                 ("RENUMBERLAYOUTS", "Renumber Layouts", "table-of-contents", "Renumber paper layouts in tab order, with a prefix, suffix and digit padding"),
                 ("AUTODIM", "Auto Dimension", "ruler", "Dimension the plan: chains around it, inside each room, on wall segments at any angle, or clear what these made"),
                 ("SHEETSET", "Sheet Set", "document--horizontal", "Make numbered sheets from a template layout, with each viewport at a scale and centred on a window"),
