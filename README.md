@@ -773,3 +773,7 @@ Adds the concrete and shuttering of every saved stair take-off (`AECSTAIR`, `AEC
 ### Copy and array timing
 
 `INCARRAY` and `INCCOPY` print a line after each run: `Timing: <objects> object(s) x <copies> copies = <new> new, <ms> ms (read, copy, commit; ms per new object)`. Run one on a large selection in your CAD program and send the line; it shows whether the cloning is worth changing. Setting `CopyTiming` = 0 hides it.
+
+### Diagnostics
+
+`HCWDIAG` prints the plugin file and version, the CAD version, whether a ribbon exists and which of our tabs are on it, how many commands are registered, the settings file and the drawing units. Everything the ribbon loader and `HCWDIAG` say is also appended to `%APPDATA%\hcwCAD-KIT\diag.log`, so a ribbon problem can be read afterwards even if the command line message was missed. Send the log or the `HCWDIAG` output with a bug report.

@@ -39,6 +39,7 @@ What the code does now (`src/HCW.AutoCAD.Plugin/UI/HcwRibbonApplication.cs`): `I
 
 Things to check, in order (none confirmed):
 
+0. Run `HCWDIAG` (works even with no ribbon) and read `%APPDATA%\hcwCAD-KIT\diag.log`: they show whether the DLL loaded, the CAD version, whether a ribbon exists and whether our tabs are on it.
 1. Did the command line print `[hcwCAD-KIT] ribbon build error: ...`? If so, that message is the lead. Run `HCWRIBBON` to see it again.
 2. If it printed "waiting for the ribbon", the workspace has no ribbon: switch to one (`RIBBON`), then run `HCWRIBBON`.
 3. A tab with the same id already existing (second `NETLOAD`, or an old copy of the DLL loaded). Restart AutoCAD to rule this out.

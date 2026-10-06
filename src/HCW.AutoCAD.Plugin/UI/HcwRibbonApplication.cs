@@ -50,6 +50,7 @@ namespace HCW.AutoCAD.Plugin.UI
         /// <summary>Command line message, or an alert when there is no drawing open yet.</summary>
         private static void Say(string message)
         {
+            Log(message);
             try
             {
                 var doc = AcAp.DocumentManager.MdiActiveDocument;
@@ -57,6 +58,54 @@ namespace HCW.AutoCAD.Plugin.UI
                 else AcAp.ShowAlertDialog("hcwCAD-KIT: " + message);
             }
             catch (System.Exception) { }
+        }
+
+        /// <summary>Appends a line to %APPDATA%\hcwCAD-KIT\diag.log so a ribbon problem can be read even when the command line message was missed.</summary>
+        private static void Log(string message)
+        {
+            try
+            {
+                string dir = System.IO.Path.GetDirectoryName(Settings.FilePath);
+                System.IO.Directory.CreateDirectory(dir);
+                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "diag.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + message + Environment.NewLine);
+            }
+            catch (System.Exception) { }
+        }
+
+        /// <summary>
+        /// HCWDIAG prints what a bug report needs: the plugin file and version, the CAD version, whether a ribbon exists and which of our tabs are on it,
+        /// the settings file, the drawing units and how many commands are registered. It is also written to diag.log.
+        /// </summary>
+        [CommandMethod("HCWDIAG")]
+        public void Diagnose()
+        {
+            var asm = typeof(HcwRibbonApplication).Assembly;
+            var lines = new System.Collections.Generic.List<string>();
+            lines.Add("plugin: " + asm.Location + " (assembly " + asm.GetName().Version + ")");
+            try { lines.Add("CAD version: " + AcAp.Version + ", " + (IntPtr.Size == 8 ? "64-bit" : "32-bit") + ", .NET " + Environment.Version); } catch (System.Exception) { }
+            var rc = ComponentManager.Ribbon;
+            if (rc == null) lines.Add("ribbon: none (classic workspace, or not created yet) - switch to a workspace with the ribbon, then run HCWRIBBON");
+            else
+            {
+                var ours = new System.Collections.Generic.List<string>();
+                foreach (RibbonTab t in rc.Tabs)
+                    if (t.Id == ToolsTabId || t.Id == SettingsTabId) ours.Add(t.Title + " (" + t.Panels.Count + " panels)");
+                lines.Add("ribbon: " + rc.Tabs.Count + " tabs; ours: " + (ours.Count == 0 ? "none (run HCWRIBBON)" : string.Join(", ", ours)));
+            }
+            int commands = 0;
+            foreach (var type in asm.GetTypes())
+                foreach (var m in type.GetMethods())
+                    commands += m.GetCustomAttributes(typeof(CommandMethodAttribute), false).Length;
+            lines.Add("commands registered in the assembly: " + commands);
+            lines.Add("settings: " + Settings.FilePath + (System.IO.File.Exists(Settings.FilePath) ? "" : " (not created yet; HCWSETTINGS creates it)"));
+            try
+            {
+                var db = AcAp.DocumentManager.MdiActiveDocument.Database;
+                lines.Add("drawing units (INSUNITS): " + db.Insunits + ", LayerOutput: " + Settings.Get("LayerOutput", "BP") + ", live updates: " + (Settings.GetInt("LiveUpdate", 1) != 0 ? "on" : "off"));
+            }
+            catch (System.Exception) { }
+            foreach (var l in lines) Say(l);
+            Say("log file: " + System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Settings.FilePath), "diag.log"));
         }
 
         /// <summary>HCWRIBBON builds the hcwCAD-KIT ribbon tabs again (any tabs of ours already there are replaced).</summary>
