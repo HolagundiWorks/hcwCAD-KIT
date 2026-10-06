@@ -43,10 +43,10 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         [CommandMethod("HCWDOOR")]
-        public void Door() => Run(true);
+        public void Door() { Run(true); AutoSync(); }
 
         [CommandMethod("HCWWINDOW")]
-        public void Window() => Run(false);
+        public void Window() { Run(false); AutoSync(); }
 
         private static string _seededFor;
 
@@ -535,7 +535,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// where it was and cut where it goes, keeping its width, type, heights and tag number. If any cannot be placed, nothing changes.
         /// </summary>
         [CommandMethod("HCWOPENMOVE")]
-        public void MoveOpening()
+        public void MoveOpening() { MoveOpeningCore(); AutoSync(); }
+
+        private void MoveOpeningCore()
         {
             var ed = Util.Ed;
             string job = Util.AskMode("Edit openings", "Move", "Slide", "Replace", "Convert", "Heights", "Sync");
@@ -605,7 +607,9 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         /// <summary>HCWOPENSLIDE drags a door or window along its wall: a ghost of the opening follows the cursor and the move is made where you click.</summary>
         [CommandMethod("HCWOPENSLIDE")]
-        public void SlideOpening()
+        public void SlideOpening() { SlideOpeningCore(); AutoSync(); }
+
+        private void SlideOpeningCore()
         {
             var ed = Util.Ed;
             var info = SelectOpening(ed, "\nSelect the door or window to slide: ");
@@ -673,7 +677,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         [CommandMethod("HCWOPENREPLACE")]
-        public void ReplaceOpening()
+        public void ReplaceOpening() { ReplaceOpeningCore(); AutoSync(); }
+
+        private void ReplaceOpeningCore()
         {
             var ed = Util.Ed;
             var info = SelectOpening(ed, "\nSelect the door or window to replace: ");
@@ -746,7 +752,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// width, position and tag, so the take-off and the schedule read one component. If any cannot be placed, nothing changes.
         /// </summary>
         [CommandMethod("HCWOPENCONVERT")]
-        public void ConvertBlocks()
+        public void ConvertBlocks() { ConvertBlocksCore(); AutoSync(); }
+
+        private void ConvertBlocksCore()
         {
             var ed = Util.Ed;
             int skipped;
@@ -789,7 +797,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// so HCWOPENSYNC, the take-off and HCWSECTIONDRAW follow.
         /// </summary>
         [CommandMethod("HCWOPENHEIGHT")]
-        public void SetHeights()
+        public void SetHeights() { SetHeightsCore(); AutoSync(); }
+
+        private void SetHeightsCore()
         {
             var ed = Util.Ed;
             int skipped;
@@ -1111,15 +1121,63 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// schedule of the take-off: one entry for each kind, width, height and sill, with its count, block name and lintel bottom (sill plus height).
         /// Entries already in the schedule for the same blocks and sizes keep their mark and type; new ones get the next free D or W mark.
         /// </summary>
+        /// <summary>
+        /// The door and window schedule, from the blocks: brings the schedule up to date (as HCWOPENSYNC) and draws it as a table.
+        /// The same entries are on the Doors and Windows tabs of MSCHED and in the take-off, which deducts them.
+        /// </summary>
+        [CommandMethod("HCWOPENSCHED")]
+        public void OpeningSchedule()
+        {
+            var ed = Util.Ed;
+            if (!MeasureCommands.Prepare()) return;
+            int count, added, updated;
+            if (!SyncNow(out count, out added, out updated))
+            {
+                ed.WriteMessage("\nHCWOPENSCHED: no doors or windows made by HCWDOOR or HCWWINDOW in this space.");
+                return;
+            }
+            using (Util.Doc.LockDocument())
+            using (var tr = Util.Db.TransactionManager.StartTransaction())
+            {
+                var book = MeasureBook.Load(tr, Util.Db);
+                if (MeasureCommands.InsertOpeningTable(ed, tr, Util.Db, book)) tr.Commit();
+            }
+        }
+
         [CommandMethod("HCWOPENSYNC")]
         public void SyncSchedule()
         {
             var ed = Util.Ed;
-            var db = Util.Db;
             if (!MeasureCommands.Prepare()) return;
+            int count, added, updated;
+            if (!SyncNow(out count, out added, out updated)) { ed.WriteMessage("\nHCWOPENSYNC: no doors or windows made by HCWDOOR or HCWWINDOW in this space."); return; }
+            ed.WriteMessage("\nHCWOPENSYNC: " + count + " opening(s) in the schedule: " + added + " new entr" + (added == 1 ? "y" : "ies") + ", " + updated + " updated. HCWOPENSCHED draws the table; MSCHED shows or changes the entries.");
+        }
+
+        /// <summary>
+        /// Keeps the opening schedule in step with the blocks: runs after the door, window and edit commands (setting OpeningAutoSync, on by default).
+        /// Quiet when nothing needs doing.
+        /// </summary>
+        private static void AutoSync()
+        {
+            if (Settings.GetInt("OpeningAutoSync", 1) == 0) return;
+            try
+            {
+                if (!MeasureCommands.Prepare()) return;
+                int count, added, updated;
+                if (SyncNow(out count, out added, out updated))
+                    Util.Ed.WriteMessage("\nOpening schedule updated (" + count + " opening(s), " + added + " new).");
+            }
+            catch (System.Exception) { /* the schedule can always be brought up to date with HCWOPENSYNC */ }
+        }
+
+        /// <summary>Reads the doors and windows made by the tools in the current space into the schedule (book of the drawing). False when there are none.</summary>
+        private static bool SyncNow(out int count, out int added, out int updated)
+        {
+            var db = Util.Db;
+            count = added = updated = 0;
             bool imperial = MeasureCommands.MeasureState.Units == MeasureCommands.UnitSys.Imperial;
             Func<double, double> toBook = mm => imperial ? mm / 25.4 : mm / 1000.0;
-
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -1131,10 +1189,9 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var info = ReadOpening(tr, id);
                     if (info != null) all.Add(info);
                 }
-                if (all.Count == 0) { ed.WriteMessage("\nHCWOPENSYNC: no doors or windows made by HCWDOOR or HCWWINDOW in this space."); return; }
-
+                if (all.Count == 0) return false;
+                count = all.Count;
                 var book = MeasureBook.Load(tr, db);
-                int added = 0, updated = 0;
                 foreach (var g in all.GroupBy(i => string.Join("|", i.Door ? "Door" : "Window", i.Type, Math.Round(i.WidthMm), Math.Round(i.HeightMm), Math.Round(i.SillMm))))
                 {
                     var first = g.First();
@@ -1168,7 +1225,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
                 book.Save(tr, db);
                 tr.Commit();
-                ed.WriteMessage("\nHCWOPENSYNC: " + all.Count + " opening(s) in the schedule: " + added + " new entr" + (added == 1 ? "y" : "ies") + ", " + updated + " updated. Open MSCHED to see or change them.");
+                return true;
             }
         }
     }

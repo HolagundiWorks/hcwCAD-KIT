@@ -219,7 +219,8 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWWALLADOPT", "Adopt\nWalls", "tag--edit", "Make wall objects from walls drawn by hand, so HCWWALLEDIT can change them");
             AddLarge(src, "HCWDOOR", "Door", "home", "Cut a door in a wall: pick the position and the side it opens to");
             AddLarge(src, "HCWWINDOW", "Window", "view", "Cut a window in a wall: pick the position");
-            AddLarge(src, "HCWOPENMOVE", "Edit\nOpening", "move", "Move, slide or replace a door or window, or sync the opening schedule from the blocks");
+            AddLarge(src, "HCWOPENMOVE", "Edit\nOpening", "move", "Move, slide, replace, convert or set heights of doors and windows, or sync the opening schedule from the blocks");
+            AddLarge(src, "HCWOPENSCHED", "Opening\nSchedule", "table-of-contents", "Bring the door and window schedule up to date from the blocks and draw it as a table; the take-off deducts the same entries");
             AddLarge(src, "HCWLIFT", "Lift\nShaft", "box", "Draw a lift shaft in plan from its sizes (walls with the door opening, clear shaft, car and doors), or a section through it");
             AddLarge(src, "HCWESCALATOR", "Escalator", "floorplan", "Draw an escalator in plan and side elevation from its rise, angle, width and landings");
             AddLarge(src, "HCWRAIL", "Handrail", "rule--data-quality", "Draw a handrail along a line or polyline, in plan (posts at the corners and along each run) or in elevation (posts and balusters)");

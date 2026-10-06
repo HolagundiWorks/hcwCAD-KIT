@@ -601,6 +601,20 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
+        /// <summary>Draws only the door and window schedule at a picked point (used by HCWOPENSCHED).</summary>
+        internal static bool InsertOpeningTable(Editor ed, Transaction tr, Database db, MeasureBook book)
+        {
+            var table = ScheduleTables(book).FirstOrDefault(t => t.Title == "DOOR AND WINDOW SCHEDULE");
+            if (table == null) { ed.WriteMessage("\nThere are no doors or windows in the schedule yet."); return false; }
+            var ppr = ed.GetPoint("\nPick a point for the door and window schedule (top-left): ");
+            if (ppr.Status != PromptStatus.OK) return false;
+            Util.EnsureLayer(tr, db, LayTbl, 4);
+            double h = MeasureState.TextHeight;
+            CenteredTextLeft(tr, db, new Point3d(ppr.Value.X, ppr.Value.Y + 0.6 * h, 0), table.Title, h * 1.2);
+            DrawTable(tr, db, new Point3d(ppr.Value.X, ppr.Value.Y - 1.5 * h, 0), table.Headers, table.Rows, h);
+            return true;
+        }
+
         private static bool InsertScheduleTable(Editor ed, Transaction tr, Database db, MeasureBook book)
         {
             var tables = ScheduleTables(book);
