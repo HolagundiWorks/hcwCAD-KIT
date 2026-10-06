@@ -1986,9 +1986,9 @@ namespace HCW.Logic.Tests
         {
             var s = new StairSpec { Kind = StairKind.Single, Width = 1200, FloorHeight = 1500, TotalRisers = 10, Going = 250 };
             var d = Section(s, o => { o.ShowHeadroom = true; o.ShowRailing = true; o.ShowRebar = true; });
-            Assert.Single(d.Polys.Where(p => p.Layer == "HEADROOM"));
+            Assert.Single(d.Polys, p => p.Layer == "HEADROOM");
             Assert.Equal(2, d.Polys.Count(p => p.Layer == "RAIL" && p.Closed));
-            Assert.Single(d.Polys.Where(p => p.Layer == "REBAR" && !p.Closed));
+            Assert.Single(d.Polys, p => p.Layer == "REBAR" && !p.Closed);
         }
     }
 }
@@ -2037,7 +2037,7 @@ namespace HCW.Logic.Tests
             double L1 = c.FlightLengths[0];
             var diag = d.Polys.Where(p => !p.Closed && p.Layer == "TREAD" && p.Pts.Count == 2 && Math.Abs(p.Pts[0].X - p.Pts[1].X) > 1 && Math.Abs(p.Pts[0].Y - p.Pts[1].Y) > 1).ToList();
             Assert.Equal(2, diag.Count);
-            Assert.All(diag, p => Assert.True(p.Pts.Any(q => Math.Abs(q.X - L1) < 1e-9 && Math.Abs(q.Y - 1200) < 1e-9)));      // both start at the inner corner
+            Assert.All(diag, p => Assert.Contains(p.Pts, q => Math.Abs(q.X - L1) < 1e-9 && Math.Abs(q.Y - 1200) < 1e-9));      // both start at the inner corner
             Assert.Contains(d.Texts, t => t.Text.StartsWith("3 WINDERS"));
             Assert.Contains(plain.Texts, t => t.Text.StartsWith("LANDING"));
         }
