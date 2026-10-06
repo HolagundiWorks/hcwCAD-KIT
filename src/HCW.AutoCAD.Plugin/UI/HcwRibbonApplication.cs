@@ -156,11 +156,7 @@ namespace HCW.AutoCAD.Plugin.UI
             AddSmallGroup(src,
                 ("RAREA", "Area Label", "area", "Add an area label at the centre of a selected polyline"),
                 ("RTAG", "Relabel", "tag--edit", "Change the room type of an existing label"),
-                ("HCWROOMTH", "Text Height", "text--scale", "Set the room label text height"),
-                ("HCWROOMFLOOR", "Floor Prefix", "floorplan", "Set or clear a floor prefix such as GF or FF"),
-                ("HCWROOMRECT", "Toggle Rect", "square--outline", "Draw or skip the room rectangle"),
-                ("HCWROOMHIDERECT", "Hide Rects", "view--off", "Freeze or thaw the rectangle layer"),
-                ("HCWROOMRESET", "Reset", "reset", "Reset room label settings to defaults"));
+                ("HCWROOMSET", "Label Settings", "settings", "Room label settings: show them, text height, floor prefix, draw or skip the rectangle, hide the rectangles, layer, or reset"));
             return Wrap(src);
         }
 
@@ -286,7 +282,6 @@ namespace HCW.AutoCAD.Plugin.UI
         {
             var src = NewSource("Room Checks");
             AddSmallGroup(src,
-                ("HCWROOMSET", "Settings", "settings", "Show text height, layers, floor prefix and the detected unit"),
                 ("HCWROOMAUDIT", "Audit", "checkmark--outline", "Compare label and rectangle counts"),
                 ("HCWROOMCHECK", "Check Rects", "rule", "Verify room rectangles are closed"),
                 ("HCWROOMREPORT", "Room Report", "report--data", "Rooms as a table with names, sizes, dimensions and areas, from outlines or from room labels; saved as a take-off, drawn, exported to CSV or Excel, or totalled"),

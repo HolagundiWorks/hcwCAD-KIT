@@ -387,7 +387,22 @@ namespace HCW.AutoCAD.Plugin.Commands
         public void HcwRoomLayer() => UI.RoomUnitSelector.Current.SetLayer(Util.Ed);
 
         [CommandMethod("HCWROOMSET")]
-        public void HcwRoomSet() => UI.RoomUnitSelector.Current.ShowSettings(Util.Ed);
+        public void HcwRoomSet()
+        {
+            // one command for the room label settings; each choice is also its own command
+            string what = Util.AskMode("Room label setting", "Show", "Height", "Floor", "Rect", "Hide", "Layer", "Reset");
+            var room = UI.RoomUnitSelector.Current;
+            switch (what)
+            {
+                case "Show": room.ShowSettings(Util.Ed); break;
+                case "Height": room.SetTextHeight(Util.Ed); break;
+                case "Floor": room.SetFloorPrefix(Util.Ed); break;
+                case "Rect": room.ToggleRect(Util.Ed); break;
+                case "Hide": room.HideRect(Util.Ed, Util.Db); break;
+                case "Layer": room.SetLayer(Util.Ed); break;
+                case "Reset": room.ResetAndAnnounce(Util.Ed); break;
+            }
+        }
 
         [CommandMethod("HCWROOMRESET")]
         public void HcwRoomReset() => UI.RoomUnitSelector.Current.ResetAndAnnounce(Util.Ed);

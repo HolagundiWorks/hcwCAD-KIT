@@ -264,6 +264,7 @@ Commands that did closely related jobs share a button, and the command asks whic
 | `MEXPORT` | Export as [Csv/Xlsx] | `MEXPORTX` |
 | `HCWROOMREPORT` | Read the rooms from [Outlines/Labels]; for Labels, [Table/Csv/Total] | `HCWROOMTABLE`, `HCWROOMSCHEDULE`, `HCWROOMTOTAL` |
 | `POLYAREA` | Area [Table/Live/Field/Room/Measure] | `AREALABEL` (`AT`), `AREAFIELD` (`A2F`), `RAREA`, `MAREA` (`MARE`) |
+| `HCWROOMSET` | Room label setting [Show/Height/Floor/Rect/Hide/Layer/Reset] | `HCWROOMTH`, `HCWROOMFLOOR`, `HCWROOMRECT`, `HCWROOMHIDERECT`, `HCWROOMLAYER`, `HCWROOMRESET` |
 | `AUTODIM` | Dimension [Outside/Rooms/Walls/Clear] | `AUTODIMROOM`, `AUTODIMWALL`, `AUTODIMCLEAR` |
 
 ### Settings file

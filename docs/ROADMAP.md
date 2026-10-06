@@ -26,7 +26,6 @@ These are limits of what was built, or items that need something the plugin cann
 
 Found in an audit of every command; each needs a decision on behaviour before it is merged:
 
-- **Room label settings:** `HCWROOMTH`, `HCWROOMFLOOR`, `HCWROOMRECT`, `HCWROOMHIDERECT`, `HCWROOMRESET` and `HCWROOMSET` are small settings commands for one dialog.
 - **Layer checks:** `HCWROOMAUDIT`, `HCWROOMCHECK` and `TXTAUDIT` are audits like `HCWAUDIT`.
 - **Drawing a result in the drawing:** the stair drawing code in `StairCommands` repeats what `GDrawer` does for lifts, escalators and balustrades (layers by role, text, dimensions, hatch); the stair version also tags every object with its ID, which `GDrawer` would need a hook for.
 - **Number increment:** `INCARRAY` and `INCCOPY` differ only in how the copies are placed.
