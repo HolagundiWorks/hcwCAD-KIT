@@ -2236,4 +2236,100 @@ namespace HCW.Logic.Tests
             Assert.False(OpeningFrame.TryParseName("HCW_DX_900x230", out dd, out tt, out ww, out tth));
         }
     }
+
+    public class PolylineJoinTests
+    {
+        private static PolyPath Open(params double[] xy)
+        {
+            var p = new PolyPath();
+            for (int i = 0; i < xy.Length; i += 2) { p.Points.Add(new P2(xy[i], xy[i + 1])); p.Bulges.Add(0); }
+            return p;
+        }
+
+        [Fact]
+        public void ReversedKeepsBulgeSense()
+        {
+            var p = Open(0, 0, 10, 0, 10, 10);
+            p.Bulges[0] = 0.5;
+            var r = p.Reversed();
+            Assert.Equal(-0.5, r.Bulges[1], 9);
+            Assert.Equal(0, r.Bulges[0], 9);
+            Assert.True(PolylineJoin.Same(p, r, 1e-9));
+        }
+
+        [Fact]
+        public void ExactDuplicatesAreFoundEitherWayRound()
+        {
+            var items = new List<PolyItem>
+            {
+                new PolyItem { Path = Open(0, 0, 5, 0, 5, 5), Key = "a" },
+                new PolyItem { Path = Open(5, 5, 5, 0, 0, 0), Key = "a" },
+                new PolyItem { Path = Open(5, 5, 5, 0, 0, 0), Key = "b" },
+            };
+            var res = PolylineJoin.Run(items, 1e-6, false);
+            Assert.Equal(new[] { 1 }, res.Duplicates);
+        }
+
+        [Fact]
+        public void EndsThatMeetAreJoinedWhateverTheirDirection()
+        {
+            var items = new List<PolyItem>
+            {
+                new PolyItem { Path = Open(0, 0, 10, 0), Key = "a" },
+                new PolyItem { Path = Open(20, 0, 10, 0), Key = "a" },
+                new PolyItem { Path = Open(20, 0, 30, 5), Key = "a" },
+            };
+            var res = PolylineJoin.Run(items, 1e-6, true);
+            Assert.Single(res.Joined);
+            var j = res.Joined[0];
+            Assert.Equal(0, j.Keeper);
+            Assert.Equal(new[] { 1, 2 }, j.Absorbed.OrderBy(x => x).ToArray());
+            Assert.Equal(4, j.Path.Points.Count);
+            Assert.Equal(30, j.Path.Last.X, 9);
+        }
+
+        [Fact]
+        public void ARingOfPiecesBecomesAClosedPolyline()
+        {
+            var items = new List<PolyItem>
+            {
+                new PolyItem { Path = Open(0, 0, 10, 0), Key = "a" },
+                new PolyItem { Path = Open(10, 0, 10, 10), Key = "a" },
+                new PolyItem { Path = Open(10, 10, 0, 10), Key = "a" },
+                new PolyItem { Path = Open(0, 10, 0, 0), Key = "a" },
+            };
+            var res = PolylineJoin.Run(items, 1e-6, true);
+            Assert.Single(res.Joined);
+            Assert.True(res.Joined[0].Path.Closed);
+            Assert.Equal(4, res.Joined[0].Path.Points.Count);
+        }
+
+        [Fact]
+        public void DifferentKeysAreNotJoined()
+        {
+            var items = new List<PolyItem>
+            {
+                new PolyItem { Path = Open(0, 0, 10, 0), Key = "a" },
+                new PolyItem { Path = Open(10, 0, 20, 0), Key = "b" },
+            };
+            Assert.Empty(PolylineJoin.Run(items, 1e-6, true).Joined);
+        }
+
+        [Fact]
+        public void AnArcEndsUpAsOneBulgedSegment()
+        {
+            var arc = PolyPath.FromArc(new P2(0, 0), 10, 0, Math.PI / 2);
+            Assert.Equal(Math.Tan(Math.PI / 8), arc.Bulges[0], 9);
+            var items = new List<PolyItem>
+            {
+                new PolyItem { Path = arc, Key = "a" },
+                new PolyItem { Path = Open(0, 10, -10, 10), Key = "a" },
+            };
+            var res = PolylineJoin.Run(items, 1e-6, true);
+            Assert.Single(res.Joined);
+            Assert.Equal(3, res.Joined[0].Path.Points.Count);
+            Assert.Equal(Math.Tan(Math.PI / 8), res.Joined[0].Path.Bulges[0], 9);
+            Assert.Equal(0, res.Joined[0].Path.Bulges[1], 9);
+        }
+    }
 }
