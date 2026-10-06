@@ -20,7 +20,7 @@ namespace HCW.AutoCAD.Plugin.Logic
     /// <summary>The kinds of electrical block the tools know, in the order they are listed. No CAD types are used here.</summary>
     public static class ElectricalKinds
     {
-        public static readonly ElKind[] All =
+        private static readonly ElKind[] Builtin =
         {
             new ElKind { Code = "SB",  Label = "Switchboard",          IsBoard = true, Group = "LT", Setting = "ElectricalBoardBlocks" },
             new ElKind { Code = "LP",  Label = "Light point",          Group = "LT", Setting = "ElectricalLightBlocks" },
@@ -40,6 +40,34 @@ namespace HCW.AutoCAD.Plugin.Logic
             new ElKind { Code = "TV",  Label = "TV",                   Group = "PW", Setting = "ElectricalBlocks_TV" },
             new ElKind { Code = "INV", Label = "Inverter",             Group = "PW", Setting = "ElectricalBlocks_INV" }
         };
+
+        private static ElKind[] _all = Builtin;
+
+        /// <summary>Every kind: the built-in ones, then any added with <see cref="Extend"/>.</summary>
+        public static ElKind[] All => _all;
+
+        /// <summary>
+        /// Adds kinds of your own, written "CODE:Label:GROUP" and separated by ; (GROUP is LT for lighting wiring or PW for power
+        /// wiring, PW if left out): "HT:Heater:PW;MS:Motion sensor:LT". A code already in use, or one with no label, is skipped.
+        /// The block names for a new kind come from the setting ElectricalBlocks_CODE, or ELBLOCKS. Calling it again replaces the earlier additions.
+        /// Returns the full list.
+        /// </summary>
+        public static ElKind[] Extend(string text)
+        {
+            var added = new List<ElKind>();
+            foreach (var item in (text ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var p = item.Split(':');
+                string code = p[0].Trim().ToUpperInvariant();
+                string label = p.Length > 1 ? p[1].Trim() : "";
+                string group = p.Length > 2 ? p[2].Trim().ToUpperInvariant() : "PW";
+                if (code.Length == 0 || label.Length == 0 || code.Any(ch => !char.IsLetterOrDigit(ch))) continue;
+                if (Builtin.Any(k => string.Equals(k.Code, code, StringComparison.OrdinalIgnoreCase)) || added.Any(k => k.Code == code)) continue;
+                added.Add(new ElKind { Code = code, Label = label, Group = group == "LT" ? "LT" : "PW", Setting = "ElectricalBlocks_" + code });
+            }
+            _all = Builtin.Concat(added).ToArray();
+            return _all;
+        }
 
         public static ElKind Find(string code)
             => All.FirstOrDefault(k => string.Equals(k.Code, code, StringComparison.OrdinalIgnoreCase));
@@ -64,6 +92,8 @@ namespace HCW.AutoCAD.Plugin.Logic
         public string Board = "";
         public string Point = "";
         public string Code = "";
+        /// <summary>The load of this point on its own, or null to use the rating of its kind.</summary>
+        public double? Watts;
     }
 
     /// <summary>

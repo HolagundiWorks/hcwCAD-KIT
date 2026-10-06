@@ -45,7 +45,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         private static string _renumber = "Keep";
 
         private static readonly ElKind Board = ElectricalKinds.Find("SB");
-        private static readonly ElKind[] AllKinds = ElectricalKinds.All;
+        private static readonly ElKind[] AllKinds = ElectricalKinds.Extend(Settings.Get("ElectricalExtraKinds", ""));
         private static readonly string[] Groups = { "LT", "PW" };
 
         private static string[] DefaultPatterns(ElKind kind)
@@ -64,6 +64,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             public bool HasIdAttribute;
             /// <summary>That attribute is visible, so the ID already shows beside the block without separate text.</summary>
             public bool IdAttributeVisible;
+            /// <summary>A WATTS attribute on the block: the load of this one point, overriding its kind.</summary>
+            public double? Watts;
             public string CurrentId => Assigned.Length > 0 ? Assigned : Existing;
         }
 
@@ -433,7 +435,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var result = new Analysis { Group = group };
             result.Blocks = blocks.Where(b => b.Kind.IsBoard || b.Kind.Group == group).ToList();
-            result.Nodes = result.Blocks.Select(b => new ElNode { Id = b.CurrentId, Code = b.Kind.Code, IsBoard = b.Kind.IsBoard, Box = b.Box }).ToList();
+            result.Nodes = result.Blocks.Select(b => new ElNode { Id = b.CurrentId, Code = b.Kind.Code, IsBoard = b.Kind.IsBoard, Box = b.Box, Watts = b.Watts }).ToList();
 
             var layers = new HashSet<string>(wiringLayers, StringComparer.OrdinalIgnoreCase);
             var wires = new List<ElWire>();
@@ -594,8 +596,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             var db = Util.Db;
             if (!EnsureBlocks(ed, db)) return;
 
-            var layoutOpt = new PromptKeywordOptions("\nSchedule [Matrix/Board/Point/Load/Circuit/Cable] <" + _layout + ">: ") { AllowNone = true };
-            foreach (var k in new[] { "Matrix", "Board", "Point", "Load", "Circuit", "Cable" }) layoutOpt.Keywords.Add(k);
+            var layoutOpt = new PromptKeywordOptions("\nSchedule [Matrix/Board/Point/Load/Circuit/Cable/Boq/Switch] <" + _layout + ">: ") { AllowNone = true };
+            foreach (var k in new[] { "Matrix", "Board", "Point", "Load", "Circuit", "Cable", "Boq", "Switch" }) layoutOpt.Keywords.Add(k);
             var layout = ed.GetKeywords(layoutOpt);
             if (layout.Status == PromptStatus.OK) _layout = layout.StringResult;
             else if (layout.Status != PromptStatus.None) return;
@@ -709,6 +711,36 @@ namespace HCW.AutoCAD.Plugin.Commands
             ed.WriteMessage("\nELUPDATE: numbers and labels refreshed, " + redrawn + " schedule(s) redrawn.");
         }
 
+        /// <summary>Every board's circuits with breaker, cable, phase and cable length filled in, boards in order, lighting before power.</summary>
+        private static List<CircuitRow> SizedCircuits(List<ElBlock> blocks, List<Analysis> analyses, double mm)
+        {
+            var watts = ElectricalLoad.ParseWatts(Settings.Get("ElectricalWatts", ElectricalLoad.DefaultWatts));
+            var dedicated = ElectricalLoad.ParseCodes(Settings.Get("ElectricalDedicated", ElectricalLoad.DefaultDedicated));
+            double ltLimit = Settings.GetDouble("ElectricalLightingCircuitW", 1000), pwLimit = Settings.GetDouble("ElectricalPowerCircuitW", 3000);
+            double allowance = Settings.GetDouble("ElectricalCableAllowancePct", 10), drop = Settings.GetDouble("ElectricalDropMm", 0) / 1000.0;
+            var boardIds = blocks.Where(b => b.Kind.IsBoard).Select(b => b.CurrentId).ToList();
+
+            var all = new List<CircuitRow>();
+            foreach (var a in analyses)
+            {
+                var mine = ElectricalLoad.Circuits(boardIds, ElectricalSchedule.Links(a.Nodes, a.Nets), watts, ltLimit, pwLimit, dedicated);
+                var lengths = CableLength.PerCircuit(a.Nodes, a.Nets, a.WireList, mine, mm * 1000.0, allowance, drop);
+                foreach (var c in mine) c.LengthM = lengths[c.FullName];
+                all.AddRange(mine);
+            }
+
+            var defaults = new SizingOptions();
+            CircuitSizing.Apply(all, new SizingOptions
+            {
+                Voltage = Settings.GetDouble("ElectricalVoltage", 230), PowerFactor = Settings.GetDouble("ElectricalPowerFactor", 1),
+                Margin = Settings.GetDouble("ElectricalBreakerMargin", 1.25), Phases = Settings.GetInt("ElectricalPhases", 1) == 3 ? 3 : 1,
+                Breakers = CircuitSizing.ParseRatings(Settings.Get("ElectricalBreakers", "6,10,16,20,25,32,40,50,63"), defaults.Breakers),
+                CableTable = CircuitSizing.ParseCableTable(Settings.Get("ElectricalCableTable", "6=1.5;10=1.5;16=2.5;20=4;25=4;32=6;40=10;50=10;63=16"), defaults.CableTable),
+            });
+            var cmp = Comparer<string>.Create(ElectricalSchedule.NaturalCompare);
+            return all.OrderBy(x => x.Board, cmp).ThenBy(x => x.Group == "LT" ? 0 : 1).ThenBy(x => x.Name, cmp).ToList();
+        }
+
         /// <summary>
         /// Draws the schedule with its title at <paramref name="anchor"/> and tags every piece so ELUPDATE can find and redraw it.
         /// Matrix: a row per switchboard and a column per kind of point. Board: a row per board and point. Point: a row per point.
@@ -744,15 +776,42 @@ namespace HCW.AutoCAD.Plugin.Commands
                 rows.Add(ElectricalLoad.ToCells(total));
                 title = "ELECTRICAL LOAD SCHEDULE";
             }
-            else if (layout == "Circuit")
+            else if (layout == "Circuit" || layout == "Boq")
             {
-                var watts = ElectricalLoad.ParseWatts(Settings.Get("ElectricalWatts", ElectricalLoad.DefaultWatts));
-                var dedicated = ElectricalLoad.ParseCodes(Settings.Get("ElectricalDedicated", ElectricalLoad.DefaultDedicated));
-                var circuits = ElectricalLoad.Circuits(blocks.Where(b => b.Kind.IsBoard).Select(b => b.CurrentId), links, watts,
-                    Settings.GetDouble("ElectricalLightingCircuitW", 1000), Settings.GetDouble("ElectricalPowerCircuitW", 3000), dedicated);
-                headers = ElectricalLoad.CircuitHeader;
-                rows.AddRange(circuits.Select(ElectricalLoad.ToCells));
-                title = "ELECTRICAL CIRCUIT SCHEDULE";
+                var circuits = SizedCircuits(blocks, analyses, mm);
+                if (layout == "Boq")
+                {
+                    headers = CableLength.BoqHeader;
+                    rows.AddRange(CableLength.Boq(circuits, (int)Settings.GetDouble("ElectricalCores", 3)));
+                    title = "CABLE BILL OF QUANTITIES";
+                }
+                else
+                {
+                    headers = ElectricalLoad.CircuitHeader;
+                    rows.AddRange(circuits.Select(ElectricalLoad.ToCells));
+                    if (Settings.GetInt("ElectricalPhases", 1) == 3)
+                        foreach (var board in circuits.GroupBy(x => x.Board))
+                        {
+                            var pl = CircuitSizing.PhaseLoads(board);
+                            var row = new string[headers.Length];
+                            for (int i = 0; i < row.Length; i++) row[i] = "";
+                            row[0] = board.Key + " phases"; row[2] = "R " + (pl[0] / 1000).ToString("0.00", CultureInfo.InvariantCulture) + " kW, Y " + (pl[1] / 1000).ToString("0.00", CultureInfo.InvariantCulture)
+                                + " kW, B " + (pl[2] / 1000).ToString("0.00", CultureInfo.InvariantCulture) + " kW";
+                            rows.Add(row);
+                        }
+                    title = "ELECTRICAL CIRCUIT SCHEDULE";
+                }
+            }
+            else if (layout == "Switch")
+            {
+                headers = SwitchControl.Header;
+                double tol = Settings.GetDouble("ElectricalSnapMm", 100) * mm;
+                foreach (var a in analyses.Where(x => x.Group == "LT"))
+                {
+                    var swLinks = SwitchControl.Links(a.Nodes, a.WireList, tol);
+                    rows.AddRange(SwitchControl.Rows(a.Nodes, swLinks).Select(SwitchControl.ToCells));
+                }
+                title = "SWITCH CONTROL SCHEDULE";
             }
             else if (layout == "Cable")
             {
@@ -850,6 +909,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                     {
                         block.HasIdAttribute = true;
                         block.IdAttributeVisible = !att.Invisible;
+                    }
+                    else if (att != null && string.Equals(att.Tag, "WATTS", StringComparison.OrdinalIgnoreCase))
+                    {
+                        double w;
+                        string text = (att.TextString ?? "").Trim().ToLowerInvariant().Replace("w", "").Trim();
+                        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out w) && w >= 0) block.Watts = w;
                     }
                 }
                 result.Add(block);

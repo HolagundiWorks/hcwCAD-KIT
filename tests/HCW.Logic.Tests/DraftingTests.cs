@@ -1305,7 +1305,8 @@ namespace HCW.Logic.Tests
             Assert.Equal(list.Count, total.Circuits);
             Assert.Equal(new[] { "SB-01/L1", "SB-01/P1", "SB-01/P2", "SB-02/L1" }, list.Select(c => c.FullName).ToArray());
             var cells = ElectricalLoad.ToCells(list[1]);
-            Assert.Equal(new[] { "SB-01/P1", "Geyser", "1: GY-01", "2000" }, cells);
+            Assert.Equal(new[] { "SB-01/P1", "Geyser", "1: GY-01", "2000", "", "", "", "", "" }, cells);
+            Assert.Equal(ElectricalLoad.CircuitHeader.Length, cells.Length);
         }
 
         [Fact]
@@ -1684,6 +1685,217 @@ namespace HCW.Logic.Tests
             var rooms = PlanarRooms.AllRooms(segs, 1e-6, 0.6);
             Assert.Single(rooms);
             Assert.Equal(4.54 * 3.54, rooms[0].NetArea, 6);
+        }
+    }
+}
+
+namespace HCW.Logic.Tests
+{
+    public class ElectricalRoadmapTests
+    {
+        private static ElWire W(params double[] xy)
+        {
+            var w = new ElWire();
+            for (int i = 0; i + 1 < xy.Length; i += 2) w.Points.Add(new PlanPoint(xy[i], xy[i + 1]));
+            return w;
+        }
+
+        private static ElNode Node(string id, string code, double x, double y, double half = 0.5) =>
+            new ElNode { Id = id, Code = code, IsBoard = code == "SB", Box = new Box(x - half, y - half, x + half, y + half) };
+
+        [Fact]
+        public void AWireThroughASymbolConnectsToIt()
+        {
+            // a wire from far left to far right passes straight through the light at (5,0); no vertex is near it
+            var nodes = new List<ElNode> { Node("SB-01", "SB", 0, 0), Node("LP-01", "LP", 5, 0), Node("LP-02", "LP", 10, 0) };
+            var wires = new List<ElWire> { W(1, 0, 4, 0), W(6, 0, 9, 0), W(0.5, 0, 10.5, 0) };
+            var nets = ElectricalNet.Build(nodes, wires, 0.01);
+            var withBoard = nets.Single(n => n.Boards.Contains(0));
+            Assert.Contains(1, withBoard.Points);                                  // reached by the long wire passing through
+            Assert.Contains(2, withBoard.Points);
+        }
+
+        [Theory]
+        [InlineData(0, 0, 4, 0, true)]       // through the middle
+        [InlineData(0, 0.4, 4, 0.4, true)]   // through a corner region inside the box
+        [InlineData(0, 2, 4, 2, false)]      // well above
+        [InlineData(0, 0.6, 4, 0.6, true)]   // just outside, within tolerance 0.15
+        [InlineData(0, 0.7, 4, 0.7, false)]
+        [InlineData(1.9, -2, 1.9, 2, true)]  // vertical, crossing
+        public void SegmentBoxDistanceUsesTheWholePiece(double x1, double y1, double x2, double y2, bool reaches)
+        {
+            var box = new Box(1, -0.5, 3, 0.5);
+            Assert.Equal(reaches, ElectricalNet.WireReaches(W(x1, y1, x2, y2), box, 0.15));
+        }
+
+        [Fact]
+        public void ASwitchControlsThePointsOnItsLeg()
+        {
+            // board -- switch -- light1 -- light2, and a second switch -- fan
+            var nodes = new List<ElNode>
+            {
+                Node("SB-01", "SB", 0, 0), Node("SW1-01", "SW1", 4, 0), Node("LP-01", "LP", 8, 0), Node("LP-02", "LP", 12, 0),
+                Node("SW1-02", "SW1", 4, 5), Node("FP-01", "FP", 8, 5),
+            };
+            var wires = new List<ElWire>
+            {
+                W(0.5, 0, 3.5, 0), W(4.5, 0, 7.5, 0), W(8.5, 0, 11.5, 0),
+                W(0.5, 0.2, 3.5, 5), W(4.5, 5, 7.5, 5),
+            };
+            var links = SwitchControl.Links(nodes, wires, 0.01);
+            var rows = SwitchControl.Rows(nodes, links);
+            Assert.Equal(new[] { "SW1-01", "SW1-02" }, rows.Select(r => r.Switch).ToArray());
+            Assert.Equal(new[] { "LP-01", "LP-02" }, rows[0].Controls.ToArray());
+            Assert.Equal(new[] { "FP-01" }, rows[1].Controls.ToArray());
+            Assert.Equal(new[] { "SW1-01", "One way switch", "LP-01, LP-02" }, SwitchControl.ToCells(rows[0]));
+        }
+
+        [Fact]
+        public void TwoWayPartnersShareWhatEitherControls()
+        {
+            // board -- SW2-01 -- SW2-02 -- light
+            var nodes = new List<ElNode> { Node("SB-01", "SB", 0, 0), Node("SW2-01", "SW2", 4, 0), Node("SW2-02", "SW2", 8, 0), Node("LP-01", "LP", 12, 0) };
+            var wires = new List<ElWire> { W(0.5, 0, 3.5, 0), W(4.5, 0, 7.5, 0), W(8.5, 0, 11.5, 0) };
+            var rows = SwitchControl.Rows(nodes, SwitchControl.Links(nodes, wires, 0.01));
+            Assert.Equal(new[] { "LP-01" }, rows[0].Controls.ToArray());
+            Assert.Equal(new[] { "LP-01" }, rows[1].Controls.ToArray());
+        }
+
+        [Fact]
+        public void ASwitchWithNothingBeyondItIsListedAsUnwired()
+        {
+            var nodes = new List<ElNode> { Node("SB-01", "SB", 0, 0), Node("SW1-01", "SW1", 4, 0) };
+            var rows = SwitchControl.Rows(nodes, SwitchControl.Links(nodes, new List<ElWire> { W(0.5, 0, 3.5, 0) }, 0.01));
+            Assert.Single(rows);
+            Assert.Empty(rows[0].Controls);
+            Assert.Equal("not wired to a point", SwitchControl.ToCells(rows[0])[2]);
+        }
+
+        [Fact]
+        public void APointRatedOnItsOwnOverridesItsKind()
+        {
+            var watts = ElectricalLoad.ParseWatts(ElectricalLoad.DefaultWatts);
+            var links = new List<ElLink>
+            {
+                new ElLink { Board = "SB-01", Point = "GY-01", Code = "GY", Watts = 3000 },
+                new ElLink { Board = "SB-01", Point = "GY-02", Code = "GY" },
+                new ElLink { Board = "SB-01", Point = "LP-01", Code = "LP", Watts = 0 },       // rated to nothing: not a load
+            };
+            LoadRow total;
+            var rows = ElectricalLoad.Build(new[] { "SB-01" }, links, watts, 1000, 3000, new HashSet<string> { "GY" }, out total);
+            Assert.Equal(3000 + 2000, rows[0].PowerWatts);
+            Assert.Equal(0, rows[0].LightingPoints);
+            var c = ElectricalLoad.CircuitsOf("SB-01", links, watts, 1000, 3000, new HashSet<string> { "GY" });
+            Assert.Equal(new[] { 3000.0, 2000.0 }, c.Select(x => x.Watts).ToArray());
+        }
+
+        [Fact]
+        public void KindsOfYourOwnAreAddedAndCanBeTakenAway()
+        {
+            try
+            {
+                var all = ElectricalKinds.Extend("ht:Heater:PW; MS : Motion sensor : LT;BAD;XX:;GY:Dup:PW;A-B:Hyphen:PW;ZZ:No group");
+                Assert.Equal("Heater", ElectricalKinds.Find("HT").Label);
+                Assert.Equal("LT", ElectricalKinds.Find("MS").Group);
+                Assert.Equal("PW", ElectricalKinds.Find("ZZ").Group);
+                Assert.Equal("ElectricalBlocks_HT", ElectricalKinds.Find("HT").Setting);
+                Assert.Equal("Geyser", ElectricalKinds.Find("GY").Label);         // a built-in code is not replaced
+                Assert.Null(ElectricalKinds.Find("BAD"));
+                Assert.Null(ElectricalKinds.Find("XX"));
+                Assert.Null(ElectricalKinds.Find("A-B"));
+                Assert.Equal(all.Length, ElectricalKinds.All.Length);
+                Assert.Equal(ElectricalKinds.All.Length, ElectricalKinds.All.Select(k => k.Code).Distinct().Count());
+            }
+            finally { ElectricalKinds.Extend(""); }
+            Assert.Null(ElectricalKinds.Find("HT"));
+        }
+
+        [Fact]
+        public void BreakersCablesAndPhases()
+        {
+            var circuits = new List<CircuitRow>
+            {
+                new CircuitRow { Board = "SB-01", Name = "P1", Watts = 2000 },          // 8.7 A -> x1.25 = 10.9 -> 16 A -> 2.5
+                new CircuitRow { Board = "SB-01", Name = "L1", Watts = 460 },           // 2 A -> 2.5 -> 6 A -> 1.5
+                new CircuitRow { Board = "SB-01", Name = "P2", Watts = 1500 },
+                new CircuitRow { Board = "SB-01", Name = "P3", Watts = 3500 },          // 15.2 A -> 19 -> 20 A -> 4
+                new CircuitRow { Board = "SB-01", Name = "P4", Watts = 20000 },         // too big for the list
+            };
+            CircuitSizing.Apply(circuits, new SizingOptions { Phases = 1 });
+            Assert.Equal(2000 / 230.0, circuits[0].Amps, 9);
+            Assert.Equal(16, circuits[0].Breaker); Assert.Equal(2.5, circuits[0].CableMm2);
+            Assert.Equal(6, circuits[1].Breaker); Assert.Equal(1.5, circuits[1].CableMm2);
+            Assert.Equal(20, circuits[3].Breaker); Assert.Equal(4, circuits[3].CableMm2);
+            Assert.True(circuits[4].BreakerOver);
+            Assert.Equal(63, circuits[4].Breaker); Assert.Equal(16, circuits[4].CableMm2);
+            Assert.All(circuits, c => Assert.Equal("", c.Phase));
+            Assert.Equal(">63", ElectricalLoad.ToCells(circuits[4])[5]);
+            Assert.Equal("16", ElectricalLoad.ToCells(circuits[0])[5]);
+
+            CircuitSizing.Apply(circuits, new SizingOptions { Phases = 3 });
+            var loads = CircuitSizing.PhaseLoads(circuits);
+            Assert.Equal(circuits.Sum(c => c.Watts), loads.Sum());
+            Assert.Equal(20000, loads[0]);                                           // the 20 kW circuit is first, on R
+            Assert.Equal("R", circuits.First(c => c.Name == "P4").Phase);
+            Assert.True(Math.Abs(loads[1] - loads[2]) <= 3500);                       // the rest spread over Y and B
+        }
+
+        [Fact]
+        public void MarginVoltageAndPowerFactorMoveTheBreaker()
+        {
+            var c = new List<CircuitRow> { new CircuitRow { Board = "SB-01", Name = "P1", Watts = 2300 } };     // 10 A at 230 V
+            CircuitSizing.Apply(c, new SizingOptions { Margin = 1.0 });
+            Assert.Equal(10, c[0].Breaker);
+            CircuitSizing.Apply(c, new SizingOptions { Margin = 1.25 });
+            Assert.Equal(16, c[0].Breaker);
+            CircuitSizing.Apply(c, new SizingOptions { Margin = 1.0, PowerFactor = 0.8 });
+            Assert.Equal(16, c[0].Breaker);                                                                      // 12.5 A
+            CircuitSizing.Apply(c, new SizingOptions { Margin = 1.0, Voltage = 115 });
+            Assert.Equal(20, c[0].Breaker);                                                                      // 20 A
+        }
+
+        [Fact]
+        public void TablesParseWithFallbacks()
+        {
+            var fb = new SizingOptions().CableTable;
+            var t = CircuitSizing.ParseCableTable("6=1.5; 16=2.5 ,bad,x=2;10=", fb);
+            Assert.Equal(new[] { 6.0, 16.0 }, t.Keys.ToArray());
+            Assert.Same(fb, CircuitSizing.ParseCableTable("nonsense", fb));
+            Assert.Equal(new[] { 10.0, 16.0, 20.0 }, CircuitSizing.ParseRatings("20, 10;16 ,10,-5,abc", new double[] { 1 }));
+            Assert.Equal(new double[] { 1 }, CircuitSizing.ParseRatings("", new double[] { 1 }));
+        }
+
+        [Fact]
+        public void CableLengthPerCircuitAndTheBoq()
+        {
+            // one board, two lighting circuits sharing the wires: SB -- LP-01 -- LP-02 -- LP-03 (1 m units per metre = 1)
+            var nodes = new List<ElNode> { Node("SB-01", "SB", 0, 0), Node("LP-01", "LP", 4, 0), Node("LP-02", "LP", 8, 0), Node("LP-03", "LP", 12, 0) };
+            var wires = new List<ElWire> { W(0.5, 0, 3.5, 0), W(4.5, 0, 7.5, 0), W(8.5, 0, 11.5, 0) };      // 3 + 3 + 3 = 9
+            var nets = ElectricalNet.Build(nodes, wires, 0.01);
+            var circuits = new List<CircuitRow>
+            {
+                new CircuitRow { Board = "SB-01", Name = "L1", Points = { "LP-01", "LP-02" }, CableMm2 = 1.5 },
+                new CircuitRow { Board = "SB-01", Name = "L2", Points = { "LP-03" }, CableMm2 = 1.5 },
+            };
+            var len = CableLength.PerCircuit(nodes, nets, wires, circuits, 1, 10, 0.5);
+            // net length 9 shared 2:1, plus 0.5 drop per point, plus 10 %
+            Assert.Equal((9.0 * 2 / 3 + 0.5 * 2) * 1.1, len["SB-01/L1"], 9);
+            Assert.Equal((9.0 / 3 + 0.5) * 1.1, len["SB-01/L2"], 9);
+            foreach (var c in circuits) c.LengthM = len[c.FullName];
+            var boq = CableLength.Boq(circuits, 3);
+            Assert.Equal(new[] { "1.5", "3", "2", (len["SB-01/L1"] + len["SB-01/L2"]).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) }, boq[0]);
+            Assert.Equal("TOTAL", boq[1][0]);
+            Assert.Equal(CableLength.BoqHeader.Length, boq[0].Length);
+        }
+
+        [Fact]
+        public void ARunWithNoCircuitPointOnItIsLeftOut()
+        {
+            var nodes = new List<ElNode> { Node("SB-01", "SB", 0, 0), Node("LP-01", "LP", 4, 0) };
+            var wires = new List<ElWire> { W(0.5, 0, 3.5, 0) };
+            var nets = ElectricalNet.Build(nodes, wires, 0.01);
+            var len = CableLength.PerCircuit(nodes, nets, wires, new List<CircuitRow> { new CircuitRow { Board = "SB-01", Name = "L1", Points = { "GHOST" } } }, 1, 0, 0);
+            Assert.Equal(0, len["SB-01/L1"]);
         }
     }
 }

@@ -13,6 +13,10 @@ namespace HCW.AutoCAD.Plugin.Logic
         public bool IsBoard;
         /// <summary>The block's extents (or a small box around its insertion point).</summary>
         public Box Box;
+        /// <summary>The load of this one point in watts when it is rated on its own (a WATTS attribute); null uses the rating of its kind.</summary>
+        public double? Watts;
+        /// <summary>A one way or two way switch.</summary>
+        public bool IsSwitch => Code != null && Code.StartsWith("SW", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>One line, polyline or arc, as its vertices in order.</summary>
@@ -94,7 +98,7 @@ namespace HCW.AutoCAD.Plugin.Logic
                 {
                     if (boxes[k].MaxX < nb.MinX - tolerance || boxes[k].MinX > nb.MaxX + tolerance
                         || boxes[k].MaxY < nb.MinY - tolerance || boxes[k].MinY > nb.MaxY + tolerance) continue;
-                    if (wires[k].Points.Any(p => Distance(p, nb) <= tolerance)) reaches[n].Add(k);
+                    if (WireReaches(wires[k], nb, tolerance)) reaches[n].Add(k);
                 }
                 // a point is a junction: everything that reaches it is one circuit
                 if (!nodes[n].IsBoard)
@@ -117,6 +121,41 @@ namespace HCW.AutoCAD.Plugin.Logic
                 }
             }
             return nets.Values.Where(x => x.Boards.Count + x.Points.Count > 0).ToList();
+        }
+
+        /// <summary>
+        /// A wire reaches a box when a vertex is within the tolerance of it, or when one of its straight pieces passes within the
+        /// tolerance (a wire that runs straight through a symbol connects to it).
+        /// </summary>
+        public static bool WireReaches(ElWire wire, Box box, double tolerance)
+        {
+            var pts = wire.Points;
+            if (pts.Count == 1) return Distance(pts[0], box) <= tolerance;
+            for (int i = 0; i + 1 < pts.Count; i++)
+                if (SegmentBoxDistance(pts[i], pts[i + 1], box) <= tolerance) return true;
+            return false;
+        }
+
+        /// <summary>The shortest distance between a segment and a box (0 when they touch or cross).</summary>
+        public static double SegmentBoxDistance(PlanPoint a, PlanPoint b, Box box)
+        {
+            // Liang-Barsky clip: does the segment cross the box?
+            double t0 = 0, t1 = 1, dx = b.X - a.X, dy = b.Y - a.Y;
+            double[] p = { -dx, dx, -dy, dy };
+            double[] q = { a.X - box.MinX, box.MaxX - a.X, a.Y - box.MinY, box.MaxY - a.Y };
+            bool crosses = true;
+            for (int i = 0; i < 4 && crosses; i++)
+            {
+                if (Math.Abs(p[i]) < 1e-15) { if (q[i] < 0) crosses = false; continue; }
+                double r = q[i] / p[i];
+                if (p[i] < 0) { if (r > t1) crosses = false; else if (r > t0) t0 = r; }
+                else { if (r < t0) crosses = false; else if (r < t1) t1 = r; }
+            }
+            if (crosses) return 0;
+            double best = Math.Min(Distance(a, box), Distance(b, box));
+            var corners = new[] { new PlanPoint(box.MinX, box.MinY), new PlanPoint(box.MaxX, box.MinY), new PlanPoint(box.MaxX, box.MaxY), new PlanPoint(box.MinX, box.MaxY) };
+            foreach (var corner in corners) best = Math.Min(best, DistanceToSegment(corner, a, b));
+            return best;
         }
 
         /// <summary>Distance from a point to a box (0 when inside).</summary>

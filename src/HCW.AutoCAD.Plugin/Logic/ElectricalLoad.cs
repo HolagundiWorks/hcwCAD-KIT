@@ -27,6 +27,12 @@ namespace HCW.AutoCAD.Plugin.Logic
         public string Group = "LT";
         public List<string> Points = new List<string>();
         public double Watts;
+        /// <summary>Filled in by <see cref="CircuitSizing.Apply"/>.</summary>
+        public double Amps, Breaker, CableMm2;
+        public bool BreakerOver;
+        public string Phase = "";
+        /// <summary>Metres of cable on this circuit, from <see cref="CableLength.PerCircuit"/>; null when not worked out.</summary>
+        public double? LengthM;
         public string FullName => Board + "/" + Name;
     }
 
@@ -97,9 +103,9 @@ namespace HCW.AutoCAD.Plugin.Logic
         {
             var cmp = Comparer<string>.Create(ElectricalSchedule.NaturalCompare);
             var pts = links.GroupBy(x => x.Point).Select(g => g.First())
-                .Select(l => new { l.Point, Kind = ElectricalKinds.Find(l.Code) })
+                .Select(l => new { l.Point, l.Watts, Kind = ElectricalKinds.Find(l.Code) })
                 .Where(x => x.Kind != null && !x.Kind.IsBoard)
-                .Select(x => new { x.Point, x.Kind, W = watts.TryGetValue(x.Kind.Code, out double w) ? w : 0 })
+                .Select(x => new { x.Point, x.Kind, W = x.Watts ?? (watts.TryGetValue(x.Kind.Code, out double w) ? w : 0) })
                 .Where(x => x.W > 0)
                 .OrderBy(x => x.Point, cmp).ToList();
 
@@ -149,11 +155,16 @@ namespace HCW.AutoCAD.Plugin.Logic
             return all;
         }
 
-        public static string[] CircuitHeader => new[] { "Circuit", "Type", "Points", "Load W" };
+        public static string[] CircuitHeader => new[] { "Circuit", "Type", "Points", "Load W", "Current A", "MCB A", "Cable mm2", "Phase", "Cable m" };
 
         public static string[] ToCells(CircuitRow c) => new[]
         {
             c.FullName, c.Kind, c.Points.Count + ": " + string.Join(", ", c.Points), c.Watts.ToString("0", CultureInfo.InvariantCulture),
+            c.Amps <= 0 ? "" : c.Amps.ToString("0.0", CultureInfo.InvariantCulture),
+            c.Breaker <= 0 ? "" : (c.BreakerOver ? ">" : "") + c.Breaker.ToString("0.#", CultureInfo.InvariantCulture),
+            c.CableMm2 <= 0 ? "" : c.CableMm2.ToString("0.##", CultureInfo.InvariantCulture),
+            c.Phase,
+            c.LengthM.HasValue ? c.LengthM.Value.ToString("0.0", CultureInfo.InvariantCulture) : "",
         };
 
         /// <summary>
@@ -186,7 +197,9 @@ namespace HCW.AutoCAD.Plugin.Logic
                 var kind = ElectricalKinds.Find(l.Code);
                 if (kind == null || kind.IsBoard) continue;
                 double w;
-                if (!watts.TryGetValue(kind.Code, out w) || w <= 0) continue;
+                if (l.Watts.HasValue) w = l.Watts.Value;
+                else if (!watts.TryGetValue(kind.Code, out w)) continue;
+                if (w <= 0) continue;
                 if (kind.Group == "LT") { row.LightingPoints++; row.LightingWatts += w; }
                 else { row.PowerPoints++; row.PowerWatts += w; }
             }

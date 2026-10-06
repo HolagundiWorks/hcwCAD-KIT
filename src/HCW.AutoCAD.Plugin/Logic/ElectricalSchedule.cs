@@ -87,7 +87,7 @@ namespace HCW.AutoCAD.Plugin.Logic
             var links = new List<ElLink>();
             foreach (var entry in BoardsOfPoints(nets))
                 foreach (int b in entry.Value)
-                    links.Add(new ElLink { Board = nodes[b].Id, Point = nodes[entry.Key].Id, Code = nodes[entry.Key].Code });
+                    links.Add(new ElLink { Board = nodes[b].Id, Point = nodes[entry.Key].Id, Code = nodes[entry.Key].Code, Watts = nodes[entry.Key].Watts });
             return links;
         }
     }
