@@ -126,7 +126,8 @@ namespace HCW.AutoCAD.Plugin.Logic
                 }
                 else
                 {
-                    Rect(d, L1, 0, L1 + LL, LW, "PLAN");                                   // landing across both flights
+                    Rect(d, L1, 0, L1 + LL, LW, "PLAN");                                   // landing across both flights, or the winder zone
+                    if (s.HasWinders) WinderLinesU(d, L1, W, well, c.WinderGoing);
                     Rect(d, L1 - L2, W + well, L1, LW, "PLAN");                            // flight 2, returning
                     for (int k = 1; k <= r2 - 2; k++) Seg(d, L1 - k * G, W + well, L1 - k * G, LW, "TREAD");
                     if (s.Nosing > 0)
@@ -134,7 +135,7 @@ namespace HCW.AutoCAD.Plugin.Logic
                     Arrow(d, L1 - 0.1 * L2, W + well + W / 2, L1 - 0.9 * L2, W + well + W / 2, th);
                     d.Texts.Add(new GText { Text = "UP", X = L1 - 0.1 * L2, Y = W + well + W / 2 + 0.4 * th, Height = th });
                     d.Texts.Add(new GText { Text = "FLIGHT 2 - " + r2 + " RISERS", X = L1 - L2 / 2, Y = W + well + W * 0.22, Height = th, Centre = true });
-                    d.Texts.Add(new GText { Text = "LANDING " + StairFormat.Level(c.LandingLevel, o.Imperial), X = L1 + LL / 2, Y = LW / 2, Height = th, Centre = true });
+                    d.Texts.Add(new GText { Text = (s.HasWinders ? "6 WINDERS " : "LANDING ") + StairFormat.Level(c.LandingLevel, o.Imperial), X = L1 + LL / 2, Y = LW / 2, Height = th, Centre = true, Rotation = s.HasWinders ? Math.PI / 2 : 0 });
                     if (well > 0)
                     {
                         double left = Math.Min(0, L1 - L2);
@@ -158,6 +159,43 @@ namespace HCW.AutoCAD.Plugin.Logic
             var box = d.Extents();
             d.Texts.Add(new GText { Text = "STAIRCASE PLAN", X = (box.MinX + box.MaxX) / 2, Y = box.MinY - 3 * o.DimOffset, Height = 1.4 * th, Centre = true });
             return d;
+        }
+
+        /// <summary>
+        /// The lines between the six winders of a U stair, in the zone one stair width long beyond the first flight. The walkline runs a quarter circle
+        /// of radius W/2 round the inner corner of the first flight, straight across the well, then a quarter circle round the inner corner of the second
+        /// flight; it is divided into six equal goings and each division line is drawn square to it, from the inner corner (in the bends) to the outer edge.
+        /// </summary>
+        private static void WinderLinesU(GDrawing d, double L1, double W, double well, double going)
+        {
+            double a = Math.PI * W / 4;                       // one quarter circle on the walkline
+            for (int i = 1; i <= 5; i++)
+            {
+                double sd = i * going;
+                if (sd <= a + 1e-9)
+                {
+                    double phi = sd / (W / 2);
+                    double sx = Math.Sin(phi), cy = Math.Cos(phi);
+                    double t = double.MaxValue;
+                    if (sx > 1e-9) t = Math.Min(t, W / sx);
+                    if (cy > 1e-9) t = Math.Min(t, W / cy);
+                    Seg(d, L1, W, L1 + sx * t, W - cy * t, "TREAD");
+                }
+                else if (sd >= a + well - 1e-9)
+                {
+                    double psi = (sd - a - well) / (W / 2);
+                    double cx = Math.Cos(psi), sy = Math.Sin(psi);
+                    double t = double.MaxValue;
+                    if (cx > 1e-9) t = Math.Min(t, W / cx);
+                    if (sy > 1e-9) t = Math.Min(t, W / sy);
+                    Seg(d, L1, W + well, L1 + cx * t, W + well + sy * t, "TREAD");
+                }
+                else
+                {
+                    double v = W + (sd - a);
+                    Seg(d, L1, v, L1 + W, v, "TREAD");
+                }
+            }
         }
 
         /// <summary>"9 x 270 = 2430": treads, going, and the length they make.</summary>
@@ -298,11 +336,12 @@ namespace HCW.AutoCAD.Plugin.Logic
             double r = c.Rise, G = s.Going, Gw = c.WinderGoing, tw = s.WaistThickness, tl = s.LandingThickness;
             double th = o.TextHeight, ext = o.FloorSlabLength, H = s.FloorHeight;
             int r1 = c.FlightRisers[0], r2 = c.FlightRisers[1];
-            int n = r1 + 2 + r2;
+            int nw = s.WinderTreads;
+            int n = r1 + (nw - 1) + r2;
 
-            // the going of the tread after each riser: flight 1, three winders, flight 2
+            // the going of the tread after each riser: flight 1, the winders, flight 2
             var goings = new List<double>();
-            for (int k = 0; k < n - 1; k++) goings.Add(k < r1 - 1 ? G : k < r1 + 2 ? Gw : G);
+            for (int k = 0; k < n - 1; k++) goings.Add(k < r1 - 1 ? G : k < r1 + nw - 1 ? Gw : G);
             var xs = new List<double> { 0 };
             for (int k = 0; k < n - 1; k++) xs.Add(xs[k] + goings[k]);                 // x of each riser
 
@@ -337,16 +376,16 @@ namespace HCW.AutoCAD.Plugin.Logic
             var flights = new List<FlightInfo>
             {
                 new FlightInfo { X0 = 0, Y0 = 0, Risers = r1, Dir = +1, Soffit = new Soffit(0, 0, r, G, tw / Math.Cos(Math.Atan2(r, G)), +1), Theta = Math.Atan2(r, G) },
-                new FlightInfo { X0 = xs[r1 + 2], Y0 = (r1 + 2) * r, Risers = r2, Dir = +1,
-                    Soffit = new Soffit(xs[r1 + 2], (r1 + 2) * r, r, G, tw / Math.Cos(Math.Atan2(r, G)), +1), Theta = Math.Atan2(r, G) },
+                new FlightInfo { X0 = xs[r1 + nw - 1], Y0 = (r1 + nw - 1) * r, Risers = r2, Dir = +1,
+                    Soffit = new Soffit(xs[r1 + nw - 1], (r1 + nw - 1) * r, r, G, tw / Math.Cos(Math.Atan2(r, G)), +1), Theta = Math.Atan2(r, G) },
             };
             FlightDetails(d, s, c, o, flights);
 
-            double xw0 = xs[r1 - 1], xw1 = xs[r1 + 2];
+            double xw0 = xs[r1 - 1], xw1 = xs[r1 + nw - 1];
             double xMax = xEnd;
             d.Texts.Add(new GText
             {
-                Text = "3 WINDERS - GOING " + StairFormat.Length(Gw, o.Imperial) + " ON THE WALKLINE",
+                Text = nw + " WINDERS - GOING " + StairFormat.Length(Gw, o.Imperial) + " ON THE WALKLINE",
                 X = (xw0 + xw1) / 2, Y = c.LandingLevel + r - 1.6 * th - tw, Height = th, Centre = true
             });
             d.Texts.Add(new GText
@@ -364,7 +403,7 @@ namespace HCW.AutoCAD.Plugin.Logic
             Dim(d, 0, 0, 0, r, -off, r / 2, StairFormat.Length(r, o.Imperial));
             Dim(d, 0, r, G, r, G / 2, r + off, StairFormat.Length(G, o.Imperial));
             Dim(d, 0, 0, xs[r1 - 1], 0, xs[r1 - 1] / 2, -1.5 * off, Counted(r1 - 1, G, o));
-            Dim(d, xw0, -tl * 0, xw1, 0, (xw0 + xw1) / 2, -1.5 * off, "3 x " + StairFormat.Length(Gw, o.Imperial) + " = " + StairFormat.Length(3 * Gw, o.Imperial));
+            Dim(d, xw0, -tl * 0, xw1, 0, (xw0 + xw1) / 2, -1.5 * off, nw + " x " + StairFormat.Length(Gw, o.Imperial) + " = " + StairFormat.Length(nw * Gw, o.Imperial));
             Dim(d, xMax, 0, xMax, H, xMax + off, H / 2, StairFormat.Length(H, o.Imperial));
 
             var box = d.Extents();

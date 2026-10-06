@@ -53,17 +53,18 @@ namespace HCW.AutoCAD.Plugin.Logic
 
             if (s.HasWinders)
             {
-                // the winders are three treads and two risers on one slab across the stair width, at their going on the walkline
+                // the winders are their treads and one fewer risers on one slab one stair width wide, at their going on the walkline
+                int nw = s.WinderTreads;
                 double gw = c.WinderGoing * mm;
-                double slope = Math.Sqrt(3 * gw * 3 * gw + 2 * rise * 2 * rise);
-                double stepArea = 0.5 * gw * rise * 2;
+                double slope = Math.Sqrt(nw * gw * nw * gw + (nw - 1) * rise * (nw - 1) * rise);
+                double stepArea = 0.5 * gw * rise * (nw - 1);
                 q.WaistConcrete += width * waist * slope;
                 q.StepsConcrete += stepArea * width;
                 q.Soffit += width * slope;
                 q.FlightSides += 2.0 * (waist * slope + stepArea);
-                q.RiserShuttering += width * rise * 2;
-                q.TreadFinish += width * gw * 3;
-                q.RiserFinish += width * rise * 2;
+                q.RiserShuttering += width * rise * (nw - 1);
+                q.TreadFinish += width * gw * nw;
+                q.RiserFinish += width * rise * (nw - 1);
             }
             else if (s.TwoFlights)
             {

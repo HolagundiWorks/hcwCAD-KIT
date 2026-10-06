@@ -281,7 +281,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
 
             if (!Number(ed, "Tread / going", s.Going, u, out v)) return false; s.Going = v;
-            if (s.Kind == StairKind.L)
+            if (s.Kind == StairKind.L || s.Kind == StairKind.U)
             {
                 var wo = new PromptKeywordOptions("\nLanding or winders [Landing/Winders] <" + (s.Winders ? "Winders" : "Landing") + ">: ") { AllowNone = true };
                 wo.Keywords.Add("Landing");
@@ -295,7 +295,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             {
                 if (!Number(ed, "Landing length", s.LandingLength, u, out v)) return false; s.LandingLength = v;
             }
-            if (s.Kind == StairKind.DogLeg || s.Kind == StairKind.U)
+            if ((s.Kind == StairKind.DogLeg || s.Kind == StairKind.U) && !s.HasWinders)
             {
                 if (!Number(ed, "Landing width (0 = the width of both flights)", s.LandingWidthOverride, u, out v, true)) return false;
                 s.LandingWidthOverride = Math.Max(0, v);
@@ -369,7 +369,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             ed.WriteMessage(row("Pitch", c.Pitch.ToString("0.0", CultureInfo.InvariantCulture) + " deg"));
             for (int i = 0; i < c.FlightRisers.Length; i++)
                 ed.WriteMessage(row("Flight " + (i + 1), c.FlightRisers[i] + " risers, " + c.FlightTreads[i] + " treads, length " + u.Fmt(c.FlightLengths[i])));
-            if (s.HasWinders) ed.WriteMessage(row("Winders", "3 treads, going " + u.Fmt(c.WinderGoing) + " on the walkline"));
+            if (s.HasWinders) ed.WriteMessage(row("Winders", s.WinderTreads + " treads, going " + u.Fmt(c.WinderGoing) + " on the walkline"));
             if (s.TwoFlights)
                 ed.WriteMessage(row("Intermediate level", StairFormat.Level(c.LandingLevel, u.Imperial)));
             ed.WriteMessage(row("Levels", StairFormat.Level(c.BottomLevel, u.Imperial) + " to " + StairFormat.Level(c.TopLevel, u.Imperial)));

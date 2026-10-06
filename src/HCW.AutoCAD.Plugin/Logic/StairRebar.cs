@@ -61,7 +61,8 @@ namespace HCW.AutoCAD.Plugin.Logic
             if (s.HasWinders)
             {
                 double gw = c.WinderGoing;
-                double slope = Math.Sqrt(3 * gw * 3 * gw + 2 * c.Rise * 2 * c.Rise);
+                int nw = s.WinderTreads;
+                double slope = Math.Sqrt(nw * gw * nw * gw + (nw - 1) * c.Rise * (nw - 1) * c.Rise);
                 rows.Add(new BarRow
                 {
                     Mark = "MW", Description = "Winders main", Dia = o.MainDia,

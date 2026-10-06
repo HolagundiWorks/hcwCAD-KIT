@@ -19,7 +19,7 @@ These are limits of what was built, or items that need something the plugin cann
 - **Copy/array.** `INCARRAY` and `INCCOPY` deep-clone the selection once per copy. Cloning entities directly would be lighter but can lose block attributes. Measure on a large drawing before changing it.
 - **Single-line (centreline) walls** and mixed drawings are not handled by the auto dimensions: only faces (two lines or a closed outline).
 - **Lift and escalator** are drawings from sizes, not a design; a lift pit, machine room and overhead are inputs.
-- **Winders** are for L stairs only. U stairs keep landings.
+- **Winders** are for L and U stairs. Dog-leg stairs keep landings, and the winder slab is worked along the walkline, not as exact kite areas.
 - **Deduction matching.** Index walls by bounding box for very large selections (a box test already rejects most pairs).
 
 ## Quality

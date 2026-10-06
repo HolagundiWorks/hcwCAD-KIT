@@ -2988,4 +2988,106 @@ namespace HCW.Logic.Tests
             Assert.False(LintelRules.AppliesToFloor("First", "Ground"));
         }
     }
+
+    public class UStairWinderTests
+    {
+        private static StairSpec U(bool winders = true, double well = 300) => new StairSpec
+        {
+            Kind = StairKind.U, Width = 1200, FloorHeight = 3300, TotalRisers = 22, FirstFlightRisers = 8, Going = 250, WellWidth = well,
+            LandingLength = 1500, WaistThickness = 150, LandingThickness = 150, Winders = winders,
+        };
+
+        [Fact]
+        public void SixWindersTakeFiveExtraRisersAndShareTheWalklineEqually()
+        {
+            var s = U();
+            Assert.True(s.HasWinders);
+            Assert.Equal(6, s.WinderTreads);
+            Assert.Equal(5, s.WinderExtraRisers);
+            Assert.Equal(22 - 8 - 5, s.SecondFlightRisers);
+            var c = StairCalc.Calculate(s);
+            // two quarter circles on a half-width radius and the straight across the well, in six
+            Assert.Equal((Math.PI * 1200 / 2 + 300) / 6, c.WinderGoing, 9);
+            Assert.Equal(1200, c.LandingLengthUsed);
+            Assert.Equal(2 * 1200 + 300, c.LandingWidth);
+            Assert.True(c.CanDraw);
+            Assert.Equal(3, StairCalc.Calculate(new StairSpec { Kind = StairKind.L, Width = 1200, FloorHeight = 3000, TotalRisers = 20, FirstFlightRisers = 8, Going = 250, Winders = true }).FlightRisers.Length + 1);
+        }
+
+        [Fact]
+        public void WithoutAWellTheGoingIsTheQuarterCircleDividedByThree()
+        {
+            var c = StairCalc.Calculate(U(true, 0));
+            Assert.Equal(Math.PI * 1200 / 12, c.WinderGoing, 9);
+        }
+
+        [Fact]
+        public void PlanHasFiveDividingLinesInsideTheZoneAndTheLandingIsGone()
+        {
+            var s = U();
+            var c = StairCalc.Calculate(s);
+            var d = StairGeometry.Plan(s, c, new StairOptions());
+            double L1 = c.FlightLengths[0], W = 1200, well = 300;
+            var lines = d.Polys.Where(p => !p.Closed && p.Layer == "TREAD" && p.Pts.Count == 2 && p.Pts.All(q => q.X >= L1 - 1e-6 && q.X <= L1 + W + 1e-6)).ToList();
+            Assert.Equal(5, lines.Count);
+            Assert.All(lines, p => Assert.True(p.Pts.All(q => q.Y >= -1e-6 && q.Y <= 2 * W + well + 1e-6)));
+            // the middle division is square to the walkline: straight across the well strip's middle
+            Assert.Contains(lines, p => Math.Abs(p.Pts[0].Y - p.Pts[1].Y) < 1e-6 && p.Pts[0].Y > W - 1e-6 && p.Pts[0].Y < W + well + 1e-6);
+            Assert.Contains(d.Texts, t => t.Text.StartsWith("6 WINDERS"));
+            var plain = StairGeometry.Plan(U(false), StairCalc.Calculate(U(false)), new StairOptions());
+            Assert.Contains(plain.Texts, t => t.Text.StartsWith("LANDING"));
+        }
+
+        [Fact]
+        public void EveryDivisionLineIsAtAnEqualWalklineDistanceFromTheLast()
+        {
+            // With no well the lines are the two L kites: 30 and 60 degrees in each corner, so 4 diagonals plus the line across the middle.
+            var s = U(true, 0);
+            var c = StairCalc.Calculate(s);
+            var d = StairGeometry.Plan(s, c, new StairOptions());
+            double L1 = c.FlightLengths[0];
+            var lines = d.Polys.Where(p => !p.Closed && p.Layer == "TREAD" && p.Pts.Count == 2 && p.Pts.All(q => q.X >= L1 - 1e-6)).ToList();
+            Assert.Equal(5, lines.Count);
+            Assert.Equal(4, lines.Count(p => Math.Abs(p.Pts[0].Y - p.Pts[1].Y) > 1 && Math.Abs(p.Pts[0].X - p.Pts[1].X) > 1));
+            Assert.Contains(lines, p => Math.Abs(p.Pts[0].Y - 1200) < 1e-6 && Math.Abs(p.Pts[1].Y - 1200) < 1e-6);
+        }
+
+        [Fact]
+        public void SectionIsOneDevelopedSlabWithTwentyTwoRisers()
+        {
+            var s = U();
+            var c = StairCalc.Calculate(s);
+            var d = StairGeometry.Section(s, c, new StairOptions());
+            var slab = d.Polys.Where(p => p.Hatch).OrderByDescending(p => p.Pts.Count).First();
+            Assert.Equal(3300, slab.Pts.Max(p => p.Y), 9);
+            Assert.Contains(d.Texts, t => t.Text.StartsWith("6 WINDERS"));
+            int verticals = 0;
+            for (int i = 0; i + 1 < slab.Pts.Count; i++)
+                if (Math.Abs(slab.Pts[i].X - slab.Pts[i + 1].X) < 1e-9 && Math.Abs(slab.Pts[i + 1].Y - slab.Pts[i].Y - 150) < 1e-6) verticals++;
+            Assert.Equal(22, verticals);
+        }
+
+        [Fact]
+        public void QuantitiesAndBarsCoverTheSixWinders()
+        {
+            var s = U();
+            var c = StairCalc.Calculate(s);
+            var q = StairQuantities.Compute(s, c);
+            Assert.Equal(0, q.LandingConcrete);
+            double finish = q.TreadFinish;
+            double expectedTreads = 1.2 * 0.25 * (c.FlightTreads[0] + c.FlightTreads[1]) + 1.2 * (c.WinderGoing / 1000) * 6;
+            Assert.Equal(expectedTreads, finish, 6);
+            var rows = StairRebar.Compute(s, c, new RebarOptions());
+            Assert.Contains(rows, r => r.Mark == "MW");
+            Assert.DoesNotContain(rows, r => r.Mark == "ML");
+        }
+
+        [Fact]
+        public void TooNarrowAWinderGoingIsFlaggedAndDogLegsStillHaveNoWinders()
+        {
+            var s = U(true, 0); s.Width = 600;
+            Assert.Contains(StairCalc.Calculate(s).Checks, k => k.Name == "Winders" && !k.Ok);
+            Assert.False(new StairSpec { Kind = StairKind.DogLeg, Winders = true }.HasWinders);
+        }
+    }
 }
