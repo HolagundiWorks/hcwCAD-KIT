@@ -378,6 +378,26 @@ namespace HCW.AutoCAD.Plugin.Commands
                             numberPath = (Curve)tr.GetObject(pathRes.ObjectId, OpenMode.ForRead);
                     }
 
+                    List<IList<P2>> roomOutlines = null;
+                    if (string.Equals(order, "Room", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var rs = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect the room outlines to number the walls room by room (closed polylines; Enter = left to right): " },
+                            new SelectionFilter(new[] { new TypedValue(0, "LWPOLYLINE") }));
+                        if (rs.Status == PromptStatus.OK)
+                        {
+                            roomOutlines = new List<IList<P2>>();
+                            foreach (var rid in rs.Value.GetObjectIds())
+                            {
+                                var rp = (Polyline)tr.GetObject(rid, OpenMode.ForRead);
+                                if (!rp.Closed) continue;
+                                var pts = new List<P2>();
+                                for (int vi = 0; vi < rp.NumberOfVertices; vi++) { var v = rp.GetPoint2dAt(vi); pts.Add(new P2(v.X, v.Y)); }
+                                roomOutlines.Add(pts);
+                            }
+                        }
+                    }
+                    var recolour = new List<KeyValuePair<Curve, string>>();
+
                     // match each deduction to the typed line it overlaps (nearest within tolerance)
                     var grpCurves = grp.Select(g => g.ent).ToList();
                     var pidx = MatchNearest(deds, grpCurves, tol);
@@ -402,7 +422,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                         // Number the walls left to right, then bottom to top: FB01, FB02, ...
                         var wallNo = new Dictionary<int, int>();
                         int serial = 0;
-                        foreach (var seg in OrderWalls(segs, grpCurves, order, numberPath))
+                        foreach (var seg in OrderWalls(segs, grpCurves, order, numberPath, roomOutlines))
                             wallNo[seg.index] = ++serial;
                         foreach (var bucket in segs.GroupBy(s => s.gross).OrderByDescending(s => s.Key))
                         {
@@ -430,6 +450,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                                     var dmp = CurveMid(deds[j]);
                                     PlaceLabel(tr, db, btr, new Point3d(dmp.X, dmp.Y - 0.8 * th, 0), raw, book, th, measured: dv);
                                     string shown = DisplayName(book, raw);
+                                    // a standalone deduction line named in the schedule takes that name's colour (a block's lines cannot be coloured per insert)
+                                    if (!blockOf.ContainsKey(j) && !string.Equals(shown, raw, StringComparison.OrdinalIgnoreCase)) recolour.Add(new KeyValuePair<Curve, string>(deds[j], shown));
                                     rows.Add(singleTypeNoPrefix
                                         ? new[] { shown, "", M(dv), "" }
                                         : new[] { shown, ty.name, "", M(dv), "" });
@@ -471,6 +493,17 @@ namespace HCW.AutoCAD.Plugin.Commands
                         ? new[] { "Item", $"Length x count ({LenLabel})", $"Deduction ({LenLabel})", $"Net ({LenLabel})" }
                         : new[] { "Item", "Type", $"Length x count ({LenLabel})", $"Deduction ({LenLabel})", $"Net ({LenLabel})" };
                     if (bookChanged) book.Save(tr, db);
+                    if (recolour.Count > 0 && Settings.GetInt("DeductionColours", 1) != 0)
+                    {
+                        var colours = DeductionColours.Assign(recolour.Select(r => r.Value));
+                        foreach (var r in recolour)
+                        {
+                            var ent = (Entity)r.Key;
+                            if (!ent.IsWriteEnabled) ent.UpgradeOpen();
+                            ent.ColorIndex = colours[r.Value];
+                        }
+                        ed.WriteMessage("\n" + recolour.Count + " deduction line(s) coloured by schedule name: " + string.Join(", ", colours.Select(c => c.Key + "=" + c.Value)) + ".");
+                    }
                     Output(tr, db, csvName, headers, rows, th);
                 }
                 tr.Commit();
@@ -655,13 +688,13 @@ namespace HCW.AutoCAD.Plugin.Commands
                         ed.WriteMessage("\nWARNING: " + floor.Name + " ceiling height " + floor.Height + " is more than its FFL to FFL height " + floor.FflHeight + ".");
                     if (floor.Height > 0 && floor.LintelBottom > floor.Height)
                         ed.WriteMessage("\nWARNING: " + floor.Name + " lintel bottom " + floor.LintelBottom + " is above its ceiling height " + floor.Height + ".");
-                    foreach (var o in book.Openings.Where(x => x.LintelBottom <= 0 && floor.LintelBottom > 0 && x.Height > floor.LintelBottom))
+                    foreach (var o in book.Openings.Where(x => x.LintelBottom <= 0 && floor.LintelBottom > 0 && x.Height > floor.LintelBottom
+                        && HCW.AutoCAD.Plugin.Logic.LintelRules.AppliesToFloor(x.Floor, floor.Name)))
                         ed.WriteMessage("\nWARNING: " + o.Mark + " is " + o.Height + " high, above the " + floor.Name + " lintel bottom " + floor.LintelBottom + ".");
                 }
-                var lintelFloor = book.Floors.FirstOrDefault(f => f.LintelBottom > 0);
                 foreach (var o in book.Openings.Where(x => x.Sill > 0))
                 {
-                    double lintel = o.LintelBottom > 0 ? o.LintelBottom : (lintelFloor == null ? 0 : lintelFloor.LintelBottom);
+                    double lintel = book.LintelFor(o);
                     if (lintel > 0 && Math.Abs(RndSchedule(lintel - o.Sill) - o.HeightRounded) > SuggestTolerance)
                         ed.WriteMessage("\nWARNING: " + o.Mark + " sill " + o.Sill + " and lintel bottom " + lintel + " leave "
                             + Math.Round(lintel - o.Sill, 3) + ", but its height is " + o.Height + ".");

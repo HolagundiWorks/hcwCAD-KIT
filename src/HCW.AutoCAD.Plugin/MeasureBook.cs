@@ -78,6 +78,11 @@ namespace HCW.AutoCAD.Plugin
             }
         }
 
+        /// <summary>The lintel bottom an opening is checked against (its own, its floor's, or the first floor's).</summary>
+        public double LintelFor(OpeningSpec o) =>
+            HCW.AutoCAD.Plugin.Logic.LintelRules.For(o.LintelBottom, o.Floor,
+                Floors.Select(f => new HCW.AutoCAD.Plugin.Logic.LintelFloor { Name = f.Name, LintelBottom = f.LintelBottom }).ToList());
+
         public OpeningSpec Opening(string mark)
         {
             return Openings.FirstOrDefault(o => string.Equals(o.Mark, mark, StringComparison.OrdinalIgnoreCase));
@@ -175,7 +180,7 @@ namespace HCW.AutoCAD.Plugin
 
         public void GroupSameSizes()
         {
-            Openings = Collapse(Openings, o => o.Kind + "|" + (o.Type ?? "").Trim().ToLowerInvariant() + "|" + o.WidthRounded + "|" + o.HeightRounded);
+            Openings = Collapse(Openings, o => o.Kind + "|" + (o.Type ?? "").Trim().ToLowerInvariant() + "|" + o.WidthRounded + "|" + o.HeightRounded + "|" + (o.Floor ?? "").Trim().ToLowerInvariant());
             Columns = CollapseColumns(Columns);
         }
 
@@ -208,7 +213,7 @@ namespace HCW.AutoCAD.Plugin
             foreach (var f in Floors)
                 yield return "F|" + Esc(f.Name) + "|" + Num(f.Height) + "|" + Num(f.FflHeight) + "|" + Num(f.LintelBottom);
             foreach (var o in Openings)
-                yield return "O|" + Esc(o.Mark) + "|" + Esc(o.Kind) + "|" + Num(o.Width) + "|" + Num(o.Height) + "|" + Esc(o.Type) + "|" + o.Count.ToString(CultureInfo.InvariantCulture) + "|" + Num(o.LintelBottom) + "|" + Num(o.Sill) + "|" + Esc(o.BlockName);
+                yield return "O|" + Esc(o.Mark) + "|" + Esc(o.Kind) + "|" + Num(o.Width) + "|" + Num(o.Height) + "|" + Esc(o.Type) + "|" + o.Count.ToString(CultureInfo.InvariantCulture) + "|" + Num(o.LintelBottom) + "|" + Num(o.Sill) + "|" + Esc(o.BlockName) + "|" + Esc(o.Floor);
             foreach (var c in Columns)
                 yield return "C|" + Esc(c.Mark) + "|" + Num(c.Width) + "|" + Num(c.Depth) + "|" + Esc(c.Name) + "|" + c.Count.ToString(CultureInfo.InvariantCulture);
             foreach (var m in Maps)
@@ -225,7 +230,7 @@ namespace HCW.AutoCAD.Plugin
             if (p[0] == "F" && p.Length >= 3)
                 book.Floors.Add(new FloorSpec { Name = p[1], Height = D(p[2]), FflHeight = p.Length > 3 ? D(p[3]) : 0, LintelBottom = p.Length > 4 ? D(p[4]) : 0 });
             else if (p[0] == "O" && p.Length >= 7)
-                book.Openings.Add(new OpeningSpec { Mark = p[1], Kind = p[2], Width = D(p[3]), Height = D(p[4]), Type = p[5], Count = I(p[6]), LintelBottom = p.Length > 7 ? D(p[7]) : 0, Sill = p.Length > 8 ? D(p[8]) : 0, BlockName = p.Length > 9 ? p[9] : "" });
+                book.Openings.Add(new OpeningSpec { Mark = p[1], Kind = p[2], Width = D(p[3]), Height = D(p[4]), Type = p[5], Count = I(p[6]), LintelBottom = p.Length > 7 ? D(p[7]) : 0, Sill = p.Length > 8 ? D(p[8]) : 0, BlockName = p.Length > 9 ? p[9] : "", Floor = p.Length > 10 ? p[10] : "" });
             else if (p[0] == "C" && p.Length >= 6)
                 book.Columns.Add(new ColumnSpec { Mark = p[1], Width = D(p[2]), Depth = D(p[3]), Name = p[4], Count = I(p[5]) });
             else if (p[0] == "P" && p.Length >= 4)
@@ -283,6 +288,8 @@ namespace HCW.AutoCAD.Plugin
             public double Sill = 0;
             /// <summary>Drawing block names that stand for this entry, separated by semicolons.</summary>
             public string BlockName = "";
+            /// <summary>The floor this entry is on, so its lintel check uses that floor's lintel bottom. Blank means every floor.</summary>
+            public string Floor = "";
             public int WidthRounded => MeasureCommands.RndSchedule(Width);
             public int HeightRounded => MeasureCommands.RndSchedule(Height);
         }

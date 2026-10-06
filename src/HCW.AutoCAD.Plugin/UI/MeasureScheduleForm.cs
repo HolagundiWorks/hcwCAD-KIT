@@ -41,7 +41,7 @@ namespace HCW.AutoCAD.Plugin.UI
             _blocks = blocks ?? new List<BlockFound>();
             var tabs = new TabControl { Dock = DockStyle.Fill };
             _floors = Grid("Floor", "FFL to FFL height (" + heightUnit + ")", "Ceiling height (" + heightUnit + ")", "Lintel bottom height (" + heightUnit + ")");
-            _openings = Grid("Name", "Door or window", "Type", "Length (" + heightUnit + ")", "Height (" + heightUnit + ")", "Sill (" + heightUnit + ")", "Lintel bottom (" + heightUnit + ")", "Block name", "Count");
+            _openings = Grid("Name", "Door or window", "Type", "Length (" + heightUnit + ")", "Height (" + heightUnit + ")", "Sill (" + heightUnit + ")", "Lintel bottom (" + heightUnit + ")", "Block name", "Count", "Floor (blank = all)");
             SetupOpeningGrid();
             _columns = Grid("Mark", "Width (" + heightUnit + ")", "Depth (" + heightUnit + ")", "Name", "Count");
             _maps = Grid("Deduction", "Measured length", "Schedule name");
@@ -124,7 +124,8 @@ namespace HCW.AutoCAD.Plugin.UI
                     Sill = Num(row, 5),
                     LintelBottom = Num(row, 6),
                     BlockName = Cell(row, 7),
-                    Count = Math.Max(1, (int)Num(row, 8))
+                    Count = Math.Max(1, (int)Num(row, 8)),
+                    Floor = Cell(row, 9)
                 });
             }
             foreach (DataGridViewRow row in _columns.Rows)
@@ -299,6 +300,7 @@ namespace HCW.AutoCAD.Plugin.UI
                     row.Cells[6].Value = o.LintelBottom > 0 ? o.LintelBottom.ToString("0.###") : "";
                     row.Cells[7].Value = o.BlockName;
                     row.Cells[8].Value = o.Count.ToString();
+                    row.Cells[9].Value = o.Floor;
                 }
         }
 

@@ -5,6 +5,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
+using HCW.AutoCAD.Plugin.Logic;
 
 namespace HCW.AutoCAD.Plugin.Commands
 {
@@ -27,7 +28,12 @@ namespace HCW.AutoCAD.Plugin.Commands
             public string Title = "";
             public bool HasWindow;
             public Point2d Min, Max;
+            public double Scale;
+            /// <summary>Layer names or patterns shown in this sheet's viewport; empty shows every layer.</summary>
+            public string ShowLayers = "";
         }
+
+        private static string _showLayers = "";
 
         [CommandMethod("SHEETSET")]
         public void SheetSet()
@@ -121,6 +127,18 @@ namespace HCW.AutoCAD.Plugin.Commands
                 var title = ed.GetString(new PromptStringOptions("\nSheet " + plan.Name + " title (Enter to leave blank): ") { AllowSpaces = true });
                 if (title.Status == PromptStatus.OK) plan.Title = title.StringResult.Trim();
                 else if (title.Status != PromptStatus.None) return;
+
+                var sc = ed.GetDouble(new PromptDoubleOptions("\nSheet " + plan.Name + " scale 1: <" + _scale + ">: ")
+                    { AllowNegative = false, AllowZero = false, DefaultValue = _scale, UseDefaultValue = true });
+                if (sc.Status != PromptStatus.OK) return;
+                plan.Scale = sc.Value;
+
+                var lay = ed.GetString(new PromptStringOptions("\nSheet " + plan.Name + ": layers to show in its viewport, names or patterns like A-* separated by ; ("
+                    + (_showLayers.Length > 0 ? "Enter = " + _showLayers + ", . = every layer" : "Enter = every layer") + "): ") { AllowSpaces = true });
+                if (lay.Status == PromptStatus.OK) plan.ShowLayers = lay.StringResult.Trim() == "." ? "" : lay.StringResult.Trim();
+                else if (lay.Status == PromptStatus.None) plan.ShowLayers = _showLayers;
+                else return;
+                _showLayers = plan.ShowLayers;
                 plans.Add(plan);
             }
 
@@ -139,7 +157,25 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
             }
             try { lm.CurrentLayout = original; } catch { }
-            ed.WriteMessage("\nSHEETSET: " + made + " layout(s) created from " + template + " at 1:" + _scale + ".");
+            ed.WriteMessage("\nSHEETSET: " + made + " layout(s) created from " + template + " at " + string.Join(", ", plans.Select(pl => pl.Name + " 1:" + pl.Scale)) + ".");
+        }
+
+        /// <summary>Freezes in one viewport every layer that does not match the patterns (all layers show when there are none).</summary>
+        private static void SetViewportLayers(Transaction tr, Database db, Viewport view, string show)
+        {
+            view.ThawAllLayersInViewport();
+            if (string.IsNullOrWhiteSpace(show)) return;
+            var table = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+            var byName = new Dictionary<string, ObjectId>(StringComparer.OrdinalIgnoreCase);
+            foreach (ObjectId id in table)
+            {
+                var rec = (LayerTableRecord)tr.GetObject(id, OpenMode.ForRead);
+                if (!rec.IsDependent) byName[rec.Name] = id;
+            }
+            var ids = new ObjectIdCollection();
+            foreach (var name in SheetData.Hidden(byName.Keys, show))
+                ids.Add(byName[name]);
+            if (ids.Count > 0) view.FreezeLayersInViewport(ids.GetEnumerator());
         }
 
         /// <summary>Sets the scale and centre of the sheet's viewport and fills the title block's number and title.</summary>
@@ -183,9 +219,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                     view.ViewCenter = Point2d.Origin;
                 }
                 // Paper millimetres per drawing unit: 1:100 with a metre drawing is 10 paper mm per unit.
-                view.CustomScale = 1.0 / (_scale * Util.MmToDrawingUnits(1.0));
+                view.CustomScale = 1.0 / ((plan.Scale > 0 ? plan.Scale : _scale) * Util.MmToDrawingUnits(1.0));
+                SetViewportLayers(tr, db, view, plan.ShowLayers);
                 view.Locked = true;
             }
+
+            var library = SheetData.TagsFromLibrary(SheetFieldLibrary.Load());
 
             foreach (var br in refs)
             {
@@ -202,6 +241,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                     {
                         att.UpgradeOpen();
                         att.TextString = plan.Title;
+                    }
+                    else if (Settings.GetInt("SheetSetFillFields", 1) != 0 && library.ContainsKey(tag) && SheetData.IsBlank(att.TextString, tag))
+                    {
+                        // project, owner, architect and the like come from the fields library when the template left them blank
+                        att.UpgradeOpen();
+                        att.TextString = library[tag];
                     }
                 }
             }

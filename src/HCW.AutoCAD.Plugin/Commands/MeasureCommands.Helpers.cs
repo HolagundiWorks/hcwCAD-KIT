@@ -247,20 +247,20 @@ namespace HCW.AutoCAD.Plugin.Commands
                 var t = new ScheduleTable
                 {
                     Title = "DOOR AND WINDOW SCHEDULE",
-                    Headers = new[] { "Name", "Kind", "Type", "Length" + u, "Height" + u, "Sill" + u, "Lintel bottom" + u, "Count" }
+                    Headers = new[] { "Name", "Kind", "Type", "Length" + u, "Height" + u, "Sill" + u, "Lintel bottom" + u, "Floor", "Count" }
                 };
                 foreach (var kind in new[] { "Door", "Window" })
                 {
                     var group = book.Openings.Where(q => string.Equals(q.Kind, kind, StringComparison.OrdinalIgnoreCase)).ToList();
                     foreach (var o in group)
-                        t.Rows.Add(new[] { o.Mark, o.Kind, o.Type, f(o.Width), f(o.Height), f(o.Sill), f(o.LintelBottom), Math.Max(1, o.Count).ToString() });
+                        t.Rows.Add(new[] { o.Mark, o.Kind, o.Type, f(o.Width), f(o.Height), f(o.Sill), f(o.LintelBottom), o.Floor ?? "", Math.Max(1, o.Count).ToString() });
                     if (group.Count > 0)
-                        t.Rows.Add(new[] { "TOTAL", kind + "s", "", "", "", "", "", group.Sum(q => Math.Max(1, q.Count)).ToString() });
+                        t.Rows.Add(new[] { "TOTAL", kind + "s", "", "", "", "", "", "", group.Sum(q => Math.Max(1, q.Count)).ToString() });
                 }
                 // Anything that is neither kind still appears, so no entry goes missing.
                 foreach (var o in book.Openings.Where(q => !string.Equals(q.Kind, "Door", StringComparison.OrdinalIgnoreCase)
                                                           && !string.Equals(q.Kind, "Window", StringComparison.OrdinalIgnoreCase)))
-                    t.Rows.Add(new[] { o.Mark, o.Kind, o.Type, f(o.Width), f(o.Height), f(o.Sill), f(o.LintelBottom), Math.Max(1, o.Count).ToString() });
+                    t.Rows.Add(new[] { o.Mark, o.Kind, o.Type, f(o.Width), f(o.Height), f(o.Sill), f(o.LintelBottom), o.Floor ?? "", Math.Max(1, o.Count).ToString() });
                 tables.Add(t);
             }
             if (book.Columns.Count > 0)
@@ -363,11 +363,17 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         /// <summary>
-        /// Order in which walls are numbered: LeftRight (then bottom to top), TopBottom (then left to right),
+        /// Order in which walls are numbered: LeftRight (then bottom to top), TopBottom (then left to right), Room (room by room, from room outlines you select),
         /// or Path (by distance along a picked line, measured to the closest point to each wall's midpoint).
         /// </summary>
-        private static IEnumerable<(int index, int gross)> OrderWalls(List<(int index, int gross)> segs, List<Curve> curves, string order, Curve path)
+        private static IEnumerable<(int index, int gross)> OrderWalls(List<(int index, int gross)> segs, List<Curve> curves, string order, Curve path,
+            IList<IList<P2>> rooms = null)
         {
+            if (rooms != null && rooms.Count > 0)
+            {
+                var mids = segs.Select(x => { var m = CurveMid(curves[x.index]); return new P2(m.X, m.Y); }).ToList();
+                return WallOrder.ByRoom(mids, rooms).Select(i => segs[i]).ToList();
+            }
             if (path != null)
                 return segs.OrderBy(x => path.GetDistAtPoint(path.GetClosestPointTo(CurveMid(curves[x.index]), false)));
             if (string.Equals(order, "TopBottom", StringComparison.OrdinalIgnoreCase))

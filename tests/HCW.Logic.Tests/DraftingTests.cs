@@ -2842,4 +2842,150 @@ namespace HCW.Logic.Tests
             Assert.Equal(1, p.MaxRow);
         }
     }
+
+    public class WallOrderTests
+    {
+        private static IList<P2> Box(double x0, double y0, double x1, double y1) => new List<P2> { new P2(x0, y0), new P2(x1, y0), new P2(x1, y1), new P2(x0, y1) };
+
+        [Fact]
+        public void WallsAreNumberedRoomByRoomLeftToRight()
+        {
+            var rooms = new List<IList<P2>> { Box(10, 0, 20, 10), Box(0, 0, 10, 10) };           // listed right room first
+            var mids = new List<P2> { new P2(15, 0), new P2(5, 0), new P2(0, 5), new P2(20, 5) };
+            var order = WallOrder.ByRoom(mids, rooms);
+            // Left room (walls 1 and 2) before right room (walls 0 and 3).
+            Assert.Equal(new[] { 1, 2 }, order.Take(2).OrderBy(i => i).ToArray());
+            Assert.Equal(new[] { 0, 3 }, order.Skip(2).OrderBy(i => i).ToArray());
+        }
+
+        [Fact]
+        public void InsideARoomWallsFollowTheOutlineAnticlockwiseFromTheBottom()
+        {
+            var rooms = new List<IList<P2>> { Box(0, 0, 10, 10) };
+            var mids = new List<P2> { new P2(0, 5), new P2(10, 5), new P2(5, 10), new P2(5, 0) };    // left, right, top, bottom
+            Assert.Equal(new[] { 3, 1, 2, 0 }, WallOrder.ByRoom(mids, rooms).ToArray());           // bottom, right, top, left
+        }
+
+        [Fact]
+        public void ASharedWallGoesToTheFirstRoom()
+        {
+            var rooms = new List<IList<P2>> { Box(0, 0, 10, 10), Box(10, 0, 20, 10) };
+            var mids = new List<P2> { new P2(10, 5), new P2(20, 5) };
+            var order = WallOrder.ByRoom(mids, rooms);
+            Assert.Equal(new[] { 0, 1 }, order.ToArray());
+        }
+
+        [Fact]
+        public void NoRoomsFallsBackToLeftToRight()
+        {
+            var mids = new List<P2> { new P2(9, 0), new P2(1, 0) };
+            Assert.Equal(new[] { 1, 0 }, WallOrder.ByRoom(mids, new List<IList<P2>>()).ToArray());
+            Assert.Empty(WallOrder.ByRoom(new List<P2>(), new List<IList<P2>>()));
+        }
+
+        [Fact]
+        public void DeductionColoursAreStableAndDistinct()
+        {
+            var a = DeductionColours.Assign(new[] { "W1", "D1", "D2", "D1" });
+            var b = DeductionColours.Assign(new[] { "D2", "W1", "D1" });
+            Assert.Equal(3, a.Count);
+            Assert.Equal(a["D1"], b["D1"]);
+            Assert.Equal(a["W1"], b["W1"]);
+            Assert.Equal(3, a.Values.Distinct().Count());
+            Assert.Equal(DeductionColours.Palette[0], a["D1"]);          // sorted first
+            Assert.Empty(DeductionColours.Assign(new string[0]));
+        }
+    }
+
+    public class SheetDataTests
+    {
+        private static readonly string[] Layers = { "0", "Defpoints", "A-WALL", "A-DOOR", "AN-DIMS", "BP-SITE-BOUNDARY", "EL-LABELS" };
+
+        [Fact]
+        public void OnlyTheMatchingLayersStayVisible()
+        {
+            var hidden = SheetData.Hidden(Layers, "A-*; an-dims");
+            Assert.Equal(new[] { "BP-SITE-BOUNDARY", "EL-LABELS" }, hidden.ToArray());
+        }
+
+        [Fact]
+        public void ZeroAndDefpointsAreNeverFrozenAndNoPatternsFreezeNothing()
+        {
+            Assert.DoesNotContain("0", SheetData.Hidden(Layers, "XYZ"));
+            Assert.DoesNotContain("Defpoints", SheetData.Hidden(Layers, "XYZ"));
+            Assert.Empty(SheetData.Hidden(Layers, ""));
+            Assert.Empty(SheetData.Hidden(Layers, null));
+        }
+
+        [Fact]
+        public void QuestionMarkMatchesOneCharacterAndRegexCharactersAreLiteral()
+        {
+            Assert.DoesNotContain("A-WALL", SheetData.Hidden(Layers, "A-WAL?"));
+            Assert.Contains("A-WALL", SheetData.Hidden(Layers, "A.WALL"));
+        }
+
+        [Fact]
+        public void LibraryLabelsBecomeTitleBlockTags()
+        {
+            var lib = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("Project title", "Rao House"),
+                new KeyValuePair<string, string>("Consulting architect", "A. Mehta"),
+                new KeyValuePair<string, string>("Owner", "  "),
+                new KeyValuePair<string, string>("Site area", "250"),
+                new KeyValuePair<string, string>("Drawing no", "99"),
+                new KeyValuePair<string, string>("Plot use", "Residential"),
+            };
+            var d = SheetData.TagsFromLibrary(lib);
+            Assert.Equal("Rao House", d["PROJECT_TITLE"]);
+            Assert.Equal("A. Mehta", d["ARCHITECT"]);
+            Assert.Equal("250", d["SITE_AREA"]);
+            Assert.Equal("Residential", d["PLOT_USE"]);
+            Assert.False(d.ContainsKey("OWNER"));
+            Assert.False(d.ContainsKey("DRAWING_NO"));
+        }
+
+        [Fact]
+        public void BlankMeansEmptyDashesOrTheTemplatesOwnWords()
+        {
+            Assert.True(SheetData.IsBlank("", "OWNER"));
+            Assert.True(SheetData.IsBlank("--", "OWNER"));
+            Assert.True(SheetData.IsBlank("project title", "PROJECT_TITLE"));
+            Assert.False(SheetData.IsBlank("Rao House", "PROJECT_TITLE"));
+        }
+    }
+
+    public class LintelRulesTests
+    {
+        private static readonly List<LintelFloor> Floors = new List<LintelFloor>
+        {
+            new LintelFloor { Name = "Ground", LintelBottom = 2.1 },
+            new LintelFloor { Name = "First", LintelBottom = 2.4 },
+        };
+
+        [Fact]
+        public void AnOpeningTiedToAFloorUsesThatFloorsLintel()
+        {
+            Assert.Equal(2.4, LintelRules.For(0, "First", Floors));
+            Assert.Equal(2.1, LintelRules.For(0, "ground", Floors));
+        }
+
+        [Fact]
+        public void AnOpeningWithoutAFloorUsesTheFirstFloorsLintelAndItsOwnWinsOverAll()
+        {
+            Assert.Equal(2.1, LintelRules.For(0, "", Floors));
+            Assert.Equal(2.1, LintelRules.For(0, "Basement", Floors));        // unknown floor falls back to the first
+            Assert.Equal(1.95, LintelRules.For(1.95, "First", Floors));
+            Assert.Equal(0, LintelRules.For(0, "First", new List<LintelFloor>()));
+        }
+
+        [Fact]
+        public void BlankFloorMeansEveryFloor()
+        {
+            Assert.True(LintelRules.AppliesToFloor("", "Ground"));
+            Assert.True(LintelRules.AppliesToFloor(null, "First"));
+            Assert.True(LintelRules.AppliesToFloor(" first ", "First"));
+            Assert.False(LintelRules.AppliesToFloor("First", "Ground"));
+        }
+    }
 }
