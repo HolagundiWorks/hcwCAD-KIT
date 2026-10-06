@@ -23,6 +23,8 @@ namespace HCW.AutoCAD.Plugin.UI
             // The ribbon may not exist yet this early in AutoCAD startup -
             // build it once idle, same pattern Autodesk's own samples use.
             AcAp.Idle += BuildRibbonOnce;
+            try { if (Settings.GetInt("LiveUpdate", 1) != 0) HCW.AutoCAD.Plugin.Commands.LiveUpdate.Start(); }
+            catch (System.Exception) { /* live updates are a convenience; the commands work without them */ }
         }
 
         public void Terminate() { }
@@ -253,6 +255,7 @@ namespace HCW.AutoCAD.Plugin.UI
             var src = NewSource("Area & Text Tools");
             AddLarge(src, "POLYAREA", "Poly\nArea", "area--custom", "Number selected polylines and draw a running-total area table");
             AddLarge(src, "HCWAREASTMT", "Area\nStatement", "report--data", "Building permit area statement: floor areas, net, FAR and ground cover, filled into the title block");
+            AddLarge(src, "HCWLIVE", "Live\nUpdates", "reset", "Switch live updates on or off: labels, level marks, dimensions and the area statement follow your edits");
             AddLarge(src, "HCWSTYLES", "Text\nStyles", "text--font", "Create HCW-SITE, HCW-WORKING and HCW-DETAIL text and dimension styles");
             AddSmallGroup(src,
                 ("INCARRAY", "Inc Array", "add--alt", "Array the selection and increment every number in the copied text, attributes and dimensions"),

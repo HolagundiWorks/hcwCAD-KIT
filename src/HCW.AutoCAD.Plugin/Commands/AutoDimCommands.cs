@@ -27,6 +27,7 @@ namespace HCW.AutoCAD.Plugin.Commands
     public class AutoDimCommands
     {
         private const string AppName = "HCW_AUTODIM";
+        internal const string AutoDimApp = AppName;
         private const string DimLayer = "AN-DIMS";
 
         private static double _scale = 100;
@@ -130,9 +131,11 @@ namespace HCW.AutoCAD.Plugin.Commands
                 made = sink.Count;
                 tr.Commit();
             }
+            int tiedA = DimAnchors.Associate(db, choice.Walls);
             Isolate(db, choice);
 
             ed.WriteMessage("\nAUTODIM: " + made + " dimension(s) on " + DimLayer + " at 1:" + _scale
+                + (tiedA > 0 ? "; " + tiedA + " follow their walls when moved (HCWLIVE)" : "")
                 + (staggered > 0 ? "; " + staggered + " short one(s) moved to a second row" : "")
                 + (repeated > 0 ? "; " + repeated + " repeated dimension(s) left out" : "")
                 + (plan.Skipped > 0 ? "; " + plan.Skipped + " angled or curved segment(s) skipped (use AUTODIMWALL)" : "") + ".");
@@ -259,8 +262,10 @@ namespace HCW.AutoCAD.Plugin.Commands
                 made = sink.Count;
                 tr.Commit();
             }
+            int tiedB = DimAnchors.Associate(db, choice.Walls);
             Isolate(db, choice);
             ed.WriteMessage("\nAUTODIMROOM: " + made + " dimension(s) in " + rooms.Count + " room(s) at 1:" + _scale
+                + (tiedB > 0 ? "; " + tiedB + " follow their walls when moved (HCWLIVE)" : "")
                 + (furnished > 0 ? "; " + furnished / 2 + " furniture item(s) dimensioned" : "")
                 + (staggered > 0 ? "; " + staggered + " short one(s) moved to a second row" : "")
                 + (skipped > 0 ? "; " + skipped + " angled edge(s) skipped" : "") + ".");
@@ -352,7 +357,9 @@ namespace HCW.AutoCAD.Plugin.Commands
                 made = sink.Count;
                 tr.Commit();
             }
+            int tiedW = DimAnchors.Associate(db, null);
             ed.WriteMessage("\nAUTODIMWALL: " + (made - radii) + " length and " + radii + " radius dimension(s) at 1:" + _scale
+                + (tiedW > 0 ? "; " + tiedW + " follow their walls when moved (HCWLIVE)" : "")
                 + (dropped > 0 ? "; " + dropped + " too short" : "") + ".");
         }
 

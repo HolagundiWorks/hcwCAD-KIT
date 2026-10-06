@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -40,7 +41,106 @@ namespace HCW.AutoCAD.Plugin.Commands
             return true;
         }
 
+        /// <summary>The sheet number a symbol drawn here belongs to: the name of the layout you are on (layouts are numbered by RENUMBERLAYOUTS), or - in model space.</summary>
+        internal static string CurrentSheetNumber()
+        {
+            try
+            {
+                var name = Autodesk.AutoCAD.DatabaseServices.LayoutManager.Current.CurrentLayout;
+                return string.IsNullOrEmpty(name) || string.Equals(name, "Model", StringComparison.OrdinalIgnoreCase) ? "-" : name;
+            }
+            catch (System.Exception) { return "-"; }
+        }
+
         // ---- level mark ----
+
+        private const string KindDatum = "DATUM", KindLevelLive = "LEVEL-LIVE", KindLevelFixed = "LEVEL-FIXED";
+
+        /// <summary>Reads the datum marker (a circle on AN-SYMB tagged DATUM) into the datum fields; false when the drawing has none.</summary>
+        private static bool LoadDatum(Database db)
+        {
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+                foreach (ObjectId id in space)
+                {
+                    var c = tr.GetObject(id, OpenMode.ForRead) as Circle;
+                    double level;
+                    if (c == null || !TitleBlockCommands.IsKind(c, KindDatum)) continue;
+                    if (!double.TryParse(TitleBlockCommands.ReadExtra(c), NumberStyles.Float, CultureInfo.InvariantCulture, out level)) level = 0;
+                    _datumY = c.Center.Y; _datumLevel = level; _hasDatum = true;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Draws the datum marker where you picked it and removes the earlier one, so marks follow the marker when it is moved.</summary>
+        private static void PlaceDatumMarker(Database db, Point3d at, double level)
+        {
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                Util.EnsureHcwLayer(tr, db, LayerSymbol);
+                TitleBlockCommands.EnsureRegApp(tr, db);
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                foreach (ObjectId id in space)
+                {
+                    var old = tr.GetObject(id, OpenMode.ForRead) as Circle;
+                    if (old == null || old.IsErased || !TitleBlockCommands.IsKind(old, KindDatum)) continue;
+                    old.UpgradeOpen(); old.Erase();
+                }
+                var marker = new Circle(at, Vector3d.ZAxis, 1.5 * Mm) { Layer = LayerSymbol };
+                TitleBlockCommands.Tag(marker, KindDatum, level.ToString("R", CultureInfo.InvariantCulture));
+                space.AppendEntity(marker);
+                tr.AddNewlyCreatedDBObject(marker, true);
+                tr.Commit();
+            }
+        }
+
+        /// <summary>
+        /// Brings every level mark that took its value from the datum up to date with where it is now and where the datum marker is.
+        /// Returns how many marks changed. Used by the live update service, and safe to call on its own.
+        /// </summary>
+        internal static int RefreshLevels(Database db)
+        {
+            int changed = 0;
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+                Circle datum = null; double level = 0;
+                var marks = new List<BlockReference>();
+                foreach (ObjectId id in space)
+                {
+                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                    if (ent == null || ent.IsErased) continue;
+                    var c = ent as Circle;
+                    if (c != null && TitleBlockCommands.IsKind(c, KindDatum))
+                    {
+                        datum = c;
+                        if (!double.TryParse(TitleBlockCommands.ReadExtra(c), NumberStyles.Float, CultureInfo.InvariantCulture, out level)) level = 0;
+                    }
+                    var br = ent as BlockReference;
+                    if (br != null && TitleBlockCommands.IsKind(br, KindLevelLive)) marks.Add(br);
+                }
+                if (datum == null) return 0;
+                double perMetre = Util.MmToDrawingUnits(1000.0);
+                foreach (var br in marks)
+                {
+                    string text = SymbolMath.LevelText(SymbolMath.LevelFromDatum(level, datum.Center.Y, br.Position.Y, perMetre));
+                    foreach (ObjectId aid in br.AttributeCollection)
+                    {
+                        var att = (AttributeReference)tr.GetObject(aid, OpenMode.ForRead);
+                        if (!string.Equals(att.Tag, "LEVEL", StringComparison.OrdinalIgnoreCase) || att.TextString == text) continue;
+                        att.UpgradeOpen();
+                        att.TextString = text;
+                        changed++;
+                    }
+                }
+                if (changed > 0) tr.Commit();
+            }
+            return changed;
+        }
 
         [CommandMethod("HCWLEVEL")]
         public void LevelMark()
@@ -49,6 +149,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             var db = Util.Db;
             if (!AskScale(ed)) return;
             double unitsPerMetre = Util.MmToDrawingUnits(1000.0);
+            if (!_hasDatum && LoadDatum(db)) ed.WriteMessage("\nUsing the datum marker already in the drawing: " + SymbolMath.LevelText(_datumLevel) + ".");
             string typed = null;
             var ucs = ed.CurrentUserCoordinateSystem;
 
@@ -77,10 +178,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                         var dv = ed.GetDouble(new PromptDoubleOptions("\nLevel of that point in metres <0>: ")
                             { AllowNone = true, DefaultValue = 0, UseDefaultValue = true });
                         if (dv.Status != PromptStatus.OK && dv.Status != PromptStatus.None) continue;
-                        _datumY = dp.Value.TransformBy(ucs).Y;
+                        var dw = dp.Value.TransformBy(ucs);
+                        _datumY = dw.Y;
                         _datumLevel = dv.Status == PromptStatus.OK ? dv.Value : 0;
                         _hasDatum = true;
-                        ed.WriteMessage("\nDatum: " + SymbolMath.LevelText(_datumLevel) + ". Later marks take their level from their height.");
+                        PlaceDatumMarker(db, dw, _datumLevel);
+                        ed.WriteMessage("\nDatum: " + SymbolMath.LevelText(_datumLevel) + ". Later marks take their level from their height, and follow the datum marker if you move it (live updates must be on: HCWLIVE).");
                     }
                     continue;
                 }
@@ -88,9 +191,11 @@ namespace HCW.AutoCAD.Plugin.Commands
 
                 var at = r.Value.TransformBy(ucs);
                 string text = typed;
+                bool fromDatum = false;
                 typed = null;
                 if (text == null)
                 {
+                    if (_hasDatum) fromDatum = true;
                     if (_hasDatum) text = SymbolMath.LevelText(SymbolMath.LevelFromDatum(_datumLevel, _datumY, at.Y, unitsPerMetre));
                     else
                     {
@@ -110,6 +215,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var br = new BlockReference(at, bt[_ceiling ? BlockLevelUp : BlockLevel]) { Layer = LayerSymbol, ScaleFactors = new Scale3d(Mm) };
                     space.AppendEntity(br);
                     tr.AddNewlyCreatedDBObject(br, true);
+                    TitleBlockCommands.EnsureRegApp(tr, db);
+                    TitleBlockCommands.Tag(br, fromDatum ? KindLevelLive : KindLevelFixed);
                     TitleBlockCommands.AddAttributes(tr, br);
                     foreach (ObjectId id in br.AttributeCollection)
                     {
@@ -231,6 +338,12 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (lr.Status != PromptStatus.OK) return;
             string label = lr.StringResult.Trim();
             if (label.Length == 0) label = def;
+            string sheetDefault = CurrentSheetNumber();
+            var shr = ed.GetString(new PromptStringOptions("\nSheet number the section is drawn on (type none to leave it off) <" + sheetDefault + ">: ")
+                { AllowSpaces = false, DefaultValue = sheetDefault, UseDefaultValue = true });
+            if (shr.Status != PromptStatus.OK) return;
+            string sheet = shr.StringResult.Trim().Length > 0 ? shr.StringResult.Trim() : sheetDefault;
+            if (string.Equals(sheet, "none", StringComparison.OrdinalIgnoreCase)) sheet = null;
 
             var ucs = ed.CurrentUserCoordinateSystem;
             var a3 = p1.Value.TransformBy(ucs); var b3 = p2.Value.TransformBy(ucs); var s3 = sp.Value.TransformBy(ucs);
@@ -264,14 +377,28 @@ namespace HCW.AutoCAD.Plugin.Commands
 
                     var centre = shaftEnd + look * (4 * mm);
                     Put(tr, space, new Circle(new Point3d(centre.X, centre.Y, z), Vector3d.ZAxis, 4 * mm) { Layer = LayerSymbol });
+                    // With a sheet number the bubble is split by a line: the letter above it, the sheet below.
+                    var labelAt = sheet == null ? centre : centre + new P2(0, 1.7 * mm);
                     var t = new DBText
                     {
                         Height = 3.5 * mm, TextString = label, Layer = LayerText,
-                        Position = new Point3d(centre.X, centre.Y, z),
+                        Position = new Point3d(labelAt.X, labelAt.Y, z),
                         HorizontalMode = TextHorizontalMode.TextMid, VerticalMode = TextVerticalMode.TextVerticalMid,
                     };
-                    t.AlignmentPoint = new Point3d(centre.X, centre.Y, z);
+                    t.AlignmentPoint = new Point3d(labelAt.X, labelAt.Y, z);
                     Put(tr, space, t);
+                    if (sheet != null)
+                    {
+                        Put(tr, space, new Line(new Point3d(centre.X - 4 * mm, centre.Y, z), new Point3d(centre.X + 4 * mm, centre.Y, z)) { Layer = LayerSymbol });
+                        var st = new DBText
+                        {
+                            Height = 2.5 * mm, TextString = sheet, Layer = LayerText,
+                            Position = new Point3d(centre.X, centre.Y - 2 * mm, z),
+                            HorizontalMode = TextHorizontalMode.TextMid, VerticalMode = TextVerticalMode.TextVerticalMid,
+                        };
+                        st.AlignmentPoint = new Point3d(centre.X, centre.Y - 2 * mm, z);
+                        Put(tr, space, st);
+                    }
                 }
                 tr.Commit();
             }
@@ -412,9 +539,9 @@ namespace HCW.AutoCAD.Plugin.Commands
                 var nr = ed.GetString(new PromptStringOptions("\nElevation number <" + _elevIndex + ">: ") { AllowSpaces = false, DefaultValue = _elevIndex.ToString(), UseDefaultValue = true });
                 if (nr.Status != PromptStatus.OK) return;
                 string number = nr.StringResult.Trim().Length > 0 ? nr.StringResult.Trim() : _elevIndex.ToString();
-                var sr = ed.GetString(new PromptStringOptions("\nSheet number the elevation is drawn on <->: ") { AllowSpaces = false, DefaultValue = "-", UseDefaultValue = true });
+                var sr = ed.GetString(new PromptStringOptions("\nSheet number the elevation is drawn on <" + CurrentSheetNumber() + ">: ") { AllowSpaces = false, DefaultValue = CurrentSheetNumber(), UseDefaultValue = true });
                 if (sr.Status != PromptStatus.OK) return;
-                string sheet = sr.StringResult.Trim().Length > 0 ? sr.StringResult.Trim() : "-";
+                string sheet = sr.StringResult.Trim().Length > 0 ? sr.StringResult.Trim() : CurrentSheetNumber();
 
                 using (Util.Doc.LockDocument())
                 using (var tr = db.TransactionManager.StartTransaction())

@@ -2622,4 +2622,127 @@ namespace HCW.Logic.Tests
             Assert.Equal(-150 * Math.Cos(a), s[1].X, 6);
         }
     }
+
+    public class AreaPlanTests
+    {
+        [Fact]
+        public void SourcesRoundTrip()
+        {
+            var h = new AreaSource { Handles = { 0x1A, 0xFF } };
+            Assert.Equal("H:1A,FF", h.Encode());
+            Assert.Equal(new long[] { 0x1A, 0xFF }, AreaSource.Decode(h.Encode()).Handles.ToArray());
+            var l = new AreaSource { Layers = { "BP-BUILDING-CUT", "BP-X" } };
+            Assert.Equal(new[] { "BP-BUILDING-CUT", "BP-X" }, AreaSource.Decode(l.Encode()).Layers.ToArray());
+            Assert.True(AreaSource.Decode("-").IsEmpty);
+            Assert.True(AreaSource.Decode(null).IsEmpty);
+        }
+
+        [Fact]
+        public void ConfigRoundTrips()
+        {
+            var c = new AreaConfig { FillTitleBlocks = false, TableAt = new P2(10.5, -3) };
+            c.Site.Layers.Add("BP-SITE-BOUNDARY");
+            c.Floors.Add(new AreaFloorSource { Name = "GROUND", Gross = new AreaSource { Layers = { "G-CUT" } }, Deduction = new AreaSource { Layers = { "BP-LIFT", "BP-STAIR" } } });
+            c.Floors.Add(new AreaFloorSource { Name = "FIRST", Gross = new AreaSource { Handles = { 5, 6 } } });
+            var back = AreaConfig.FromLines(c.ToLines());
+            Assert.False(back.FillTitleBlocks);
+            Assert.Equal(10.5, back.TableAt.Value.X);
+            Assert.Equal(2, back.Floors.Count);
+            Assert.Equal(new[] { "BP-LIFT", "BP-STAIR" }, back.Floors[0].Deduction.Layers.ToArray());
+            Assert.Equal(new long[] { 5, 6 }, back.Floors[1].Gross.Handles.ToArray());
+            Assert.True(back.AllLayers().Contains("bp-lift"));
+            Assert.Contains(5L, back.AllHandles());
+            Assert.Null(AreaConfig.FromLines(new[] { "EMPTY" }));
+        }
+
+        [Fact]
+        public void ExemptionRulesTakeAShareWithACap()
+        {
+            var r = ExemptRules.Parse("BP-LIFT=100; BP-BALCONY=50:10; junk; BP-X=150");
+            var areas = new Dictionary<string, double> { { "BP-LIFT", 8 }, { "BP-BALCONY", 40 }, { "BP-OTHER", 5 } };
+            Assert.Equal(8 + 10, r.Deduction(areas, false), 9);          // balcony: 50 % of 40 = 20, capped at 10
+            Assert.Equal(8 + 10 + 5, r.Deduction(areas, true), 9);
+            Assert.False(r.IsEmpty);
+            Assert.True(ExemptRules.Parse("").IsEmpty);
+        }
+
+        [Fact]
+        public void PermissibleTableChoosesByZoneAndPlotSize()
+        {
+            var t = PermissibleTable.Parse("R1|0|250|175|65; R1|250|500|150|60; R1|500|0|125|50; *|0|0|100|40");
+            Assert.Equal(175, t.Lookup("R1", 100).Far);
+            Assert.Equal(150, t.Lookup("r1", 250).Far);          // lower limit inclusive, upper exclusive
+            Assert.Equal(50, t.Lookup("R1", 9999).GroundCover);
+            Assert.Equal(100, t.Lookup("C2", 300).Far);         // any other zone: the * row
+            Assert.Null(PermissibleTable.Parse("R1|0|250|175|65").Lookup("R2", 100));
+            Assert.Empty(PermissibleTable.Parse("bad row; R1|10|5|1|1").Rows);
+        }
+
+        [Fact]
+        public void MoreFloorsThanSlotsAreMergedIntoTheLastRow()
+        {
+            var floors = new List<FloorInput>();
+            string[] names = { "GROUND", "FIRST", "SECOND", "THIRD", "FOURTH", "FIFTH" };
+            for (int i = 0; i < names.Length; i++) floors.Add(new FloorInput { Name = names[i], Gross = 100 + i, Deduction = 10 });
+            var f = AreaStatement.Compute(floors, 400).ToFields(4);
+            Assert.Equal("THIRD TO FIFTH", f["FL4"]);
+            Assert.Equal("312.00", f["GROSS4"]);                 // 103 + 104 + 105
+            Assert.Equal("30.00", f["DED4"]);
+            double rows = new[] { "GROSS1", "GROSS2", "GROSS3", "GROSS4" }.Sum(k => double.Parse(f[k], System.Globalization.CultureInfo.InvariantCulture));
+            Assert.Equal(double.Parse(f["TOT_GROSS"], System.Globalization.CultureInfo.InvariantCulture), rows, 6);
+        }
+
+        [Fact]
+        public void FewFloorsStillFillOwnRows()
+        {
+            var f = AreaStatement.Compute(new[] { new FloorInput { Name = "GROUND", Gross = 50 } }, 100).ToFields(4);
+            Assert.Equal("GROUND", f["FL1"]);
+            Assert.Equal("--", f["FL2"]);
+        }
+    }
+
+    public class DimAnchorLogicTests
+    {
+        private static Anchor A(long h, int i, double x, double y) => new Anchor { Handle = h, Index = i, Pt = new P2(x, y) };
+
+        [Fact]
+        public void AxisFollowsTheDirectionOfTheDimension()
+        {
+            Assert.Equal('X', DimAnchorLogic.AxisOf(new P2(0, 5), new P2(10, 5), 1e-6));
+            Assert.Equal('Y', DimAnchorLogic.AxisOf(new P2(3, 0), new P2(3, 9), 1e-6));
+            Assert.Equal('P', DimAnchorLogic.AxisOf(new P2(0, 0), new P2(4, 3), 1e-6));
+        }
+
+        [Fact]
+        public void AnEndHangsOnTheVertexWithTheSameCoordinateNearestTheDimension()
+        {
+            var c = new List<Anchor> { A(1, 0, 4000, 0), A(1, 1, 4000, 3000), A(2, 0, 8000, 0), A(3, 0, 4001, 0) };
+            // Horizontal dimension at y = -500, end at x = 4000: the vertex at (4000, 0) is nearer than (4000, 3000).
+            Assert.Equal(0, DimAnchorLogic.Pick(c, 'X', new P2(4000, -500), 0.5));
+            Assert.Equal(-1, DimAnchorLogic.Pick(c, 'X', new P2(5000, -500), 0.5));
+            Assert.Equal(2, DimAnchorLogic.Pick(c, 'P', new P2(8000, 0), 0.5));
+            Assert.Equal(-1, DimAnchorLogic.Pick(c, 'P', new P2(8000, 10), 0.5));
+        }
+
+        [Fact]
+        public void OnlyTheMeasuredCoordinateFollows()
+        {
+            var cur = new P2(4000, -500);
+            Assert.Equal(new P2(4500, -500), DimAnchorLogic.Follow('X', cur, new P2(4500, 120)));
+            Assert.Equal(new P2(4000, 120), DimAnchorLogic.Follow('Y', cur, new P2(4500, 120)));
+            Assert.Equal(new P2(4500, 120), DimAnchorLogic.Follow('P', cur, new P2(4500, 120)));
+        }
+
+        [Fact]
+        public void TiesRoundTripAndBadOnesAreRefused()
+        {
+            string s = DimAnchorLogic.Encode('Y', 0x2B7, 3);
+            char axis; long handle; int index;
+            Assert.True(DimAnchorLogic.TryDecode(s, out axis, out handle, out index));
+            Assert.Equal('Y', axis); Assert.Equal(0x2B7, handle); Assert.Equal(3, index);
+            Assert.False(DimAnchorLogic.TryDecode("A|Q|1|0", out axis, out handle, out index));
+            Assert.False(DimAnchorLogic.TryDecode("AUTODIM", out axis, out handle, out index));
+            Assert.False(DimAnchorLogic.TryDecode("A|X|zz|0", out axis, out handle, out index));
+        }
+    }
 }

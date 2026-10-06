@@ -41,16 +41,29 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
+        private const string StoreDictionary = "HCW_AREA", StoreRecord = "CONFIG", KindTable = "AREATABLE";
+
+        private static string _readFrom = "Selection";
+
         private static void Run(Editor ed, Database db)
         {
             double upm = Util.MmToDrawingUnits(1000.0);          // drawing units per metre
             double toSqm = 1.0 / (upm * upm);
 
+            var ro = new PromptKeywordOptions("\nRead the outlines from [Selection/Layers] <" + _readFrom + ">: ", "Selection Layers") { AllowNone = true };
+            ro.Keywords.Default = _readFrom;
+            var rr = ed.GetKeywords(ro);
+            if (rr.Status == PromptStatus.OK) _readFrom = rr.StringResult;
+            else if (rr.Status != PromptStatus.None) return;
+            bool byLayer = _readFrom == "Layers";
+
+            var cfg = new AreaConfig();
+            var rules = ExemptRules.Parse(Settings.Get("AreaExemptRules", ""));
+            if (byLayer && !rules.IsEmpty)
+                ed.WriteMessage("\nExemption rules from settings (AreaExemptRules) apply to the exemption layers you name.");
+
             // Site.
-            double site = 0;
-            var s = SumAreas(ed, "\nSelect the site boundary (closed polyline; Enter to skip): ", toSqm);
-            if (s == null) return;
-            site = s.Sqm;
+            if (!AskSource(ed, byLayer, "the site boundary", Settings.Get("AreaSiteLayer", "BP-SITE-BOUNDARY"), toSqm, out cfg.Site)) return;
 
             // Floors.
             var count = ed.GetInteger(new PromptIntegerOptions("\nNumber of floors <" + _floors + ">: ")
@@ -58,7 +71,6 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (count.Status != PromptStatus.OK) return;
             _floors = count.Value;
 
-            var floors = new List<FloorInput>();
             for (int i = 0; i < _floors; i++)
             {
                 string def = DefaultNames[i];
@@ -68,43 +80,151 @@ namespace HCW.AutoCAD.Plugin.Commands
                 string name = nr.StringResult.Trim().ToUpperInvariant();
                 if (name.Length == 0) name = def;
 
-                var gross = SumAreas(ed, "\nSelect the built-up outline(s) of " + name + " (Enter if none): ", toSqm);
-                if (gross == null) return;
-                var ded = SumAreas(ed, "\nSelect the areas of " + name + " left out of the FAR - shafts, ducts, lift (Enter if none): ", toSqm);
-                if (ded == null) return;
-                floors.Add(new FloorInput { Name = name, Gross = gross.Sqm, Deduction = ded.Sqm });
+                var floor = new AreaFloorSource { Name = name };
+                if (!AskSource(ed, byLayer, "the built-up outline(s) of " + name, Settings.Get("AreaGrossLayer", "BP-BUILDING-CUT"), toSqm, out floor.Gross)) return;
+                if (!AskSource(ed, byLayer, "the areas of " + name + " left out of the FAR - shafts, ducts, lift", "", toSqm, out floor.Deduction)) return;
+                cfg.Floors.Add(floor);
             }
 
-            var stmt = AreaStatement.Compute(floors, site, Settings.GetDouble("AreaFarPermittedPercent", 0), Settings.GetDouble("AreaGroundCoverPermittedPercent", 0));
+            AreaStatement stmt;
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                stmt = Compute(tr, db, cfg, toSqm);
+                tr.Commit();
+            }
             Report(ed, stmt);
 
             // Title blocks anywhere in the drawing.
             var blocks = FindTitleBlocks(db);
+            cfg.FillTitleBlocks = false;
             if (blocks.Count > 0)
             {
                 var ko = new PromptKeywordOptions("\nFill the area fields of " + blocks.Count + " title block(s) [Yes/No] <Yes>: ", "Yes No") { AllowNone = true };
                 ko.Keywords.Default = "Yes";
                 var kr = ed.GetKeywords(ko);
                 if (kr.Status == PromptStatus.Cancel) return;
-                if (kr.Status != PromptStatus.OK || kr.StringResult == "Yes")
-                {
-                    var fields = stmt.ToFields(4);
-                    using (Util.Doc.LockDocument())
-                    using (var tr = db.TransactionManager.StartTransaction())
-                    {
-                        foreach (var id in blocks)
-                            TitleBlockCommands.WriteFields(tr, (BlockReference)tr.GetObject(id, OpenMode.ForRead), fields);
-                        tr.Commit();
-                    }
-                    ed.WriteMessage("\nHCWAREASTMT: title block fields filled." + (floors.Count > 4 ? " The title block has 4 floor rows; floors 5 and up are in the totals only." : ""));
-                }
+                cfg.FillTitleBlocks = kr.Status != PromptStatus.OK || kr.StringResult == "Yes";
             }
             else ed.WriteMessage("\nHCWAREASTMT: no hcwCAD-KIT title block found (SHEETFIT or TITLEBLOCK places one); the numbers are above.");
 
             // Optional table.
             var pr = ed.GetPoint(new PromptPointOptions("\nTop-left of an area table (Enter to skip): ") { AllowNone = true });
-            if (pr.Status != PromptStatus.OK) return;
-            var at = pr.Value.TransformBy(ed.CurrentUserCoordinateSystem);
+            if (pr.Status == PromptStatus.OK)
+            {
+                var at = pr.Value.TransformBy(ed.CurrentUserCoordinateSystem);
+                cfg.TableAt = new P2(at.X, at.Y);
+            }
+            else if (pr.Status != PromptStatus.None) return;
+
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                DrawingStore.Write(tr, db, StoreDictionary, StoreRecord, cfg.ToLines());
+                Apply(tr, db, cfg, stmt, inModel: true);
+                tr.Commit();
+            }
+            LoadWatch(db);
+            if (cfg.FillTitleBlocks) ed.WriteMessage("\nHCWAREASTMT: title block fields filled." + (stmt.Floors.Count > 4 ? " The title block has 4 floor rows; floors 4 and up are summed in the last row." : ""));
+            ed.WriteMessage("\nHCWAREASTMT: the statement is saved with the drawing and updates itself when its outlines change while live updates are on (HCWLIVE).");
+        }
+
+        /// <summary>Asks where a set of outlines comes from: a selection (kept by handle) or layer names. False when cancelled.</summary>
+        private static bool AskSource(Editor ed, bool byLayer, string what, string defaultLayer, double toSqm, out AreaSource source)
+        {
+            source = new AreaSource();
+            if (byLayer)
+            {
+                string prompt = "\nLayer(s) holding " + what + ", separated by ;" + (defaultLayer.Length > 0 ? " <" + defaultLayer + ">" : " (Enter if none)") + ": ";
+                var r = ed.GetString(new PromptStringOptions(prompt) { AllowSpaces = false, DefaultValue = defaultLayer, UseDefaultValue = defaultLayer.Length > 0 });
+                if (r.Status == PromptStatus.None) return true;
+                if (r.Status != PromptStatus.OK) return false;
+                source.Layers.AddRange(r.StringResult.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).Where(l => l.Length > 0));
+                return true;
+            }
+            var s = SumAreas(ed, "\nSelect " + what + " (closed polylines; Enter if none): ", toSqm);
+            if (s == null) return false;
+            source.Handles.AddRange(s.Handles);
+            return true;
+        }
+
+        /// <summary>The areas, in square metres, of the closed polylines a source names (by handle, or on layers in model space), and the area on each layer.</summary>
+        private static double Measure(Transaction tr, Database db, AreaSource src, double toSqm, Dictionary<string, double> byLayer)
+        {
+            double total = 0;
+            Action<Polyline> add = pl =>
+            {
+                if (!pl.Closed) return;
+                double a = Math.Abs(pl.Area) * toSqm;
+                total += a;
+                double have;
+                byLayer.TryGetValue(pl.Layer, out have);
+                byLayer[pl.Layer] = have + a;
+            };
+            foreach (var h in src.Handles)
+            {
+                ObjectId id;
+                if (!db.TryGetObjectId(new Handle(h), out id) || id.IsErased) continue;
+                var pl = tr.GetObject(id, OpenMode.ForRead) as Polyline;
+                if (pl != null) add(pl);
+            }
+            if (src.Layers.Count > 0)
+            {
+                var layers = new HashSet<string>(src.Layers, StringComparer.OrdinalIgnoreCase);
+                var model = (BlockTableRecord)tr.GetObject(((BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead))[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+                foreach (ObjectId id in model)
+                {
+                    if (id.ObjectClass.DxfName != "LWPOLYLINE") continue;
+                    var pl = tr.GetObject(id, OpenMode.ForRead) as Polyline;
+                    if (pl != null && !pl.IsErased && layers.Contains(pl.Layer)) add(pl);
+                }
+            }
+            return total;
+        }
+
+        /// <summary>Works the statement out from what the configuration points at now, including the permissible values for the plot.</summary>
+        internal static AreaStatement Compute(Transaction tr, Database db, AreaConfig cfg, double toSqm)
+        {
+            var rules = ExemptRules.Parse(Settings.Get("AreaExemptRules", ""));
+            double site = Measure(tr, db, cfg.Site, toSqm, new Dictionary<string, double>());
+            var floors = new List<FloorInput>();
+            foreach (var f in cfg.Floors)
+            {
+                double gross = Measure(tr, db, f.Gross, toSqm, new Dictionary<string, double>());
+                var byLayer = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+                double all = Measure(tr, db, f.Deduction, toSqm, byLayer);
+                // Outlines picked by hand count in full; outlines on layers count by the exemption rules (every layer in full when there are none).
+                double deduction = f.Deduction.Layers.Count > 0 ? rules.Deduction(byLayer, true) : all;
+                floors.Add(new FloorInput { Name = f.Name, Gross = gross, Deduction = deduction });
+            }
+            double far = Settings.GetDouble("AreaFarPermittedPercent", 0), gc = Settings.GetDouble("AreaGroundCoverPermittedPercent", 0);
+            var table = PermissibleTable.Parse(Settings.Get("AreaPermTable", ""));
+            var row = table.Rows.Count > 0 && site > 0 ? table.Lookup(Settings.Get("AreaZone", ""), site) : null;
+            if (row != null) { far = row.Far; gc = row.GroundCover; }
+            var stmt = AreaStatement.Compute(floors, site, far, gc);
+            if (table.Rows.Count > 0 && site > 0 && row == null)
+                stmt.Warnings.Add("The permissible table (AreaPermTable) has no row for zone \"" + Settings.Get("AreaZone", "") + "\" and a plot of " + AreaStatement.Fmt(site) + " sq m; the single settings values were used.");
+            return stmt;
+        }
+
+        /// <summary>Writes the statement to the title blocks and redraws the area table (replacing the one drawn before).</summary>
+        private static void Apply(Transaction tr, Database db, AreaConfig cfg, AreaStatement stmt, bool inModel)
+        {
+            if (cfg.FillTitleBlocks)
+            {
+                var fields = stmt.ToFields(4);
+                foreach (var id in FindTitleBlocks(db))
+                    TitleBlockCommands.WriteFields(tr, (BlockReference)tr.GetObject(id, OpenMode.ForRead), fields);
+            }
+            if (!cfg.TableAt.HasValue || !inModel) return;
+
+            TitleBlockCommands.EnsureRegApp(tr, db);
+            var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+            foreach (ObjectId id in space)
+            {
+                var old = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (old == null || old.IsErased || !TitleBlockCommands.IsKind(old, KindTable)) continue;
+                old.UpgradeOpen(); old.Erase();
+            }
             double h = Util.MmToDrawingUnits(TableTextMm);
             var rows = new List<string[]>();
             foreach (var f in stmt.Floors)
@@ -116,21 +236,51 @@ namespace HCW.AutoCAD.Plugin.Commands
                 rows.Add(new[] { "F.A.R. %", "", "", AreaStatement.Fmt(stmt.FarPercent.Value) });
                 rows.Add(new[] { "GROUND COVER %", AreaStatement.Fmt(stmt.GroundCover), "", AreaStatement.Fmt(stmt.GroundCoverPercent.Value) });
             }
-            using (Util.Doc.LockDocument())
+            Util.EnsureHcwLayer(tr, db, "AN-TEXT");
+            var at = cfg.TableAt.Value;
+            var ids = MeasureCommands.DrawTable(tr, db, new Point3d(at.X, at.Y - 2.5 * h, 0), new[] { "Floor", "Gross (sq m)", "Deduction", "Net" }, rows, h, "AN-TEXT");
+            var title = new DBText { Height = h * 1.2, TextString = "AREA STATEMENT", Layer = "AN-TEXT", Position = new Point3d(at.X, at.Y - 1.2 * h, 0) };
+            ids.Add(space.AppendEntity(title));
+            tr.AddNewlyCreatedDBObject(title, true);
+            foreach (var id in ids) TitleBlockCommands.Tag((Entity)tr.GetObject(id, OpenMode.ForWrite), KindTable);
+        }
+
+        // ------------------------------------------------------------------ live updates
+
+        internal static readonly Dictionary<Database, KeyValuePair<HashSet<string>, HashSet<long>>> Watched =
+            new Dictionary<Database, KeyValuePair<HashSet<string>, HashSet<long>>>();
+
+        private static AreaConfig ReadConfig(Transaction tr, Database db) => AreaConfig.FromLines(DrawingStore.Read(tr, db, StoreDictionary, StoreRecord));
+
+        /// <summary>Notes which layers and outlines the saved statement reads, so the live service can tell when one of them changes.</summary>
+        internal static void LoadWatch(Database db)
+        {
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                Util.EnsureHcwLayer(tr, db, "AN-TEXT");
-                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
-                MeasureCommands.DrawTable(tr, db, new Point3d(at.X, at.Y - 2.5 * h, 0),
-                    new[] { "Floor", "Gross (sq m)", "Deduction", "Net" }, rows, h, "AN-TEXT");
-                var title = new DBText { Height = h * 1.2, TextString = "AREA STATEMENT", Layer = "AN-TEXT", Position = new Point3d(at.X, at.Y - 1.2 * h, 0) };
-                space.AppendEntity(title);
-                tr.AddNewlyCreatedDBObject(title, true);
+                var cfg = ReadConfig(tr, db);
+                if (cfg == null) Watched.Remove(db);
+                else Watched[db] = new KeyValuePair<HashSet<string>, HashSet<long>>(cfg.AllLayers(), cfg.AllHandles());
                 tr.Commit();
             }
         }
 
-        private class Sum { public double Sqm; public int Used, Skipped; }
+        /// <summary>Works the saved statement out again and rewrites the title blocks and table. Does nothing when no statement was saved.</summary>
+        internal static void LiveRefresh(Autodesk.AutoCAD.ApplicationServices.Document doc)
+        {
+            var db = doc.Database;
+            double upm = Util.MmToDrawingUnits(1000.0);
+            bool inModel = string.Equals(LayoutManager.Current.CurrentLayout, "Model", StringComparison.OrdinalIgnoreCase);
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var cfg = ReadConfig(tr, db);
+                if (cfg == null) return;
+                var stmt = Compute(tr, db, cfg, 1.0 / (upm * upm));
+                Apply(tr, db, cfg, stmt, inModel);
+                tr.Commit();
+            }
+        }
+
+        private class Sum { public double Sqm; public int Used, Skipped; public List<long> Handles = new List<long>(); }
 
         /// <summary>Total area of the closed polylines selected, in square metres. Null when cancelled; zero when Enter is pressed.</summary>
         private static Sum SumAreas(Editor ed, string prompt, double toSqm)
@@ -149,6 +299,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     if (!pl.Closed) { sum.Skipped++; continue; }
                     sum.Sqm += Math.Abs(pl.Area) * toSqm;
                     sum.Used++;
+                    sum.Handles.Add(pl.Handle.Value);
                 }
                 tr.Commit();
             }

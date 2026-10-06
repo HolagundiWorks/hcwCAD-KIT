@@ -633,6 +633,9 @@ namespace HCW.AutoCAD.Plugin.Commands
             return values.Length > 1 && string.Equals(values[1].Value as string, kind, StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>The extra value stored with a tag (the third value of the extended data), or null.</summary>
+        internal static string ReadExtra(Entity ent) => KindValue(ent, 2);
+
         private static string KindValue(Entity ent, int index)
         {
             var data = ent.GetXDataForApplication(AppName);

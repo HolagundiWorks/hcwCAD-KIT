@@ -74,19 +74,33 @@ namespace HCW.AutoCAD.Plugin.Logic
             return s;
         }
 
-        /// <summary>Title block tag values. Slots beyond the floors given read "--"; floors beyond the slots count in the totals only.</summary>
+        /// <summary>
+        /// Title block tag values. Slots beyond the floors given read "--". When there are more floors than slots the last slot holds the
+        /// remaining floors together, named "FOURTH TO SIXTH" and summing their areas, so the rows still add up to the totals.
+        /// </summary>
         public Dictionary<string, string> ToFields(int slots = 4)
         {
             var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var rows = new List<FloorRow>(Floors);
+            if (slots > 0 && rows.Count > slots)
+            {
+                var rest = rows.Skip(slots - 1).ToList();
+                rows = rows.Take(slots - 1).ToList();
+                rows.Add(new FloorRow
+                {
+                    Name = rest[0].Name + " TO " + rest[rest.Count - 1].Name,
+                    Gross = rest.Sum(f => f.Gross), Deduction = rest.Sum(f => f.Deduction), Net = rest.Sum(f => f.Net),
+                });
+            }
             for (int i = 0; i < slots; i++)
             {
                 string n = (i + 1).ToString(CultureInfo.InvariantCulture);
-                if (i < Floors.Count)
+                if (i < rows.Count)
                 {
-                    d["FL" + n] = Floors[i].Name;
-                    d["DED" + n] = Fmt(Floors[i].Deduction);
-                    d["NET" + n] = Fmt(Floors[i].Net);
-                    d["GROSS" + n] = Fmt(Floors[i].Gross);
+                    d["FL" + n] = rows[i].Name;
+                    d["DED" + n] = Fmt(rows[i].Deduction);
+                    d["NET" + n] = Fmt(rows[i].Net);
+                    d["GROSS" + n] = Fmt(rows[i].Gross);
                 }
                 else { d["FL" + n] = "--"; d["DED" + n] = "--"; d["NET" + n] = "--"; d["GROSS" + n] = "--"; }
             }

@@ -587,6 +587,23 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
+        internal const string AppNameForLive = AppName;
+
+        /// <summary>
+        /// Moves the ID text of every electrical block to where its block is now, and erases text whose block is gone. This is the part of
+        /// ELUPDATE that follows a move; it does not number blocks or redraw schedules. Used by the live update service.
+        /// </summary>
+        internal static void LiveSync(Database db)
+        {
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var blocks = ReadBlocks(tr, db);
+                if (blocks.Count == 0) return;
+                SyncLabels(tr, db, blocks);
+                tr.Commit();
+            }
+        }
+
         // ------------------------------------------------------------------ ELSCHEDULE and ELUPDATE
 
         [CommandMethod("ELSCHEDULE")]
