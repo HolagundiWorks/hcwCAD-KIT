@@ -19,7 +19,7 @@ namespace HCW.AutoCAD.Plugin.Logic
 
         private static readonly string[][] Words =
         {
-            new[] { "WALL" },
+            new[] { "WALL", "BUILDING-CUT" },
             new[] { "WIND", "DOOR", "OPEN", "GLAZ", "FENES" },
             new[] { "COL", "STRUCT" },
             new[] { "FURN", "FIXT", "EQUIP" }

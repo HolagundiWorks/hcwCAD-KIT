@@ -18,7 +18,7 @@ namespace HCW.AutoCAD.Plugin.Commands
     /// </summary>
     public class ColumnCommands
     {
-        internal const string LayerColumn = "A-COL";
+        internal static string LayerColumn => Util.Out("A-COL");
         private const string LayerFill = "AN-HATCH", LayerTag = "AN-TEXT";
         private const string KindTag = "COLTAG", KindTable = "COLTABLE";
         private const double TagHeightMm = 250, SkipRadiusMm = 50;
@@ -45,7 +45,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 else _size = r.StringResult.Trim();
             }
 
-            var lo = new PromptKeywordOptions("\nColumn layer [A-COL/MEASURE-COLUMN] <" + _layer + ">: ", "A-COL MEASURE-COLUMN") { AllowNone = true };
+            var lo = new PromptKeywordOptions("\nColumn layer [" + LayerColumn + "/" + MeasureCommands.LayCol + "] <" + _layer + ">: ", LayerColumn + " " + MeasureCommands.LayCol) { AllowNone = true };
             lo.Keywords.Default = _layer;
             var lr = ed.GetKeywords(lo);
             if (lr.Status == PromptStatus.OK) _layer = lr.StringResult;
@@ -417,7 +417,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         /// <summary>A column layer: A-COL, or MEASURE-COLUMN where the take-off reads them.</summary>
         private static bool IsColumnLayer(string layer) =>
-            string.Equals(layer, LayerColumn, StringComparison.OrdinalIgnoreCase) || string.Equals(layer, MeasureCommands.LayCol, StringComparison.OrdinalIgnoreCase);
+            string.Equals(layer, LayerColumn, StringComparison.OrdinalIgnoreCase) || string.Equals(layer, "A-COL", StringComparison.OrdinalIgnoreCase) || string.Equals(layer, MeasureCommands.LayCol, StringComparison.OrdinalIgnoreCase);
 
         private static void AddLine(List<Seg> into, Line ln) =>
             into.Add(new Seg(new P2(ln.StartPoint.X, ln.StartPoint.Y), new P2(ln.EndPoint.X, ln.EndPoint.Y)));

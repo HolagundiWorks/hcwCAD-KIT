@@ -18,8 +18,8 @@ namespace HCW.AutoCAD.Plugin.Commands
     /// </summary>
     public class OpeningCommands
     {
-        private const string LayerDoor = "A-DOOR";
-        private const string LayerWin = "A-WIND";
+        private static string LayerDoor => Util.Out("A-DOOR");
+        private static string LayerWin => Util.Out("A-WIND");
         private const string LayerTag = "AN-TEXT";
         private const double MinThickMm = 60, MaxThickMm = 600, TagHeightMm = 250;
 

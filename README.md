@@ -236,6 +236,26 @@ Walls are numbered `FB01`, `FB02` … left to right (then bottom to top) by defa
 
 **Colour-mapped deductions.** A standalone deduction line (not inside a door or window block) that is mapped to a schedule name takes a colour for that name, the same name always the same colour, so you can see on the drawing which openings are which. Lines inside blocks cannot be coloured per insert. `DeductionColours` 0 turns it off.
 
+### Layers for permit scrutiny
+
+When a drawing goes to a separate scrutiny program, the items the tools draw are on the building permit layers so that program can pick them up by layer. This is the default (setting `LayerOutput` = `BP`; `HCW` keeps the HCW layer names). What goes where, from the `BpLayerMap` setting (change an entry to send an item to another layer):
+
+| Item | Layer |
+|---|---|
+| Walls (`HCWWALL`, lift shaft walls) | `BP-BUILDING-CUT` |
+| Doors (`HCWDOOR`) | `BP-DOOR` |
+| Windows (`HCWWINDOW`) | `BP-WINDOW` |
+| Columns (`HCWCOLUMN`) | `BP-STRUC-REF` |
+| Room outlines and room labels (`HCWROOMWALLS`, `ROOM`) | `BP-ROOM` |
+| Lift shaft, car and doors, machine room outline (`HCWLIFT`) | `BP-LIFT` |
+| Stair plan, escalator, handrails (`AECSTAIR`, `HCWESCALATOR`, `HCWRAIL`) | `BP-STAIR` |
+| Stair, lift and balustrade sections: concrete, headroom, bars | `BP-SECTION` |
+| Level marks (`HCWLEVEL`) and levels in sections | `BP-LEVEL` |
+| Section markers (`HCWSECTION`) | `BP-SECTION` |
+| Elevation markers (`HCWELEV`) | `BP-ELEVATION` |
+
+Text, dimensions, the grid, the north arrow, take-off and electrical layers keep their own names. The layers are created with their building permit colour, linetype and lineweight. `HCWPERMITLAYERS` handles drawings made earlier: **Report** counts what is on an HCW layer that has a permit layer, **Move** puts it there (model space, the current space and the geometry inside the door, window and column blocks the tools made; locked layers are left alone). The area statement already reads `BP-BUILDING-CUT` and the lift outline `BP-LIFT`. The permit layer names come from the plugin's building permit table; the scrutiny program's own expectations are not checked here, so compare the table above with what it reads and change `BpLayerMap` where they differ.
+
 ### Live updates (`HCWLIVE`)
 
 While live updates are on, the plugin notes which objects a command changed and, when the command ends, refreshes what depends on them. Four things are watched:

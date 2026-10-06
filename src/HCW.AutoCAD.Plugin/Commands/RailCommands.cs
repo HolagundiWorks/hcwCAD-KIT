@@ -16,7 +16,7 @@ namespace HCW.AutoCAD.Plugin.Commands
     /// </summary>
     public class RailCommands
     {
-        internal const string RailLayer = "A-RAIL";
+        internal static string RailLayer => Util.Out("A-RAIL");
 
         private static double _railMm = 50;
         private static double _spacingMm = 1200;
@@ -178,10 +178,10 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private static readonly Dictionary<string, GDrawer.RoleLayer> BalustradeRoles = new Dictionary<string, GDrawer.RoleLayer>
         {
-            { "RAIL", new GDrawer.RoleLayer { Layer = "A-RAIL-ELEV", Color = 6, Weight = LineWeight.LineWeight025 } },
-            { "POST", new GDrawer.RoleLayer { Layer = "A-RAIL-ELEV", Color = 6 } },
-            { "BALUSTER", new GDrawer.RoleLayer { Layer = "A-RAIL-BAL", Color = 8 } },
-            { "LEVEL", new GDrawer.RoleLayer { Layer = "A-RAIL-LVL", Color = 3 } },
+            { "RAIL", new GDrawer.RoleLayer { Layer = Util.Out("A-RAIL-ELEV"), Color = 6, Weight = LineWeight.LineWeight025 } },
+            { "POST", new GDrawer.RoleLayer { Layer = Util.Out("A-RAIL-ELEV"), Color = 6 } },
+            { "BALUSTER", new GDrawer.RoleLayer { Layer = Util.Out("A-RAIL-BAL"), Color = 8 } },
+            { "LEVEL", new GDrawer.RoleLayer { Layer = Util.Out("A-RAIL-LVL"), Color = 3 } },
             { "TEXT", new GDrawer.RoleLayer { Layer = "AN-TEXT", Color = 7 } },
         };
     }

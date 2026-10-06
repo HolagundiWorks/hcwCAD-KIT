@@ -89,12 +89,23 @@ namespace HCW.AutoCAD.Plugin
             return ltTbl.Has(name) ? ltTbl[name] : ObjectId.Null;
         }
 
-        /// <summary>Creates a layer from the HCW Layer Standard table (colour, linetype, lineweight), or colour 7 when the name is not in it.</summary>
+        /// <summary>
+        /// The layer name an item is drawn on. With the setting LayerOutput at BP (the default) items that have a building permit layer go on it, as the map
+        /// BpLayerMap says; with HCW they keep the HCW name. <paramref name="permitName"/> is the permit layer for an item the map does not list.
+        /// </summary>
+        public static string Out(string hcwName, string permitName = null) =>
+            Logic.LayerRoles.Resolve(hcwName, string.Equals(Settings.Get("LayerOutput", "BP"), "BP", StringComparison.OrdinalIgnoreCase),
+                Logic.LayerRoles.Parse(Settings.Get("BpLayerMap", Logic.LayerRoles.DefaultMap)), permitName);
+
+        /// <summary>Creates a layer from the HCW Layer Standard or the building permit table (colour, linetype, lineweight), or colour 7 when the name is in neither.</summary>
         public static ObjectId EnsureHcwLayer(Transaction tr, Database db, string name)
         {
             foreach (var l in LayerData.Hcw)
                 if (string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase))
                     return EnsureLayer(tr, db, l.Name, (short)l.Aci, l.Linetype, MmToLineWeight(l.LwMm));
+            foreach (var l in LayerData.Bplt)
+                if (string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase))
+                    return EnsureLayer(tr, db, l.Name, (short)l.Aci, l.Linetype, MmToLineWeight(l.LwHundredthsMm / 100.0));
             return EnsureLayer(tr, db, name, 7);
         }
 

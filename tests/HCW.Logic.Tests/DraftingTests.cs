@@ -3351,4 +3351,42 @@ namespace HCW.Logic.Tests
             Assert.Equal(StairRebar.Headers.Length, StairRebar.Rows(bars, 1)[0].Length);
         }
     }
+
+    public class LayerRolesTests
+    {
+        private static Dictionary<string, string> Map => LayerRoles.Parse(LayerRoles.DefaultMap);
+
+        [Fact]
+        public void PermitOutputUsesTheMapAndHcwOutputKeepsNames()
+        {
+            Assert.Equal("BP-BUILDING-CUT", LayerRoles.Resolve("A-WALL", true, Map));
+            Assert.Equal("BP-DOOR", LayerRoles.Resolve("a-door", true, Map));
+            Assert.Equal("A-WALL", LayerRoles.Resolve("A-WALL", false, Map));
+        }
+
+        [Fact]
+        public void UnlistedItemsUseTheCallersPermitNameOrKeepTheirOwn()
+        {
+            Assert.Equal("BP-LEVEL", LayerRoles.Resolve("AN-SYMB", true, Map, "BP-LEVEL"));
+            Assert.Equal("AN-TEXT", LayerRoles.Resolve("AN-TEXT", true, Map));
+            Assert.Equal("AN-SYMB", LayerRoles.Resolve("AN-SYMB", false, Map, "BP-LEVEL"));
+        }
+
+        [Fact]
+        public void EveryDefaultTargetIsABuildingPermitLayerOrPlainText()
+        {
+            var known = new HashSet<string>(HCW.AutoCAD.Plugin.LayerData.Bplt.Select(l => l.Name), StringComparer.OrdinalIgnoreCase) { "AN-TEXT" };
+            Assert.All(Map.Values, v => Assert.Contains(v, known));
+            Assert.Contains("BP-STAIR", LayerRoles.PermitLayers(Map));
+            Assert.Equal(LayerRoles.PermitLayers(Map).Count, LayerRoles.PermitLayers(Map).Distinct().Count());
+        }
+
+        [Fact]
+        public void MalformedMapRowsAreIgnored()
+        {
+            var m = LayerRoles.Parse("A-WALL=BP-X; junk; =BP-Y; A-DOOR=");
+            Assert.Single(m);
+            Assert.Equal("BP-X", m["A-WALL"]);
+        }
+    }
 }

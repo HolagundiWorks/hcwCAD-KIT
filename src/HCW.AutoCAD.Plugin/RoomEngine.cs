@@ -518,8 +518,8 @@ namespace HCW.AutoCAD.Plugin
         // unit actually is - see Util.MmToDrawingUnits.
         public override double DefaultTextHeight => Util.MmToDrawingUnits(125.0);
 
-        public override string DefaultLabelLayer => "ROOM-LABELS";
-        public override string DefaultRectLayer => "ROOM-RECT";
+        public override string DefaultLabelLayer => Util.Out("ROOM-LABELS");
+        public override string DefaultRectLayer => Util.Out("ROOM-RECT");
 
         public override string AreaUnitLabel => IsImperial ? "sq ft" : "m2";
 

@@ -16,7 +16,10 @@ namespace HCW.AutoCAD.Plugin.Commands
     /// </summary>
     public class LiftCommands
     {
-        private const string LayerWall = "A-WALL", LayerDoor = "A-DOOR", LayerLift = "BP-LIFT", LayerText = "AN-TEXT", LayerMachine = "A-LIFT-MR";
+        private static string LayerWall => Util.Out("A-WALL");
+        private static string LayerDoor => Util.Out("A-DOOR", "BP-LIFT");          // the car and its doors belong to the lift
+        private const string LayerLift = "BP-LIFT", LayerText = "AN-TEXT";
+        private static string LayerMachine => Util.Out("A-LIFT-MR");
         private const double TextHeightMm = 250, FrontGapMm = 30;
 
         private static string _clear = "1800x2000";
@@ -218,11 +221,11 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         internal static readonly Dictionary<string, GDrawer.RoleLayer> SectionRoles = new Dictionary<string, GDrawer.RoleLayer>
         {
-            { "WALL", new GDrawer.RoleLayer { Layer = "A-LIFT-SEC", Color = 7, Weight = LineWeight.LineWeight035 } },
+            { "WALL", new GDrawer.RoleLayer { Layer = Util.Out("A-LIFT-SEC"), Color = 7, Weight = LineWeight.LineWeight035 } },
             { "DOOR", new GDrawer.RoleLayer { Layer = LayerDoor, Color = 4 } },
-            { "LEVEL", new GDrawer.RoleLayer { Layer = "A-LIFT-LVL", Color = 3 } },
+            { "LEVEL", new GDrawer.RoleLayer { Layer = Util.Out("A-LIFT-LVL"), Color = 3 } },
             { "TEXT", new GDrawer.RoleLayer { Layer = LayerText, Color = 7 } },
-            { "HATCH", new GDrawer.RoleLayer { Layer = "A-LIFT-HATCH", Color = 8 } },
+            { "HATCH", new GDrawer.RoleLayer { Layer = Util.Out("A-LIFT-HATCH"), Color = 8 } },
         };
 
         private static bool AskNumber(Editor ed, string prompt, ref double value)

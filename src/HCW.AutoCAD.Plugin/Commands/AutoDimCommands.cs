@@ -565,7 +565,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// </summary>
         private static void ReadRoomNames(Transaction tr, Database db, List<KeyValuePair<P2, string>> into)
         {
-            var layers = Layers("AutoDimRoomNameLayers", "ROOM-LABELS;A-ROOM-NAME");
+            var layers = Layers("AutoDimRoomNameLayers", "ROOM-LABELS;BP-ROOM;A-ROOM-NAME");
             var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
             var skip = new System.Text.RegularExpressions.Regex("^(R?\\d+(\\.\\d+)?|[\\d.,]+\\s*(m2|sq\\.? ?m|sqm|m\\u00B2)?)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             foreach (ObjectId id in space)

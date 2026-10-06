@@ -88,11 +88,11 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private static readonly Dictionary<string, GDrawer.RoleLayer> Roles = new Dictionary<string, GDrawer.RoleLayer>
         {
-            { "WALL", new GDrawer.RoleLayer { Layer = "A-ESCALATOR", Color = 7, Weight = LineWeight.LineWeight035 } },
-            { "TREAD", new GDrawer.RoleLayer { Layer = "A-ESCALATOR-STEPS", Color = 8 } },
-            { "ARROW", new GDrawer.RoleLayer { Layer = "A-ESCALATOR-STEPS", Color = 3 } },
-            { "RAIL", new GDrawer.RoleLayer { Layer = "A-ESCALATOR-RAIL", Color = 6 } },
-            { "LEVEL", new GDrawer.RoleLayer { Layer = "A-ESCALATOR-LVL", Color = 3 } },
+            { "WALL", new GDrawer.RoleLayer { Layer = Util.Out("A-ESCALATOR"), Color = 7, Weight = LineWeight.LineWeight035 } },
+            { "TREAD", new GDrawer.RoleLayer { Layer = Util.Out("A-ESCALATOR-STEPS"), Color = 8 } },
+            { "ARROW", new GDrawer.RoleLayer { Layer = Util.Out("A-ESCALATOR-STEPS"), Color = 3 } },
+            { "RAIL", new GDrawer.RoleLayer { Layer = Util.Out("A-ESCALATOR-RAIL"), Color = 6 } },
+            { "LEVEL", new GDrawer.RoleLayer { Layer = Util.Out("A-ESCALATOR-LVL"), Color = 3 } },
             { "TEXT", new GDrawer.RoleLayer { Layer = "AN-TEXT", Color = 7 } },
         };
     }

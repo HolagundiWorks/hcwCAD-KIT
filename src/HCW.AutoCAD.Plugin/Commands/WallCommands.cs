@@ -16,7 +16,7 @@ namespace HCW.AutoCAD.Plugin.Commands
     /// </summary>
     public class WallCommands
     {
-        internal const string WallLayer = "A-WALL";
+        internal static string WallLayer => Util.Out("A-WALL");
 
         private static double _thicknessMm = 230;
         private static WallJustify _justify = WallJustify.Centre;
@@ -106,7 +106,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     {
                         if (id.ObjectClass.DxfName != "LWPOLYLINE") continue;
                         var pl = tr.GetObject(id, OpenMode.ForRead) as Polyline;
-                        if (pl == null || pl.IsErased || !pl.Closed || !string.Equals(pl.Layer, WallLayer, StringComparison.OrdinalIgnoreCase)) continue;
+                        if (pl == null || pl.IsErased || !pl.Closed || !(string.Equals(pl.Layer, WallLayer, StringComparison.OrdinalIgnoreCase) || string.Equals(pl.Layer, "A-WALL", StringComparison.OrdinalIgnoreCase))) continue;
                         if (fresh.Any(f => f.ObjectId == id)) continue;
                         var e = pl.GeometricExtents;
                         if (boxes.Any(b => e.MinPoint.X <= b.MaxPoint.X + reach && e.MaxPoint.X >= b.MinPoint.X - reach

@@ -70,7 +70,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
                 else ids.AddRange(psr.Value.GetObjectIds());
 
-                var roomLayers = new HashSet<string>(Settings.Get("RoomTableLayers", "ROOM-RECT;MEASURE-FLOOR;A-ROOM")
+                var roomLayers = new HashSet<string>(Settings.Get("RoomTableLayers", "ROOM-RECT;BP-ROOM;MEASURE-FLOOR;A-ROOM")
                     .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()), StringComparer.OrdinalIgnoreCase);
                 foreach (var id in ids)
                 {
@@ -103,7 +103,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
             if (rooms.Count == 0)
             {
-                ed.WriteMessage("\nHCWROOMREPORT: no closed room outlines" + (all ? " on the " + Settings.Get("RoomTableLayers", "ROOM-RECT;MEASURE-FLOOR;A-ROOM") + " layers" : " in the selection")
+                ed.WriteMessage("\nHCWROOMREPORT: no closed room outlines" + (all ? " on the " + Settings.Get("RoomTableLayers", "ROOM-RECT;BP-ROOM;MEASURE-FLOOR;A-ROOM") + " layers" : " in the selection")
                     + ". Make them with HCWROOMWALLS, or select closed polylines.");
                 return;
             }

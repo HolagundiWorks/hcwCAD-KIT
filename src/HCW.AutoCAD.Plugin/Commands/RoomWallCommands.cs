@@ -19,7 +19,8 @@ namespace HCW.AutoCAD.Plugin.Commands
     /// </summary>
     public class RoomWallCommands
     {
-        private const string RectLayer = "ROOM-RECT", LabelLayer = "ROOM-LABELS";
+        private static string RectLayer => Util.Out("ROOM-RECT");
+        private static string LabelLayer => Util.Out("ROOM-LABELS");
         private const double TextMm = 125, SnapMm = 1, SagittaMm = 2, WallBodyMm = 600;
 
         private static double _gapMm = 0;

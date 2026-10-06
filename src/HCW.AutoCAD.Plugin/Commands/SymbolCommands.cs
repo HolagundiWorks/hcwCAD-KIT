@@ -19,6 +19,10 @@ namespace HCW.AutoCAD.Plugin.Commands
     public class SymbolCommands
     {
         private const string LayerSymbol = "AN-SYMB", LayerText = "AN-TEXT";
+        /// <summary>Level marks and section markers go on their building permit layers for scrutiny; the north arrow and the other symbols stay on AN-SYMB.</summary>
+        private static string LevelLayer => Util.Out("AN-SYMB", "BP-LEVEL");
+        private static string SectionLayer => Util.Out("AN-SYMB", "BP-SECTION");
+        private static string ElevationLayer => Util.Out("AN-SYMB", "BP-ELEVATION");
         private const string BlockLevel = "HCW_LEVEL", BlockLevelUp = "HCW_LEVEL_UP", BlockNorth = "HCW_NORTH", BlockElev = "HCW_ELEV";
 
         private static double _scale = 100;
@@ -81,7 +85,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                Util.EnsureHcwLayer(tr, db, LayerSymbol);
+                Util.EnsureHcwLayer(tr, db, LevelLayer);
                 TitleBlockCommands.EnsureRegApp(tr, db);
                 var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                 foreach (ObjectId id in space)
@@ -90,7 +94,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     if (old == null || old.IsErased || !TitleBlockCommands.IsKind(old, KindDatum)) continue;
                     old.UpgradeOpen(); old.Erase();
                 }
-                var marker = new Circle(at, Vector3d.ZAxis, 1.5 * Mm) { Layer = LayerSymbol };
+                var marker = new Circle(at, Vector3d.ZAxis, 1.5 * Mm) { Layer = LevelLayer };
                 TitleBlockCommands.Tag(marker, KindDatum, level.ToString("R", CultureInfo.InvariantCulture));
                 space.AppendEntity(marker);
                 tr.AddNewlyCreatedDBObject(marker, true);
@@ -208,11 +212,11 @@ namespace HCW.AutoCAD.Plugin.Commands
                 using (Util.Doc.LockDocument())
                 using (var tr = db.TransactionManager.StartTransaction())
                 {
-                    Util.EnsureHcwLayer(tr, db, LayerSymbol);
+                    Util.EnsureHcwLayer(tr, db, LevelLayer);
                     EnsureLevelBlock(tr, db, _ceiling);
                     var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                     var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                    var br = new BlockReference(at, bt[_ceiling ? BlockLevelUp : BlockLevel]) { Layer = LayerSymbol, ScaleFactors = new Scale3d(Mm) };
+                    var br = new BlockReference(at, bt[_ceiling ? BlockLevelUp : BlockLevel]) { Layer = LevelLayer, ScaleFactors = new Scale3d(Mm) };
                     space.AppendEntity(br);
                     tr.AddNewlyCreatedDBObject(br, true);
                     TitleBlockCommands.EnsureRegApp(tr, db);
@@ -355,13 +359,13 @@ namespace HCW.AutoCAD.Plugin.Commands
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                Util.EnsureHcwLayer(tr, db, LayerSymbol);
+                Util.EnsureHcwLayer(tr, db, SectionLayer);
                 Util.EnsureHcwLayer(tr, db, LayerText);
                 string ltype = "CENTER2";
                 bool haveLt = Util.LoadLinetype(tr, db, ltype) != ObjectId.Null;
                 var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
 
-                var cut = new Line(new Point3d(a.X, a.Y, z), new Point3d(b.X, b.Y, z)) { Layer = LayerSymbol };
+                var cut = new Line(new Point3d(a.X, a.Y, z), new Point3d(b.X, b.Y, z)) { Layer = SectionLayer };
                 if (haveLt) cut.Linetype = ltype;
                 Put(tr, space, cut);
 
@@ -369,14 +373,14 @@ namespace HCW.AutoCAD.Plugin.Commands
                 {
                     // Thick shaft along the look direction, then the bubble with the label.
                     var shaftEnd = end + look * (10 * mm);
-                    var shaft = new Polyline { ConstantWidth = 0.8 * mm, Layer = LayerSymbol };
+                    var shaft = new Polyline { ConstantWidth = 0.8 * mm, Layer = SectionLayer };
                     shaft.AddVertexAt(0, new Point2d(end.X, end.Y), 0, 0, 0);
                     shaft.AddVertexAt(1, new Point2d(shaftEnd.X, shaftEnd.Y), 0, 0, 0);
                     shaft.Elevation = z;
                     Put(tr, space, shaft);
 
                     var centre = shaftEnd + look * (4 * mm);
-                    Put(tr, space, new Circle(new Point3d(centre.X, centre.Y, z), Vector3d.ZAxis, 4 * mm) { Layer = LayerSymbol });
+                    Put(tr, space, new Circle(new Point3d(centre.X, centre.Y, z), Vector3d.ZAxis, 4 * mm) { Layer = SectionLayer });
                     // With a sheet number the bubble is split by a line: the letter above it, the sheet below.
                     var labelAt = sheet == null ? centre : centre + new P2(0, 1.7 * mm);
                     var t = new DBText
@@ -389,7 +393,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     Put(tr, space, t);
                     if (sheet != null)
                     {
-                        Put(tr, space, new Line(new Point3d(centre.X - 4 * mm, centre.Y, z), new Point3d(centre.X + 4 * mm, centre.Y, z)) { Layer = LayerSymbol });
+                        Put(tr, space, new Line(new Point3d(centre.X - 4 * mm, centre.Y, z), new Point3d(centre.X + 4 * mm, centre.Y, z)) { Layer = SectionLayer });
                         var st = new DBText
                         {
                             Height = 2.5 * mm, TextString = sheet, Layer = LayerText,
@@ -546,11 +550,11 @@ namespace HCW.AutoCAD.Plugin.Commands
                 using (Util.Doc.LockDocument())
                 using (var tr = db.TransactionManager.StartTransaction())
                 {
-                    Util.EnsureHcwLayer(tr, db, LayerSymbol);
+                    Util.EnsureHcwLayer(tr, db, ElevationLayer);
                     EnsureElevationBlock(tr, db);
                     var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                     var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                    var br = new BlockReference(at, bt[BlockElev]) { Layer = LayerSymbol, Rotation = rotation, ScaleFactors = new Scale3d(Mm) };
+                    var br = new BlockReference(at, bt[BlockElev]) { Layer = ElevationLayer, Rotation = rotation, ScaleFactors = new Scale3d(Mm) };
                     space.AppendEntity(br);
                     tr.AddNewlyCreatedDBObject(br, true);
                     TitleBlockCommands.AddAttributes(tr, br);

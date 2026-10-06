@@ -291,6 +291,7 @@ namespace HCW.AutoCAD.Plugin.UI
         {
             var src = NewSource("BPLT");
             AddLarge(src, "BPLTSTART", "BPLT\nStart", "flag", "Set metres and create the BP- submission layers");
+            AddLarge(src, "HCWPERMITLAYERS", "Permit\nLayers", "layers", "Report or move everything the tools drew on HCW layers onto its building permit layer, ready for scrutiny");
             AddSmallGroup(src,
                 ("BPLTREPORT", "Export Report", "report", "Export the full BPLT layer report as CSV"));
             return Wrap(src);

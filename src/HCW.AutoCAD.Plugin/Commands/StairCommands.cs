@@ -451,7 +451,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             string wanted = Settings.Get("StairDimStyle", "HCW-WORKING");
             var roles = Roles.ToDictionary(r => r, r => new GDrawer.RoleLayer
             {
-                Layer = "AECSTAIR-" + (r == "SECTION" ? "RCC" : r), Color = ColorFor(r),
+                Layer = Util.Out("AECSTAIR-" + (r == "SECTION" ? "RCC" : r)), Color = ColorFor(r),
                 Weight = r == "SECTION" ? LineWeight.LineWeight035 : LineWeight.LineWeight000,
             });
             var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
