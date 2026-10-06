@@ -65,22 +65,57 @@ namespace HCW.AutoCAD.Plugin.Commands
             // Site.
             if (!AskSource(ed, byLayer, "the site boundary", Settings.Get("AreaSiteLayer", "BP-SITE-BOUNDARY"), toSqm, out cfg.Site)) return;
 
-            // Floors.
-            var count = ed.GetInteger(new PromptIntegerOptions("\nNumber of floors <" + _floors + ">: ")
-                { AllowNegative = false, AllowZero = false, LowerLimit = 1, UpperLimit = 12, DefaultValue = _floors, UseDefaultValue = true });
-            if (count.Status != PromptStatus.OK) return;
-            _floors = count.Value;
+            // Floors: named and counted from the levels kept in the drawing (MSCHED, Floors tab) when there are any.
+            var levels = LevelStore.Load();
+            bool fromLevels = false;
+            if (levels.Count > 0)
+            {
+                var lo = new PromptKeywordOptions("\nFloors from [Levels/Typed] <Levels> (" + string.Join(", ", levels.Select(l => l.Name)) + "): ", "Levels Typed") { AllowNone = true };
+                lo.Keywords.Default = "Levels";
+                var lr = ed.GetKeywords(lo);
+                if (lr.Status != PromptStatus.OK && lr.Status != PromptStatus.None) return;
+                fromLevels = lr.Status == PromptStatus.None || lr.StringResult == "Levels";
+            }
+            if (fromLevels) _floors = Math.Min(12, levels.Count);
+            else
+            {
+                var count = ed.GetInteger(new PromptIntegerOptions("\nNumber of floors <" + _floors + ">: ")
+                    { AllowNegative = false, AllowZero = false, LowerLimit = 1, UpperLimit = 12, DefaultValue = _floors, UseDefaultValue = true });
+                if (count.Status != PromptStatus.OK) return;
+                _floors = count.Value;
+            }
 
             for (int i = 0; i < _floors; i++)
             {
-                string def = DefaultNames[i];
-                var nr = ed.GetString(new PromptStringOptions("\nName of floor " + (i + 1) + " <" + def + ">: ")
-                    { AllowSpaces = true, DefaultValue = def, UseDefaultValue = true });
-                if (nr.Status != PromptStatus.OK) return;
-                string name = nr.StringResult.Trim().ToUpperInvariant();
-                if (name.Length == 0) name = def;
+                string name;
+                if (fromLevels) name = levels[i].Name.Trim().ToUpperInvariant();
+                else
+                {
+                    string def = DefaultNames[i];
+                    var nr = ed.GetString(new PromptStringOptions("\nName of floor " + (i + 1) + " <" + def + ">: ")
+                        { AllowSpaces = true, DefaultValue = def, UseDefaultValue = true });
+                    if (nr.Status != PromptStatus.OK) return;
+                    name = nr.StringResult.Trim().ToUpperInvariant();
+                    if (name.Length == 0) name = def;
+                }
+                if (name.Length == 0) name = DefaultNames[i];
 
                 var floor = new AreaFloorSource { Name = name };
+                if (i > 0)
+                {
+                    // a repeated floor reuses the outlines of the one before
+                    var so = new PromptKeywordOptions("\n" + name + " has the same outlines as " + cfg.Floors[i - 1].Name + " [Yes/No] <No>: ", "Yes No") { AllowNone = true };
+                    so.Keywords.Default = "No";
+                    var sr = ed.GetKeywords(so);
+                    if (sr.Status == PromptStatus.Cancel) return;
+                    if (sr.Status == PromptStatus.OK && sr.StringResult == "Yes")
+                    {
+                        floor.Gross = AreaSource.Decode(cfg.Floors[i - 1].Gross.Encode());
+                        floor.Deduction = AreaSource.Decode(cfg.Floors[i - 1].Deduction.Encode());
+                        cfg.Floors.Add(floor);
+                        continue;
+                    }
+                }
                 if (!AskSource(ed, byLayer, "the built-up outline(s) of " + name, Settings.Get("AreaGrossLayer", "BP-BUILDING-CUT"), toSqm, out floor.Gross)) return;
                 if (!AskSource(ed, byLayer, "the areas of " + name + " left out of the FAR - shafts, ducts, lift", "", toSqm, out floor.Deduction)) return;
                 cfg.Floors.Add(floor);

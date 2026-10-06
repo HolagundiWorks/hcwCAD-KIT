@@ -763,3 +763,7 @@ The ribbon icons are IBM Carbon Design System artwork, included under the Apache
 
 * `ELSCHEDULE` has a **Room** layout: every point with the room it stands in (the smallest closed outline on the `RoomTableLayers` layers that contains it, named from the text inside), its type and the board it is wired to. Points in no room are listed last as "(no room)".
 * `HCWLEVEL` has a **Levels** option: pick a floor from the levels kept in the drawing and the mark is placed with that floor's finished floor level.
+
+### Area statement floors from the levels
+
+`HCWAREASTMT` offers **Floors from Levels**: when floors are defined on the Floors tab of `MSCHED`, their names (upper case) and number are used instead of typing them, up to twelve. For each floor after the first you can answer **Yes** to "same outlines as the floor before", which reuses its built-up and deduction sources (a repeated floor) instead of picking them again. The floors still name the title block rows and the area table; the saved statement keeps them and refreshes as before.
