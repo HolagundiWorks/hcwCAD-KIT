@@ -249,6 +249,20 @@ While live updates are on, the plugin notes which objects a command changed and,
 
 `HCWLIVE` shows whether the service is on and offers **On**, **Off** and **Refresh** (refresh everything now). The setting `LiveUpdate` (1 to start with) decides whether it starts with the plugin. It reads changes through the host's object events, so it needs a command to end before it acts: it does not move things while you drag. It was written against the AutoCAD .NET interface; how BricsCAD and ZWCAD report grip edits and undo has not been tested, so on those use **Refresh** if something does not follow.
 
+### One command for related jobs
+
+Commands that did closely related jobs share a button, and the command asks which job first (Enter takes the first). The old command names still work and go straight to their job, so scripts and habits are not broken.
+
+| Button command | Asks | Also reachable as |
+|---|---|---|
+| `HCWAXIS` | Grid [New/Add/Remove] | `HCWAXISADD`, `HCWAXISDEL` |
+| `HCWLIFT` | Lift drawing [Plan/Section] | `HCWLIFTSECTION` |
+| `HCWRAIL` | Handrail view [Plan/Elevation] | `HCWBALUSTRADE` |
+| `HCWOPENMOVE` | Edit openings [Move/Slide/Replace/Sync] | `HCWOPENSLIDE`, `HCWOPENREPLACE`, `HCWOPENSYNC` |
+| `FIXTXT` | Separate overlapping text [Vertical/Horizontal] | `FIXTXTH` |
+| `HCWAUDIT` | Check [Layers/Overrides/Info/Counts] | `HCWAUDIT2`, `HCWINFO`, `HCWSCHEDULE` |
+| `MEXPORT` | Export as [Csv/Xlsx] | `MEXPORTX` |
+
 ### Settings file
 
 `HCWSETTINGS` creates `%APPDATA%\hcwCAD-KIT\settings.ini` if it is missing and prints its path; open it in any text editor. It holds the take-off label height (`TakeoffTextHeightMm`, default 125) and deduction tolerance (`DeductionToleranceMm`, default 10), the deduction-map suggestion tolerance, wall numbering, default floor and opening heights, and the `AUTODIM` distances, grid layers and text-fit factor. Each key has a comment. Restart the host after editing.

@@ -182,7 +182,6 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("MSLAB", "Slab", "floorplan", "Slab area with opening deductions"),
                 ("MSHOW", "Restore Layers", "view", "Turn back on only the layers a take-off command hid"),
                 ("MEXPORT", "Export", "document--export", "Save the last take-off as CSV, or every take-off as one Excel workbook"),
-                ("MEXPORTX", "Export Excel", "document--export", "Save every take-off as one Excel workbook, with a Bill sheet for rated take-offs"),
                 ("MCLEAR", "Clear Labels", "clean", "Erase take-off label and table objects"));
             return Wrap(src);
         }
@@ -224,16 +223,11 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWWALLEDIT", "Edit\nWall", "tag--edit", "Change the thickness or line position of a wall; joined walls are rebuilt and openings re-cut");
             AddLarge(src, "HCWDOOR", "Door", "home", "Cut a door in a wall: pick the position and the side it opens to");
             AddLarge(src, "HCWWINDOW", "Window", "view", "Cut a window in a wall: pick the position");
-            AddLarge(src, "HCWOPENMOVE", "Move\nOpening", "move", "Move a door or window to another place on the wall; the wall is closed where it was and cut where it goes");
-            AddLarge(src, "HCWOPENREPLACE", "Replace\nOpening", "reset", "Swap a door for a window or the other way, or change its width, in the same place");
-            AddLarge(src, "HCWLIFT", "Lift\nShaft", "box", "Draw a lift shaft in plan from its sizes: walls with the door opening, clear shaft, car and doors");
-            AddLarge(src, "HCWLIFTSECTION", "Lift\nSection", "box", "Draw a section through a lift shaft: pit, landings, car, overhead and an optional machine room");
+            AddLarge(src, "HCWOPENMOVE", "Edit\nOpening", "move", "Move, slide or replace a door or window, or sync the opening schedule from the blocks");
+            AddLarge(src, "HCWLIFT", "Lift\nShaft", "box", "Draw a lift shaft in plan from its sizes (walls with the door opening, clear shaft, car and doors), or a section through it");
             AddLarge(src, "HCWESCALATOR", "Escalator", "floorplan", "Draw an escalator in plan and side elevation from its rise, angle, width and landings");
-            AddLarge(src, "HCWRAIL", "Handrail", "rule--data-quality", "Draw a handrail in plan along a line or polyline, with posts at the corners and along each run");
-            AddLarge(src, "HCWBALUSTRADE", "Balustrade", "floorplan", "Draw a balustrade in elevation along a line or polyline: handrail, posts and balusters with a largest gap, level or sloped to follow a flight");
-            AddLarge(src, "HCWAXIS", "Axis\nGrid", "grid", "Draw a column grid from bay widths, with numbered and lettered bubbles");
-            AddLarge(src, "HCWAXISADD", "Add Grid\nLine", "add--alt", "Add a grid line parallel to one already drawn, with its bubbles and the next label");
-            AddLarge(src, "HCWAXISDEL", "Remove Grid\nLine", "add--alt", "Remove a grid line with its bubbles");
+            AddLarge(src, "HCWRAIL", "Handrail", "rule--data-quality", "Draw a handrail along a line or polyline, in plan (posts at the corners and along each run) or in elevation (posts and balusters)");
+            AddLarge(src, "HCWAXIS", "Axis\nGrid", "grid", "Draw a column grid from bay widths, with numbered and lettered bubbles; or add or remove a grid line");
             AddLarge(src, "HCWCOLUMN", "Place\nColumns", "column", "Put a column of one size on every grid intersection, or those in a window");
             AddLarge(src, "HCWCOLSCHED", "Column\nSchedule", "table-of-contents", "Mark every column C1, C2 ... by size and draw the column schedule");
             return Wrap(src);
@@ -271,8 +265,7 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("WinLabel", "Window Label", "tag", "Label window blocks from their WNAME property"),
                 ("WinLabelHeight", "Label Height", "text--scale", "Set the window-label text height"),
                 ("TXTALIGN", "Align Text", "text--align--left", "Align selected TEXT to a reference point"),
-                ("FIXTXT", "Fix Overlap (V)", "text--vertical-alignment", "Separate text that overlaps vertically"),
-                ("FIXTXTH", "Fix Overlap (H)", "text--align--justify", "Separate text that overlaps horizontally"),
+                ("FIXTXT", "Fix Overlap", "text--vertical-alignment", "Separate text that overlaps, vertically or horizontally"),
                 ("TXTSTYLE", "Set Style", "text--font", "List text styles and set the current one"),
                 ("TXTDUP", "Find Duplicates", "copy--file", "Find or remove TEXT with the same content and position"),
                 ("DBCOUNT", "Count Blocks", "report", "Count blocks in this layout, including dynamic-block visibility states"),
@@ -289,10 +282,7 @@ namespace HCW.AutoCAD.Plugin.UI
         {
             var src = NewSource("Layer Checks");
             AddSmallGroup(src,
-                ("HCWAUDIT", "Audit Layers", "checkmark--outline", "Check that all 36 standard layers are present"),
-                ("HCWAUDIT2", "Overrides", "rule--data-quality", "Report objects whose colour or linetype is not ByLayer"),
-                ("HCWINFO", "Layer Info", "document--view", "List the standard layers with colour, linetype and lineweight"),
-                ("HCWSCHEDULE", "Layer Schedule", "calendar", "Count objects on each layer"),
+                ("HCWAUDIT", "Audit", "checkmark--outline", "Check the standard layers, colour and linetype overrides, layer info or object counts per layer"),
                 ("HCWLAYERSTATE", "Layer State", "save", "Save or restore a named layer state"),
                 ("HCWPURGE", "Purge All", "clean", "Run PURGE All twice"));
             return Wrap(src);

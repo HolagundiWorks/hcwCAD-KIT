@@ -523,6 +523,11 @@ namespace HCW.AutoCAD.Plugin.Commands
         public void MoveOpening()
         {
             var ed = Util.Ed;
+            string job = Util.AskMode("Edit openings", "Move", "Slide", "Replace", "Sync");
+            if (job == null) return;
+            if (job == "Slide") { SlideOpening(); return; }
+            if (job == "Replace") { ReplaceOpening(); return; }
+            if (job == "Sync") { SyncSchedule(); return; }
             int skipped;
             var infos = SelectOpenings(ed, "\nSelect the doors and windows to move (Enter to pick a gap in the wall): ", out skipped);
             if (infos == null) return;

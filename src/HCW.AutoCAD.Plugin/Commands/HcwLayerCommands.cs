@@ -78,6 +78,11 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("HCWAUDIT")]
         public void HcwAudit()
         {
+            string check = Util.AskMode("Check", "Layers", "Overrides", "Info", "Counts");
+            if (check == null) return;
+            if (check == "Overrides") { HcwAudit2(); return; }
+            if (check == "Info") { HcwInfo(); return; }
+            if (check == "Counts") { HcwSchedule(); return; }
             var db = Util.Db; var ed = Util.Ed;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())

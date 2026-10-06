@@ -148,6 +148,19 @@ namespace HCW.AutoCAD.Plugin
         public static void Info(string msg) => Ed.WriteMessage("\n" + msg);
 
         /// <summary>
+        /// Asks which of several related jobs one command should do, as a keyword prompt that Enter answers with the first. Returns the
+        /// keyword, or null when the user cancels. Lets one button stand for a family of commands that used to be separate.
+        /// </summary>
+        public static string AskMode(string what, params string[] modes)
+        {
+            var o = new PromptKeywordOptions("\n" + what + " [" + string.Join("/", modes) + "] <" + modes[0] + ">: ", string.Join(" ", modes)) { AllowNone = true };
+            o.Keywords.Default = modes[0];
+            var r = Ed.GetKeywords(o);
+            if (r.Status == PromptStatus.None) return modes[0];
+            return r.Status == PromptStatus.OK ? r.StringResult : null;
+        }
+
+        /// <summary>
         /// A real-world length in millimetres -> the current drawing's raw
         /// unit, based on its actual INSUNITS setting. Used anywhere a
         /// command needs a plot-correct physical size (text height, arrow

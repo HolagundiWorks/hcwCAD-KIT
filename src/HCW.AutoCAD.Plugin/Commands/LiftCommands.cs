@@ -31,6 +31,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed;
             var db = Util.Db;
+            string drawing = Util.AskMode("Lift drawing", "Plan", "Section");
+            if (drawing == null) return;
+            if (drawing == "Section") { DrawSection(); return; }
 
             var table = LiftTable.Parse(Settings.Get("LiftTable", LiftTable.Default));
             var pers = ed.GetInteger(new PromptIntegerOptions("\nCapacity in persons, to take the sizes from the lift table (Enter to type the sizes) <none>: ") { AllowNone = true, AllowNegative = false, AllowZero = true });

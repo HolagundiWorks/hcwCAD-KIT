@@ -20,7 +20,11 @@ namespace HCW.AutoCAD.Plugin.Commands
         // ---- FIXTXT / FIXTXTH : uniform height + push-apart along one axis ----
 
         [CommandMethod("FIXTXT")]
-        public void FixTxt() => FixOverlap(vertical: true);
+        public void FixTxt()
+        {
+            string axis = Util.AskMode("Separate overlapping text", "Vertical", "Horizontal");
+            if (axis != null) FixOverlap(vertical: axis == "Vertical");
+        }
 
         [CommandMethod("FIXTXTH")]
         public void FixTxtH() => FixOverlap(vertical: false);

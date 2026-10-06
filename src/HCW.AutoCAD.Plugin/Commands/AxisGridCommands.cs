@@ -29,6 +29,10 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed;
             var db = Util.Db;
+            string mode = Util.AskMode("Grid", "New", "Add", "Remove");
+            if (mode == null) return;
+            if (mode == "Add") { AddLine(); return; }
+            if (mode == "Remove") { RemoveLine(); return; }
 
             var xs = AskBays(ed, "\nBay widths in mm, left to right, e.g. 4000 3*3600 <" + _xBays + ">: ", _xBays);
             if (xs == null) return;

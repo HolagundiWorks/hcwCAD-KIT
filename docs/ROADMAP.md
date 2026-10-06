@@ -22,6 +22,18 @@ These are limits of what was built, or items that need something the plugin cann
 - **Winders** are for L and U stairs. Dog-leg stairs keep landings, and the winder slab is worked along the walkline, not as exact kite areas.
 - **Deduction matching.** Index walls by bounding box for very large selections (a box test already rejects most pairs).
 
+## Overlaps still worth merging
+
+Found in an audit of every command; each needs a decision on behaviour before it is merged:
+
+- **Area labelling:** `POLYAREA` and `AREALABEL` both number picked areas and list them in a table (one running total, one live table or a file); `RAREA`, `AREAFIELD` and `MAREA` also put an area on a shape.
+- **Room tables:** `HCWROOMSCHEDULE` (CSV of room labels), `HCWROOMTABLE` (table of room labels) and `HCWROOMTOTAL` read labels; `HCWROOMREPORT` reads outlines, names, dimensions and areas and does the table, take-off and CSV/Excel in one. A single room command with a source choice (labels or outlines) would replace the four.
+- **Auto dimension:** `AUTODIM`, `AUTODIMROOM`, `AUTODIMWALL` and `AUTODIMCLEAR` share the layer dialog and chain drawing; one command with a mode would do.
+- **Room label settings:** `HCWROOMTH`, `HCWROOMFLOOR`, `HCWROOMRECT`, `HCWROOMHIDERECT`, `HCWROOMRESET` and `HCWROOMSET` are small settings commands for one dialog.
+- **Layer checks:** `HCWROOMAUDIT`, `HCWROOMCHECK` and `TXTAUDIT` are audits like `HCWAUDIT`.
+- **Drawing a result in the drawing:** the stair drawing code in `StairCommands` repeats what `GDrawer` does for lifts, escalators and balustrades (layers by role, text, dimensions, hatch); the stair version also tags every object with its ID, which `GDrawer` would need a hook for.
+- **Number increment:** `INCARRAY` and `INCCOPY` differ only in how the copies are placed.
+
 ## Quality
 
 - Move more pure logic (schedule maths, table layout) into `src/HCW.AutoCAD.Plugin/Logic` and cover it with tests.

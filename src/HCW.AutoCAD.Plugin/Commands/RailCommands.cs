@@ -26,6 +26,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         public void DrawRail()
         {
             var ed = Util.Ed;
+            string view = Util.AskMode("Handrail view", "Plan", "Elevation");
+            if (view == null) return;
+            if (view == "Elevation") { DrawBalustrade(); return; }
             if (!Ask(ed, "\nHandrail width in mm <" + _railMm + ">: ", ref _railMm, false)) return;
             if (!Ask(ed, "\nLargest distance between posts in mm <" + _spacingMm + ">: ", ref _spacingMm, false)) return;
             if (!Ask(ed, "\nPost size in mm, 0 for no posts <" + _postMm + ">: ", ref _postMm, true)) return;
