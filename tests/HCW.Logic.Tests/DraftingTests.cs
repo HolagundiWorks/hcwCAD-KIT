@@ -2652,7 +2652,7 @@ namespace HCW.Logic.Tests
             Assert.Equal(2, back.Floors.Count);
             Assert.Equal(new[] { "BP-LIFT", "BP-STAIR" }, back.Floors[0].Deduction.Layers.ToArray());
             Assert.Equal(new long[] { 5, 6 }, back.Floors[1].Gross.Handles.ToArray());
-            Assert.True(back.AllLayers().Contains("bp-lift"));
+            Assert.Contains("bp-lift", back.AllLayers());
             Assert.Contains(5L, back.AllHandles());
             Assert.Null(AreaConfig.FromLines(new[] { "EMPTY" }));
         }
