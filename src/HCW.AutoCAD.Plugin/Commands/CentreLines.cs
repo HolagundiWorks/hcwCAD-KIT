@@ -16,6 +16,8 @@ namespace HCW.AutoCAD.Plugin.Commands
         internal class Chain
         {
             public List<P2> Points = new List<P2>();
+            /// <summary>Per point: true for a point inside a curve (not a corner). Empty when there are no curves.</summary>
+            public List<bool> Smooth = new List<bool>();
             public bool Closed;
             public double Z;
         }
@@ -44,6 +46,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                         {
                             c.Points.Add(new P2(line.StartPoint.X, line.StartPoint.Y));
                             c.Points.Add(new P2(line.EndPoint.X, line.EndPoint.Y));
+                            c.Smooth.Add(false); c.Smooth.Add(false);
                             c.Z = line.StartPoint.Z;
                         }
                         else if (arc != null)
@@ -51,6 +54,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                             double sweep = arc.EndAngle - arc.StartAngle;
                             if (sweep <= 0) sweep += 2 * Math.PI;
                             c.Points = CurveSampler.ArcPoints(new P2(arc.Center.X, arc.Center.Y), arc.Radius, arc.StartAngle, sweep, Sagitta);
+                            for (int i = 0; i < c.Points.Count; i++) c.Smooth.Add(i > 0 && i < c.Points.Count - 1);
                             c.Z = arc.Center.Z;
                         }
                         else if (pl != null)
@@ -62,10 +66,10 @@ namespace HCW.AutoCAD.Plugin.Commands
                                 var b = pl.GetPoint2dAt((i + 1) % n);
                                 var seg = CurveSampler.BulgePoints(new P2(a.X, a.Y), new P2(b.X, b.Y), pl.GetBulgeAt(i), Sagitta);
                                 // Each piece starts where the last ended, so drop the repeated point.
-                                for (int k = 0; k < seg.Count - 1; k++) c.Points.Add(seg[k]);
-                                if (!pl.Closed && i == last - 1) c.Points.Add(seg[seg.Count - 1]);
+                                for (int k = 0; k < seg.Count - 1; k++) { c.Points.Add(seg[k]); c.Smooth.Add(k > 0); }
+                                if (!pl.Closed && i == last - 1) { c.Points.Add(seg[seg.Count - 1]); c.Smooth.Add(false); }
                             }
-                            if (n == 1) { var p = pl.GetPoint2dAt(0); c.Points.Add(new P2(p.X, p.Y)); }
+                            if (n == 1) { var p = pl.GetPoint2dAt(0); c.Points.Add(new P2(p.X, p.Y)); c.Smooth.Add(false); }
                             c.Closed = pl.Closed;
                             c.Z = pl.Elevation;
                         }
@@ -110,6 +114,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 {
                     var w = p.TransformBy(ucs);
                     c.Points.Add(new P2(w.X, w.Y));
+                    c.Smooth.Add(false);
                     c.Z = w.Z;
                 }
                 create(new List<Chain> { c });

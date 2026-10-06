@@ -227,6 +227,7 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWLIFTSECTION", "Lift\nSection", "box", "Draw a section through a lift shaft: pit, landings, car, overhead and an optional machine room");
             AddLarge(src, "HCWESCALATOR", "Escalator", "floorplan", "Draw an escalator in plan and side elevation from its rise, angle, width and landings");
             AddLarge(src, "HCWRAIL", "Handrail", "rule--data-quality", "Draw a handrail in plan along a line or polyline, with posts at the corners and along each run");
+            AddLarge(src, "HCWBALUSTRADE", "Balustrade", "floorplan", "Draw a balustrade in elevation along a line or polyline: handrail, posts and balusters with a largest gap, level or sloped to follow a flight");
             AddLarge(src, "HCWAXIS", "Axis\nGrid", "grid", "Draw a column grid from bay widths, with numbered and lettered bubbles");
             AddLarge(src, "HCWCOLUMN", "Place\nColumns", "column", "Put a column of one size on every grid intersection, or those in a window");
             AddLarge(src, "HCWCOLSCHED", "Column\nSchedule", "table-of-contents", "Mark every column C1, C2 ... by size and draw the column schedule");

@@ -2441,4 +2441,91 @@ namespace HCW.Logic.Tests
             Assert.Equal(Math.Tan(Math.PI / 6), (slope.Y - start.Y) / (slope.X - start.X), 6);
         }
     }
+
+    public class BalustradeTests
+    {
+        [Fact]
+        public void NoGapIsWiderThanTheLimit()
+        {
+            string e;
+            var o = new BalustradeOptions { MaxClearGap = 100, BalusterSize = 12, PostSize = 50 };
+            var r = Balustrade.Build(3600, new double[] { 0, 1200, 2400, 3600 }, o, out e);
+            Assert.Null(e);
+            Assert.Equal(4, r.Posts);
+            Assert.True(r.ClearGap <= 100 + 1e-9);
+            Assert.True(r.Balusters >= 3 * 9);
+            // One fewer baluster per bay would break the limit.
+            double clear = 1200 - 50;
+            int perBay = r.Balusters / 3;
+            Assert.True((clear - (perBay - 1) * 12) / perBay > 100);
+        }
+
+        [Fact]
+        public void SlopeRaisesTheRailAlongTheFlight()
+        {
+            string e;
+            var r = Balustrade.Build(2000, new double[] { 0, 2000 }, new BalustradeOptions { SlopeDeg = 30 }, out e);
+            var rail = r.Drawing.Polys.First(p => p.Layer == "RAIL").Pts;
+            Assert.Equal(2000 * Math.Tan(Math.PI / 6), rail[1].Y - rail[0].Y, 6);
+            var floor = r.Drawing.Polys.First(p => p.Layer == "LEVEL").Pts;
+            Assert.Equal(Math.Tan(Math.PI / 6), (floor[1].Y - floor[0].Y) / (floor[1].X - floor[0].X), 9);
+        }
+
+        [Fact]
+        public void BadInputsGiveReasons()
+        {
+            string e;
+            Assert.Null(Balustrade.Build(0, new double[0], new BalustradeOptions(), out e));
+            Assert.NotNull(e);
+            Assert.Null(Balustrade.Build(1000, new double[] { 0, 1000 }, new BalustradeOptions { HandrailHeight = 100 }, out e));
+            Assert.Null(Balustrade.Build(1000, new double[] { 0, 1000 }, new BalustradeOptions { SlopeDeg = 70 }, out e));
+        }
+    }
+
+    public class CurvedRailPostTests
+    {
+        [Fact]
+        public void PostsStayOffTheCutPointsOfACurve()
+        {
+            // A quarter circle of radius 10 cut into 8 pieces, with straight runs either side.
+            var pts = new List<P2> { new P2(-5, 0) };
+            var smooth = new List<bool> { false };
+            var arc = CurveSampler.ArcPoints(new P2(0, 10), 10, -Math.PI / 2, Math.PI / 2, 0.01);
+            for (int i = 0; i < arc.Count; i++) { pts.Add(arc[i]); smooth.Add(i > 0 && i < arc.Count - 1); }
+            pts.Add(new P2(10, 15)); smooth.Add(false);
+            var posts = RailLayout.PostPoints(pts, false, 3, smooth);
+            // Posts at the 4 real corners/ends are exact; none of the 'smooth' interior points is a post unless it lands on a spacing step.
+            Assert.Contains(posts, p => p.DistanceTo(new P2(-5, 0)) < 1e-9);
+            Assert.Contains(posts, p => p.DistanceTo(new P2(10, 15)) < 1e-9);
+            double archLen = 10 * Math.PI / 2;
+            int expectedOnArc = (int)Math.Ceiling(archLen / 3 - 1e-9);
+            int onArc = posts.Count(p => Math.Abs(p.DistanceTo(new P2(0, 10)) - 10) < 1e-6 && p.X > 1e-6 && p.Y < 10 - 1e-6 || (Math.Abs(p.X) < 1e-9 && Math.Abs(p.Y) < 1e-9));
+            Assert.True(onArc >= expectedOnArc);
+            // The arc is divided evenly: consecutive posts on it are about the same chord apart.
+            var onCurve = posts.Where(p => Math.Abs(p.DistanceTo(new P2(0, 10)) - 10) < 1e-6).ToList();
+            Assert.True(onCurve.Count >= 2);
+        }
+
+        [Fact]
+        public void NoSmoothFlagsMeansTheOldBehaviour()
+        {
+            var a = RailLayout.PostPoints(new[] { new P2(0, 0), new P2(2.5, 0) }, false, 1.2);
+            var b = RailLayout.PostPoints(new[] { new P2(0, 0), new P2(2.5, 0) }, false, 1.2, new[] { false, false });
+            Assert.Equal(a.Count, b.Count);
+        }
+
+        [Fact]
+        public void DistancesMarkCornersAndSplitEachStretchEvenly()
+        {
+            var pts = new[] { new P2(0, 0), new P2(10, 0), new P2(10, 5) };
+            var d = RailLayout.PostDistances(pts, false, 4, new[] { false, false, false });
+            Assert.Equal(new[] { 0.0, 10.0 / 3, 20.0 / 3, 10.0, 12.5, 15.0 }, d.ToArray(), new DoubleComparer());
+        }
+
+        private class DoubleComparer : IEqualityComparer<double>
+        {
+            public bool Equals(double a, double b) => Math.Abs(a - b) < 1e-9;
+            public int GetHashCode(double v) => 0;
+        }
+    }
 }
