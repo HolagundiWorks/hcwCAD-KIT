@@ -254,7 +254,7 @@ namespace HCW.Logic.Tests
         [Fact]
         public void BadRowsAreSkippedAndEmptyTableGivesZero()
         {
-            Assert.Equal(1, HCW.AutoCAD.Plugin.Logic.LintelDepth.Parse("bad; 1000=150; x=1; -5=2").Count);
+            Assert.Single(HCW.AutoCAD.Plugin.Logic.LintelDepth.Parse("bad; 1000=150; x=1; -5=2"));
             bool beyond;
             Assert.Equal(0, HCW.AutoCAD.Plugin.Logic.LintelDepth.For(500, HCW.AutoCAD.Plugin.Logic.LintelDepth.Parse(""), out beyond));
         }
@@ -269,6 +269,102 @@ namespace HCW.Logic.Tests
             Assert.Equal("2", rows[1][5]);
             Assert.Equal((1.36 * 0.23 * 0.1524 * 2).ToString("0.000", System.Globalization.CultureInfo.InvariantCulture), rows[1][6]);
             Assert.Equal("TOTAL", rows[2][0]); Assert.Equal("3", rows[2][5]);
+        }
+    }
+}
+
+namespace HCW.Logic.Tests
+{
+    public class WallRegenTests
+    {
+        private static HCW.AutoCAD.Plugin.Logic.P2 P(double x, double y) => new HCW.AutoCAD.Plugin.Logic.P2(x, y);
+        private static HCW.AutoCAD.Plugin.Logic.Seg S(double x1, double y1, double x2, double y2) => new HCW.AutoCAD.Plugin.Logic.Seg(P(x1, y1), P(x2, y2));
+        private static HCW.AutoCAD.Plugin.Logic.RegenSeg R(double x1, double y1, double x2, double y2, double t, bool outer = false) =>
+            new HCW.AutoCAD.Plugin.Logic.RegenSeg { A = P(x1, y1), B = P(x2, y2), ThicknessMm = t, Outer = outer };
+
+        [Fact]
+        public void RectangleIsOuterAndThePartitionInsideIsNot()
+        {
+            var segs = new[] { S(0, 0, 4000, 0), S(4000, 0, 4000, 3000), S(4000, 3000, 0, 3000), S(0, 3000, 0, 0), S(2000, 0, 2000, 3000) };
+            var o = HCW.AutoCAD.Plugin.Logic.WallRegen.Outer(segs);
+            Assert.True(o[0] && o[1] && o[2] && o[3]);
+            Assert.False(o[4]);
+        }
+
+        [Fact]
+        public void PartitionWithAGapIsExtendedOntoTheWallItMeets()
+        {
+            // a 4.5 in partition stopping 40 mm short of the wall along y = 3000
+            var input = new[] { R(0, 3000, 4000, 3000, 228.6, true), R(2000, 0, 2000, 2960, 114.3) };
+            var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, rep);
+            var part = res.Single(r => r.ThicknessMm == 114.3);
+            Assert.Equal(3000, System.Math.Max(part.A.Y, part.B.Y), 6);
+            Assert.Equal(1, rep.TJunctions);
+        }
+
+        [Fact]
+        public void PartitionRunningPastTheWallIsCutBackToIt()
+        {
+            var input = new[] { R(0, 3000, 4000, 3000, 228.6, true), R(2000, 0, 2000, 3080, 114.3) };
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, new HCW.AutoCAD.Plugin.Logic.RegenReport());
+            var part = res.Single(r => r.ThicknessMm == 114.3);
+            Assert.Equal(3000, System.Math.Max(part.A.Y, part.B.Y), 6);
+        }
+
+        [Fact]
+        public void CornerWithAGapMeetsAtTheCrossingOfTheTwoLines()
+        {
+            var input = new[] { R(0, 0, 3960, 0, 228.6, true), R(4000, 40, 4000, 3000, 228.6, true) };
+            var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, rep);
+            Assert.Equal(4000, res[0].B.X, 6); Assert.Equal(0, res[0].B.Y, 6);
+            Assert.Equal(0, res[1].A.Y, 6);
+            Assert.Equal(1, rep.LCorners);
+        }
+
+        [Fact]
+        public void CornerBetweenTwoThicknessesIsSquaredByHalfTheOtherWall()
+        {
+            var input = new[] { R(0, 0, 4000, 0, 228.6, true), R(4000, 0, 4000, 2000, 114.3) };
+            var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, rep);
+            Assert.Equal(4000 + 114.3 / 2, res[0].B.X, 6);     // the 9 in wall runs half of 4.5 in further
+            Assert.Equal(-228.6 / 2, res[1].A.Y, 6);           // the 4.5 in wall runs half of 9 in below the corner
+            Assert.Equal(1, rep.SquaredCorners);
+        }
+
+        [Fact]
+        public void SameThicknessCornerIsLeftToTheChainToMitre()
+        {
+            var input = new[] { R(0, 0, 4000, 0, 228.6), R(4000, 0, 4000, 2000, 228.6) };
+            var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, rep);
+            Assert.Equal(0, rep.SquaredCorners);
+            Assert.Equal(4000, res[0].B.X, 6);
+            var chains = HCW.AutoCAD.Plugin.Logic.WallRegen.Chains(res, 0.5);
+            Assert.Single(chains);
+            Assert.Equal(3, chains[0].Value.Points.Count);
+        }
+
+        [Fact]
+        public void CrossingAndFreeEndsAreCounted()
+        {
+            var input = new[] { R(0, 1000, 4000, 1000, 114.3), R(2000, 0, 2000, 2000, 114.3) };
+            var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
+            HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, rep);
+            Assert.Equal(1, rep.Crossings);
+            Assert.Equal(4, rep.FreeEnds);
+        }
+
+        [Fact]
+        public void ThreeEndsAtOnePointAreSquaredByTheThickestOther()
+        {
+            var input = new[] { R(0, 0, 2000, 0, 228.6), R(2000, 0, 4000, 0, 114.3), R(2000, 0, 2000, 1500, 114.3) };
+            var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, rep);
+            Assert.Equal(1, rep.SquaredCorners);
+            Assert.Equal(2000 + 114.3 / 2, res[0].B.X, 6);      // the thickest of the other two ends is 4.5 in
         }
     }
 }

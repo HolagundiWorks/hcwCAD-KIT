@@ -20,6 +20,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             public List<bool> Smooth = new List<bool>();
             public bool Closed;
             public double Z;
+            /// <summary>Thickness for this chain in mm; 0 uses the thickness HCWWALL was asked for.</summary>
+            public double ThicknessMm;
         }
 
         /// <summary>Curved centre lines are cut into straight pieces no further than this from the true curve.</summary>

@@ -55,9 +55,10 @@ namespace HCW.AutoCAD.Plugin.Commands
                 var newIds = new List<string>();
                 foreach (var c in chains)
                 {
-                    var loops = WallGeometry.Outline(c.Points, c.Closed, thick, _justify);
+                    double chainMm = c.ThicknessMm > 0 ? c.ThicknessMm : _thicknessMm;
+                    var loops = WallGeometry.Outline(c.Points, c.Closed, Util.MmToDrawingUnits(chainMm), _justify);
                     if (loops.Count == 0) { skipped++; continue; }
-                    var rec = new WallRecord { Id = WallStore.NextId(tr, db), ThicknessMm = _thicknessMm, Justify = _justify, Closed = c.Closed, Z = c.Z, Points = c.Points };
+                    var rec = new WallRecord { Id = WallStore.NextId(tr, db), ThicknessMm = chainMm, Justify = _justify, Closed = c.Closed, Z = c.Z, Points = c.Points };
                     WallStore.Save(tr, db, rec);
                     WallStore.DrawMeasure(tr, db, space, rec);
                     newIds.Add(rec.Id);
@@ -234,6 +235,140 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (n < 0) ed.WriteMessage("\nHCWWALLHATCH: the walls could not be hatched; the wall shapes were not accepted. Nothing was changed.");
             else if (n == 0) ed.WriteMessage("\nHCWWALLHATCH: no wall objects in this space to hatch. Walls drawn by hand need HCWWALLADOPT first.");
             else ed.WriteMessage("\nHCWWALLHATCH: wall hatch redrawn on " + WallHatch.Layer + ".");
+        }
+
+        // ---- regenerate walls from the single lines already in the drawing ----
+
+        private const string CentreLineLayer = "A-WALL-CL";
+
+        /// <summary>
+        /// HCWWALLREGEN reads the lines on a walls layer (pick the layer first) as wall centre lines and draws them again as walls of two
+        /// thicknesses, 9 in for outer walls and 4.5 in for inner walls, with the junctions worked out and the walls hatched.
+        /// </summary>
+        [CommandMethod("HCWWALLREGEN")]
+        public void RegenerateWalls()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            double mm = Util.MmToDrawingUnits(1.0);
+
+            // 1. the walls layer, first
+            string layer = WallLayer;
+            var po = new PromptEntityOptions("\nPick a line on the walls layer [Type the layer name] <" + layer + ">: ", "Type") { AllowNone = true };
+            po.SetRejectMessage("\nPick a line or polyline.");
+            po.AddAllowedClass(typeof(Curve), false);
+            var pr = ed.GetEntity(po);
+            if (pr.Status == PromptStatus.Keyword)
+            {
+                var sr = ed.GetString(new PromptStringOptions("\nLayer holding the walls <" + layer + ">: ") { AllowSpaces = false, DefaultValue = layer, UseDefaultValue = true });
+                if (sr.Status != PromptStatus.OK) return;
+                layer = sr.StringResult.Trim();
+            }
+            else if (pr.Status == PromptStatus.OK)
+            {
+                using (var tr = db.TransactionManager.StartTransaction()) { layer = ((Entity)tr.GetObject(pr.ObjectId, OpenMode.ForRead)).Layer; tr.Commit(); }
+            }
+            else if (pr.Status != PromptStatus.None) return;
+
+            // 2. read the straight lines on it
+            var ids = new List<ObjectId>(); var segs = new List<Seg>(); var segIds = new List<ObjectId>(); int curved = 0;
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+                foreach (ObjectId id in space)
+                {
+                    string dxf = id.ObjectClass.DxfName;
+                    if (dxf != "LINE" && dxf != "LWPOLYLINE" && dxf != "ARC") continue;
+                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                    if (ent == null || ent.IsErased || !string.Equals(ent.Layer, layer, StringComparison.OrdinalIgnoreCase)) continue;
+                    var ln = ent as Line; var pl = ent as Polyline;
+                    if (ln != null) { segs.Add(new Seg(new P2(ln.StartPoint.X, ln.StartPoint.Y), new P2(ln.EndPoint.X, ln.EndPoint.Y))); segIds.Add(id); }
+                    else if (pl != null && !WallStore.IdsOf(pl).Any())
+                    {
+                        int n = pl.NumberOfVertices, last = pl.Closed ? n : n - 1;
+                        bool any = false;
+                        for (int i = 0; i < last; i++)
+                        {
+                            if (pl.GetSegmentType(i) != SegmentType.Line) { curved++; continue; }
+                            var a = pl.GetPoint2dAt(i); var b = pl.GetPoint2dAt((i + 1) % n);
+                            segs.Add(new Seg(new P2(a.X, a.Y), new P2(b.X, b.Y))); segIds.Add(id); any = true;
+                        }
+                        if (any && !ids.Contains(id)) ids.Add(id);
+                    }
+                    else curved++;
+                }
+                tr.Commit();
+            }
+            for (int i = segs.Count - 1; i >= 0; i--)
+                if (segs[i].Length <= 2 * mm) { segs.RemoveAt(i); segIds.RemoveAt(i); }          // zero-length lines are not walls
+            if (segs.Count == 0) { ed.WriteMessage("\nHCWWALLREGEN: no straight lines on " + layer + "."); return; }
+            ed.WriteMessage("\nHCWWALLREGEN: " + segs.Count + " line(s) on " + layer + (curved > 0 ? ", " + curved + " curved or closed-outline piece(s) skipped" : "") + ".");
+
+            // 3. thickness: outer walls and inner walls
+            double outerMm = Settings.GetDouble("RegenOuterMm", 228.6), innerMm = Settings.GetDouble("RegenInnerMm", 114.3);
+            var to = new PromptKeywordOptions("\nThickness [Auto/Outer/Inner] <Auto> (Auto: outer lines " + Math.Round(outerMm / 25.4, 2) + " in, inner lines " + Math.Round(innerMm / 25.4, 2) + " in; Outer or Inner: every line the same): ", "Auto Outer Inner") { AllowNone = true };
+            to.Keywords.Default = "Auto";
+            var tr0 = ed.GetKeywords(to);
+            string rule = tr0.Status == PromptStatus.OK ? tr0.StringResult : "Auto";
+            if (tr0.Status != PromptStatus.OK && tr0.Status != PromptStatus.None) return;
+            var outer = rule == "Auto" ? WallRegen.Outer(segs) : segs.Select(s => rule == "Outer").ToArray();
+            ed.WriteMessage("\n  " + outer.Count(b => b) + " line(s) at " + Math.Round(outerMm / 25.4, 2) + " in, " + outer.Count(b => !b) + " at " + Math.Round(innerMm / 25.4, 2) + " in.");
+
+            // 4. flip the lines the rule got wrong
+            if (rule == "Auto")
+            {
+                var fo = new PromptKeywordOptions("\nChange the thickness of some lines [Yes/No] <No>: ", "Yes No") { AllowNone = true };
+                fo.Keywords.Default = "No";
+                var fr = ed.GetKeywords(fo);
+                if (fr.Status == PromptStatus.Cancel) return;
+                if (fr.Status == PromptStatus.OK && fr.StringResult == "Yes")
+                {
+                    var sel = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect the lines to swap between outer and inner thickness: " },
+                        new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "LINE,LWPOLYLINE"), new TypedValue((int)DxfCode.LayerName, layer) }));
+                    if (sel.Status == PromptStatus.OK)
+                    {
+                        var chosen = new HashSet<ObjectId>(sel.Value.GetObjectIds());
+                        int flipped = 0;
+                        for (int i = 0; i < segs.Count && i < segIds.Count; i++)
+                            if (chosen.Contains(segIds[i])) { outer[i] = !outer[i]; flipped++; }
+                        ed.WriteMessage("\n  " + flipped + " line(s) swapped.");
+                    }
+                }
+            }
+
+            // 5. what happens to the original lines
+            var oo = new PromptKeywordOptions("\nOriginal lines [Move/Erase] <Move> (Move puts them on " + CentreLineLayer + "): ", "Move Erase") { AllowNone = true };
+            oo.Keywords.Default = "Move";
+            var orr = ed.GetKeywords(oo);
+            bool erase = orr.Status == PromptStatus.OK && orr.StringResult == "Erase";
+            if (orr.Status != PromptStatus.OK && orr.Status != PromptStatus.None) return;
+
+            // 6. work out the junctions and make the walls
+            var input = segs.Select((s, i) => new RegenSeg { A = s.A, B = s.B, Outer = outer[i], ThicknessMm = outer[i] ? outerMm : innerMm }).ToList();
+            var report = new RegenReport();
+            var resolved = WallRegen.Resolve(input, Settings.GetDouble("RegenReachMm", 300) * mm, 1.0 / mm, 0.5 * mm, report);
+            var chains = new List<CentreLines.Chain>();
+            foreach (var kv in WallRegen.Chains(resolved, 0.5 * mm))
+                chains.Add(new CentreLines.Chain { Points = kv.Value.Points, Closed = kv.Value.Closed, Z = 0, ThicknessMm = kv.Key, Smooth = new List<bool>() });
+            var oldJust = _justify; _justify = WallJustify.Centre;
+            try { Create(ed, chains); } finally { _justify = oldJust; }
+
+            // 7. take the original lines off the walls layer (the new outlines are on it)
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                if (!erase) Util.EnsureLayer(tr, db, CentreLineLayer, 8);
+                foreach (var id in segIds.Distinct())
+                {
+                    var ent = tr.GetObject(id, OpenMode.ForWrite) as Entity;
+                    if (ent == null || ent.IsErased) continue;
+                    if (erase) ent.Erase(); else ent.Layer = CentreLineLayer;
+                }
+                tr.Commit();
+            }
+            ed.WriteMessage("\nHCWWALLREGEN: junctions - " + report.LCorners + " corner(s), " + report.TJunctions + " T junction(s), " + report.Crossings + " crossing(s), "
+                + report.SquaredCorners + " point(s) squared between thicknesses, " + report.Snapped + " end(s) moved onto the wall they meet, " + report.FreeEnds + " free end(s). "
+                + (erase ? "Original lines erased." : "Original lines are on " + CentreLineLayer + ".") + " Edit the walls with HCWWALLEDIT; openings can be cut with HCWDOOR and HCWWINDOW.");
         }
 
         [CommandMethod("HCWWALLJOIN")]

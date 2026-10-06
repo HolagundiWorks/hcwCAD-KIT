@@ -14,7 +14,7 @@ The bylaw tables and limits: `AreaExemptRules`, `AreaPermTable`, `AreaZone`, `Ar
 
 ## Not verified
 
-- Nothing has been loaded into AutoCAD, BricsCAD or ZWCAD. The command layer (prompts, entity creation, live update events, jigs, ribbon) has only been compiled, never run. This includes the newest commands: `SHEETFIT`, the wall, opening and axis grid tools, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWROOMSET`, `HCWWALLHATCH`, lintels, the column schedule, `HCWSECTIONDRAW`, `HCWOPENCONVERT`, `HCWOPENHEIGHT`, `HCWOPENSCHED`, `HCWCOLQTY`, `MQTYSUM`, `MLINTEL`, the electrical schedule by room, `HCWLEVEL` Levels option, the area statement floors from levels, single-line walls at any angle in the auto dimensions.
+- Nothing has been loaded into AutoCAD, BricsCAD or ZWCAD. The command layer (prompts, entity creation, live update events, jigs, ribbon) has only been compiled, never run. This includes the newest commands: `SHEETFIT`, the wall, opening and axis grid tools, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWROOMSET`, `HCWWALLHATCH`, lintels, the column schedule, `HCWSECTIONDRAW`, `HCWOPENCONVERT`, `HCWOPENHEIGHT`, `HCWOPENSCHED`, `HCWCOLQTY`, `MQTYSUM`, `MLINTEL`, `HCWWALLREGEN`, the electrical schedule by room, `HCWLEVEL` Levels option, the area statement floors from levels, single-line walls at any angle in the auto dimensions.
 - The BricsCAD and ZWCAD projects were not built.
 - The installers (`build\Package-Installers.ps1`) were not built.
 
@@ -29,7 +29,7 @@ The bylaw tables and limits: `AreaExemptRules`, `AreaPermTable`, `AreaZone`, `Ar
 - Ribbon regrouped (Walls & Openings, Structure, Levels & Sections, Rooms & Areas, Take-off, Electrical, Symbols, Drawing & Text Tools, Notes) and `HCWRIBBON` added.
 - `HCWLEGEND` no longer throws `eKeyNotFound`.
 
-Riskiest untested pieces: the wall hatch (region booleans on the joined walls, redrawn after every opening command), the lintel and window-tag changes inside `OpeningCommands.PlaceIn` (the path every door and window takes), and the section tool (crossings of the section line with the wall and column layers).
+Riskiest untested pieces: `HCWWALLREGEN` (the junction logic is unit tested, but the wall creation, join and hatch after it have not run), the wall hatch (region booleans on the joined walls, redrawn after every opening command), the lintel and window-tag changes inside `OpeningCommands.PlaceIn` (the path every door and window takes), and the section tool (crossings of the section line with the wall and column layers).
 
 ## Open problem: ribbon not loading
 
