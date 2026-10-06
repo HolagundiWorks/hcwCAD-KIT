@@ -437,6 +437,47 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         /// <summary>Saves take-offs: the latest as CSV, or every saved take-off as one Excel workbook.</summary>
         /// <summary>
+        /// The lintels made with HCWLINTEL as a take-off: each line on MEASURE-LINTEL that carries its depth (by opening width: 6 in up to 4 ft,
+        /// 9 in up to 6 ft, 1 ft up to 10 ft, setting LintelDepthTable), with the wall thickness it runs through. Concrete is length x wall x depth,
+        /// shuttering the soffit and both sides. Saved as the take-off "Lintels" for MEXPORT.
+        /// </summary>
+        [CommandMethod("MLINTEL")]
+        public void LintelTakeoff()
+        {
+            var ed = Util.Ed; var db = Util.Db;
+            var lintels = new List<HCW.AutoCAD.Plugin.Logic.LintelLine>();
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+                double mm = Util.MmToDrawingUnits(1.0);
+                foreach (ObjectId id in space)
+                {
+                    if (id.ObjectClass.DxfName != "LINE") continue;
+                    var ln = tr.GetObject(id, OpenMode.ForRead) as Line;
+                    if (ln == null || ln.IsErased || !string.Equals(ln.Layer, LayLt, StringComparison.OrdinalIgnoreCase)) continue;
+                    var rb = ln.GetXDataForApplication(OpeningCommands.LintelApp);
+                    if (rb == null) continue;
+                    var v = rb.AsArray().Where(t => t.TypeCode == (int)DxfCode.ExtendedDataReal).Select(t => (double)t.Value).ToList();
+                    if (v.Count < 5) continue;
+                    lintels.Add(new HCW.AutoCAD.Plugin.Logic.LintelLine { LengthMm = ln.Length / mm, DepthMm = v[2], ThicknessMm = v[3], OpeningMm = v[4] });
+                }
+                var rows = HCW.AutoCAD.Plugin.Logic.LintelQuantity.Rows(lintels);
+                if (rows.Count == 0)
+                {
+                    ed.WriteMessage("\nMLINTEL: no lintels made by HCWLINTEL in this space. Generate them first.");
+                    return;
+                }
+                MeasureBook.SaveTakeoff(tr, db, "Lintels", HCW.AutoCAD.Plugin.Logic.LintelQuantity.Headers, rows);
+                ed.WriteMessage("\n\nLINTELS");
+                foreach (var r in rows)
+                    ed.WriteMessage("\n  " + Util.Pad(r[0], 7) + "opening " + Util.Pad(r[1], 6) + "length " + Util.Pad(r[2], 6) + "wall " + Util.Pad(r[3], 5) + "depth " + Util.Pad(r[4], 6) + "x" + Util.Pad(r[5], 4) + r[6] + " m3  " + r[7] + " m2");
+                ed.WriteMessage("\n  Saved as the take-off \"Lintels\"; MEXPORT writes it with the others.");
+                tr.Commit();
+            }
+        }
+
+        /// <summary>
         /// One table of concrete and shuttering for the structural elements already worked out: every stair take-off and the column take-off
         /// (HCWCOLQTY) added together. Saved as the take-off "Structure summary", so MEXPORT writes it with the others.
         /// </summary>

@@ -27,7 +27,7 @@ namespace HCW.AutoCAD.Plugin.Logic
         public static List<string[]> Build(IEnumerable<SavedTakeoff> takeoffs)
         {
             var ci = CultureInfo.InvariantCulture;
-            double stairC = 0, stairS = 0, colC = 0, colS = 0; int stairs = 0, cols = 0;
+            double stairC = 0, stairS = 0, colC = 0, colS = 0, linC = 0, linS = 0; int stairs = 0, cols = 0, lins = 0;
             foreach (var t in takeoffs)
             {
                 if (t.Name.StartsWith("Stair ", StringComparison.OrdinalIgnoreCase) && !t.Name.EndsWith(" bars", StringComparison.OrdinalIgnoreCase))
@@ -39,6 +39,15 @@ namespace HCW.AutoCAD.Plugin.Logic
                         else if (string.Equals(r[0], "SHUTTERING TOTAL", StringComparison.OrdinalIgnoreCase)) stairS += Num(r[1]);
                     }
                     stairs++;
+                }
+                else if (string.Equals(t.Name, "Lintels", StringComparison.OrdinalIgnoreCase))
+                {
+                    int cI = Array.FindIndex(t.Headers, h => h.StartsWith("Concrete", StringComparison.OrdinalIgnoreCase));
+                    int sI = Array.FindIndex(t.Headers, h => h.StartsWith("Shuttering", StringComparison.OrdinalIgnoreCase));
+                    var total = t.Rows.LastOrDefault(r => r.Length > 0 && string.Equals(r[0], "TOTAL", StringComparison.OrdinalIgnoreCase));
+                    if (total != null && cI >= 0 && cI < total.Length) linC += Num(total[cI]);
+                    if (total != null && sI >= 0 && sI < total.Length) linS += Num(total[sI]);
+                    lins++;
                 }
                 else if (string.Equals(t.Name, "Columns", StringComparison.OrdinalIgnoreCase))
                 {
@@ -53,7 +62,8 @@ namespace HCW.AutoCAD.Plugin.Logic
             var rows = new List<string[]>();
             if (stairs > 0) rows.Add(new[] { "Stairs", stairs.ToString(ci), stairC.ToString("0.000", ci), stairS.ToString("0.00", ci) });
             if (cols > 0) rows.Add(new[] { "Columns", cols.ToString(ci), colC.ToString("0.000", ci), colS.ToString("0.00", ci) });
-            if (rows.Count > 0) rows.Add(new[] { "TOTAL", "", (stairC + colC).ToString("0.000", ci), (stairS + colS).ToString("0.00", ci) });
+            if (lins > 0) rows.Add(new[] { "Lintels", lins.ToString(ci), linC.ToString("0.000", ci), linS.ToString("0.00", ci) });
+            if (rows.Count > 0) rows.Add(new[] { "TOTAL", "", (stairC + colC + linC).ToString("0.000", ci), (stairS + colS + linS).ToString("0.00", ci) });
             return rows;
         }
     }

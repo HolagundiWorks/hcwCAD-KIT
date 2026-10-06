@@ -821,6 +821,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (skipped > 0) ed.WriteMessage("\n" + skipped + " other object(s) skipped.");
             double mm = Util.MmToDrawingUnits(1.0);
             int done = 0;
+            var depths = new List<string>();
+            LintelBeyondTable = false;
             using (Util.Doc.LockDocument())
             using (var tr = Util.Db.TransactionManager.StartTransaction())
             {
@@ -833,12 +835,15 @@ namespace HCW.AutoCAD.Plugin.Commands
                     if (!remove)
                     {
                         var dir = c.FaceAEnd - c.FaceAStart;
-                        AddLintel(tr, Util.Db, space, centre, dir, dir.Length, i.ThicknessMm * mm, i.Z);
+                        double depth = AddLintel(tr, Util.Db, space, centre, dir, dir.Length, i.ThicknessMm * mm, i.Z);
+                        depths.Add(Math.Round(i.WidthMm) + " mm opening: " + Math.Round(depth, 1) + " mm deep");
                     }
                     done++;
                 }
                 tr.Commit();
             }
+            if (!remove && depths.Count > 0) ed.WriteMessage("\nLintel depths (setting LintelDepthTable): " + string.Join("; ", depths.Distinct()) + ".");
+            if (LintelBeyondTable) ed.WriteMessage("\nWARNING: an opening is wider than the lintel depth table covers (" + LintelDepthTable() + "); the deepest step was used.");
             ed.WriteMessage("\nHCWLINTEL: lintel " + (remove ? "removed from " : "generated for ") + done + " opening(s)" + (remove ? "." : ", through the full wall thickness with " + Settings.GetDouble("LintelBearingMm", 230) + " mm bearing each end."));
         }
 
@@ -1151,15 +1156,19 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         // ---- lintels: every opening gets one, as a measurement line for the take-off and a dashed outline in plan ----
 
-        private const string LintelApp = "HCW_LINTEL";
+        internal const string LintelApp = "HCW_LINTEL";
         private static string LayerLintel => Util.Out("A-LINTEL");
 
         /// <summary>
         /// A lintel over a new opening: a line on MEASURE-LINTEL (opening length plus the bearing each side, read by MBML as a concrete lintel)
         /// and a dashed outline as wide as the wall. Both carry the opening's centre so they are removed with it. Setting LintelAuto = 0 leaves them out.
         /// </summary>
-        private static void AddLintel(Transaction tr, Database db, BlockTableRecord space, P2 centre, P2 dir, double openingLen, double thickness, double z)
+        private static double AddLintel(Transaction tr, Database db, BlockTableRecord space, P2 centre, P2 dir, double openingLen, double thickness, double z)
         {
+            double mmU = Util.MmToDrawingUnits(1.0);
+            bool beyond;
+            double depthMm = LintelDepth.For(openingLen / mmU, LintelDepth.Parse(Settings.Get("LintelDepthTable", LintelDepth.Default)), out beyond);
+            if (beyond) LintelBeyondTable = true;
             double bearing = Util.MmToDrawingUnits(Settings.GetDouble("LintelBearingMm", 230));
             var box = LintelGeometry.Outline(centre, dir, openingLen, thickness, bearing);
 
@@ -1172,8 +1181,11 @@ namespace HCW.AutoCAD.Plugin.Commands
                 apps.Add(rec);
                 tr.AddNewlyCreatedDBObject(rec, true);
             }
+            // centre, then the lintel's depth, the wall thickness it runs through and the opening it spans (all mm): what the lintel take-off reads
             Func<ResultBuffer> tag = () => new ResultBuffer(new TypedValue((int)DxfCode.ExtendedDataRegAppName, LintelApp),
-                new TypedValue((int)DxfCode.ExtendedDataReal, centre.X), new TypedValue((int)DxfCode.ExtendedDataReal, centre.Y));
+                new TypedValue((int)DxfCode.ExtendedDataReal, centre.X), new TypedValue((int)DxfCode.ExtendedDataReal, centre.Y),
+                new TypedValue((int)DxfCode.ExtendedDataReal, depthMm), new TypedValue((int)DxfCode.ExtendedDataReal, thickness / mmU),
+                new TypedValue((int)DxfCode.ExtendedDataReal, openingLen / mmU));
 
             var u = dir * (1.0 / dir.Length);
             var half = u * (LintelGeometry.Length(openingLen, bearing) / 2);
@@ -1188,7 +1200,11 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (lt != ObjectId.Null) pl.LinetypeId = lt;
             space.AppendEntity(pl); tr.AddNewlyCreatedDBObject(pl, true);
             pl.XData = tag();
+            return depthMm;
         }
+
+        private static bool LintelBeyondTable;
+        private static string LintelDepthTable() => Settings.Get("LintelDepthTable", LintelDepth.Default);
 
         /// <summary>Erases the lintel made with an opening (the entities tagged with its centre).</summary>
         private static bool EraseLintel(Transaction tr, BlockTableRecord space, P2 centre, double reach)

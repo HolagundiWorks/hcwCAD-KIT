@@ -222,3 +222,53 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class LintelDepthTests
+    {
+        private static System.Collections.Generic.List<HCW.AutoCAD.Plugin.Logic.LintelDepth.Step> T() => HCW.AutoCAD.Plugin.Logic.LintelDepth.Parse(HCW.AutoCAD.Plugin.Logic.LintelDepth.Default);
+
+        [Theory]
+        [InlineData(900, 152.4)]
+        [InlineData(1219.2, 152.4)]     // exactly 4 ft is still 6 in
+        [InlineData(1220, 228.6)]
+        [InlineData(1828.8, 228.6)]     // exactly 6 ft is still 9 in
+        [InlineData(2400, 304.8)]
+        [InlineData(3048, 304.8)]       // exactly 10 ft is 1 ft
+        public void DepthFollowsTheOpeningWidth(double width, double depth)
+        {
+            bool beyond;
+            Assert.Equal(depth, HCW.AutoCAD.Plugin.Logic.LintelDepth.For(width, T(), out beyond), 6);
+            Assert.False(beyond);
+        }
+
+        [Fact]
+        public void WiderThanTheTableUsesTheDeepestAndSaysSo()
+        {
+            bool beyond;
+            Assert.Equal(304.8, HCW.AutoCAD.Plugin.Logic.LintelDepth.For(3500, T(), out beyond), 6);
+            Assert.True(beyond);
+        }
+
+        [Fact]
+        public void BadRowsAreSkippedAndEmptyTableGivesZero()
+        {
+            Assert.Equal(1, HCW.AutoCAD.Plugin.Logic.LintelDepth.Parse("bad; 1000=150; x=1; -5=2").Count);
+            bool beyond;
+            Assert.Equal(0, HCW.AutoCAD.Plugin.Logic.LintelDepth.For(500, HCW.AutoCAD.Plugin.Logic.LintelDepth.Parse(""), out beyond));
+        }
+
+        [Fact]
+        public void LintelsOfTheSameSizeShareAMarkAndGiveConcreteAndShuttering()
+        {
+            var a = new HCW.AutoCAD.Plugin.Logic.LintelLine { OpeningMm = 900, LengthMm = 1360, ThicknessMm = 230, DepthMm = 152.4 };
+            var rows = HCW.AutoCAD.Plugin.Logic.LintelQuantity.Rows(new[] { a, a, new HCW.AutoCAD.Plugin.Logic.LintelLine { OpeningMm = 1500, LengthMm = 1960, ThicknessMm = 230, DepthMm = 228.6 } });
+            Assert.Equal(3, rows.Count);
+            Assert.Equal("LT1", rows[0][0]); Assert.Equal("1500", rows[0][1]);            // widest first
+            Assert.Equal("2", rows[1][5]);
+            Assert.Equal((1.36 * 0.23 * 0.1524 * 2).ToString("0.000", System.Globalization.CultureInfo.InvariantCulture), rows[1][6]);
+            Assert.Equal("TOTAL", rows[2][0]); Assert.Equal("3", rows[2][5]);
+        }
+    }
+}

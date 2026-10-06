@@ -102,6 +102,7 @@ namespace HCW.AutoCAD.Plugin
             Entry("OpeningAutoSync", "1", "Doors and windows: 1 updates the opening schedule (the one MSCHED and the take-off use) after HCWDOOR, HCWWINDOW and the opening edit commands; 0 leaves it to HCWOPENSYNC."),
             Entry("RoomMeasureOutlines", "1", "Rooms: 1 also draws each room outline on MEASURE-FLOOR and MEASURE-CEILING, so MFLOOR and MCEIL read the rooms; 0 leaves them out."),
             Entry("LintelAuto", "0", "Doors and windows: 1 also draws a lintel over every new opening without asking (a line on MEASURE-LINTEL for MBML and a dashed outline on A-LINTEL); 0 (the default) draws one only when you run HCWLINTEL."),
+            Entry("LintelDepthTable", "1219.2=152.4; 1828.8=228.6; 3048=304.8", "Lintels: the depth by opening width, as \"up to this width in mm = depth in mm\" separated by semicolons. The default is 4 ft opening = 6 in, 6 ft = 9 in, 10 ft = 1 ft. HCWLINTEL stores the depth with each lintel and MLINTEL measures it."),
             Entry("LintelBearingMm", "230", "Lintels: the bearing on the wall at each end of the opening, in millimetres."),
             Entry("WallHatch", "1", "HCWWALL: 1 hatches the walls (all walls joined, doors and windows cut out) on A-WALL-HATCH and redraws it as walls and openings change; 0 turns it off."),
             Entry("WallHatchPattern", "ANSI31", "Wall hatch: the pattern name (ANSI31, ANSI37, SOLID ...)."),

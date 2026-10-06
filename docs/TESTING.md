@@ -16,6 +16,7 @@ Nothing in the command layer has been run in a CAD program. This is the order to
 | `HCWDOOR` 900 on one wall | Gap cut, door block, tag `D1`; no lintel yet (they are made on request); the hatch is cut at the door |
 | `HCWWINDOW` 1200 on another wall, then a second window of the same size | Tags `W1/1`, `W1/2`; same code for the same size |
 | `HCWLINTEL` > Generate, select the door and a window | A dashed outline through the full wall thickness on `A-LINTEL` and a line on `MEASURE-LINTEL`; the wall is not cut; running it again does not double them |
+| `MLINTEL` after the lintels | Marks LT1.. with opening, length, wall, depth (900 mm opening: 152.4; 1500: 228.6; 2400: 304.8), concrete and shuttering; take-off "Lintels" saved |
 | `HCWOPENSCHED` | Schedule updated, table drawn where you pick |
 | `HCWOPENMOVE` > Move the door | The lintel (if generated), hatch and tag follow |
 | `HCWWALLEDIT` change thickness to 115 | Walls rebuilt, openings re-cut, hatch and measurement lines redrawn |
