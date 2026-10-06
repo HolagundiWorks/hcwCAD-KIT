@@ -3090,4 +3090,112 @@ namespace HCW.Logic.Tests
             Assert.False(new StairSpec { Kind = StairKind.DogLeg, Winders = true }.HasWinders);
         }
     }
+
+    public class RoomTableTests
+    {
+        private static RoomInput Box(double x0, double y0, double x1, double y1) =>
+            new RoomInput { Outline = { new P2(x0, y0), new P2(x1, y0), new P2(x1, y1), new P2(x0, y1) } };
+        private static RoomText T(double x, double y, string s) => new RoomText { At = new P2(x, y), Text = s };
+
+        [Fact]
+        public void ARoomGetsItsNameSidesAndArea()
+        {
+            var rows = RoomTable.Build(new[] { Box(0, 0, 4200, 3600) }, new[] { T(2000, 1800, "Kitchen") }, new RoomDim[0], 1000, RoomOrder.Position);
+            var r = Assert.Single(rows);
+            Assert.Equal("KITCHEN", r.Name);
+            Assert.Equal(4.2, r.Length, 9);
+            Assert.Equal(3.6, r.Width, 9);
+            Assert.Equal(15.12, r.Area, 9);
+            Assert.Equal(15.6, r.Perimeter, 9);
+        }
+
+        [Fact]
+        public void NamesSkipNumbersTagsAndAreaLabels()
+        {
+            var texts = new[] { T(1000, 1000, "R3"), T(1100, 1000, "12.00 m2"), T(1200, 1000, "D1"), T(1300, 1000, "3600"), T(1500, 1500, "Master Bedroom\\P15.12 m2") };
+            var r = RoomTable.Build(new[] { Box(0, 0, 4200, 3600) }, texts, new RoomDim[0], 1000, RoomOrder.Position)[0];
+            Assert.Equal("MASTER BEDROOM", r.Name);
+            Assert.Equal(15.12, r.LabelArea.Value, 9);        // the last matching area label inside is the one kept
+        }
+
+        [Fact]
+        public void ALabelThatDisagreesWithTheOutlineIsNoted()
+        {
+            var r = RoomTable.Build(new[] { Box(0, 0, 4000, 3000) }, new[] { T(500, 500, "Hall"), T(600, 500, "10.00 m2") }, new RoomDim[0], 1000, RoomOrder.Position)[0];
+            Assert.Equal("label says 10.00", r.Note);
+            var ok = RoomTable.Build(new[] { Box(0, 0, 4000, 3000) }, new[] { T(500, 500, "Hall"), T(600, 500, "12.00 m2") }, new RoomDim[0], 1000, RoomOrder.Position)[0];
+            Assert.Equal("", ok.Note);
+        }
+
+        [Fact]
+        public void TextOutsideARoomIsNotItsName()
+        {
+            var rows = RoomTable.Build(new[] { Box(0, 0, 4000, 3000), Box(5000, 0, 8000, 3000) }, new[] { T(6000, 1000, "Study") }, new RoomDim[0], 1000, RoomOrder.Position);
+            Assert.Equal("", rows.First(r => r.Centre.X < 4000).Name);
+            Assert.Equal("STUDY", rows.First(r => r.Centre.X > 4000).Name);
+        }
+
+        [Fact]
+        public void DimensionsInsideTheRoomAreListedLargestFirstAndOthersLeftOut()
+        {
+            var dims = new[]
+            {
+                new RoomDim { A = new P2(0, 0), B = new P2(4000, 0), Value = 4000 },        // on the edge: counts
+                new RoomDim { A = new P2(0, 0), B = new P2(0, 3000), Value = 3000 },
+                new RoomDim { A = new P2(0, 0), B = new P2(4000, 0), Value = 4000 },        // repeated: once
+                new RoomDim { A = new P2(9000, 0), B = new P2(12000, 0), Value = 3000 },    // another room's
+            };
+            var r = RoomTable.Build(new[] { Box(0, 0, 4000, 3000) }, new RoomText[0], dims, 1000, RoomOrder.Position)[0];
+            Assert.Equal(new[] { 4.0, 3.0 }, r.Dimensions.ToArray());
+        }
+
+        [Fact]
+        public void ATiltedRectangleGivesItsRealSides()
+        {
+            double a = Math.PI / 6, c = Math.Cos(a), s = Math.Sin(a);
+            Func<double, double, P2> rot = (x, y) => new P2(x * c - y * s, x * s + y * c);
+            var room = new RoomInput { Outline = { rot(0, 0), rot(5000, 0), rot(5000, 2000), rot(0, 2000) } };
+            var r = RoomTable.Build(new[] { room }, new RoomText[0], new RoomDim[0], 1000, RoomOrder.Position)[0];
+            Assert.Equal(5.0, r.Length, 6);
+            Assert.Equal(2.0, r.Width, 6);
+        }
+
+        [Fact]
+        public void AnLShapeUsesItsBoundingSidesAndTheHostsAreaWhenGiven()
+        {
+            var l = new RoomInput { Outline = { new P2(0, 0), new P2(4000, 0), new P2(4000, 2000), new P2(2000, 2000), new P2(2000, 4000), new P2(0, 4000) } };
+            var r = RoomTable.Build(new[] { l }, new RoomText[0], new RoomDim[0], 1000, RoomOrder.Position)[0];
+            Assert.Equal(12.0, r.Area, 9);
+            Assert.Equal(4.0, r.Length, 9);
+            l.Area = 12.5e6;
+            Assert.Equal(12.5, RoomTable.Build(new[] { l }, new RoomText[0], new RoomDim[0], 1000, RoomOrder.Position)[0].Area, 9);
+        }
+
+        [Fact]
+        public void OrderByPositionIsTopToBottomThenLeftToRightAndByNameIsAlphabetical()
+        {
+            var rooms = new[] { Box(5000, 0, 8000, 3000), Box(0, 0, 4000, 3000), Box(0, 4000, 4000, 7000) };
+            var texts = new[] { T(6000, 1000, "Bath"), T(1000, 1000, "Kitchen"), T(1000, 5000, "Living") };
+            var pos = RoomTable.Build(rooms, texts, new RoomDim[0], 1000, RoomOrder.Position);
+            Assert.Equal(new[] { "LIVING", "KITCHEN", "BATH" }, pos.Select(r => r.Name).ToArray());
+            Assert.Equal(new[] { 1, 2, 3 }, pos.Select(r => r.Number).ToArray());
+            var byName = RoomTable.Build(rooms, texts, new RoomDim[0], 1000, RoomOrder.Name);
+            Assert.Equal(new[] { "BATH", "KITCHEN", "LIVING" }, byName.Select(r => r.Name).ToArray());
+        }
+
+        [Fact]
+        public void RowsFormatInMetresOrMillimetresWithATotal()
+        {
+            var rows = RoomTable.Build(new[] { Box(0, 0, 4200, 3600), Box(5000, 0, 7000, 2000) }, new[] { T(100, 100, "A") }, new RoomDim[0], 1000, RoomOrder.Name);
+            var m = RoomTable.ToRows(rows, false);
+            Assert.Equal(3, m.Count);
+            Assert.Equal("4.20", m[0][2]);
+            Assert.Equal("15.12", m[0][4]);
+            Assert.Equal("TOTAL", m[2][0]);
+            Assert.Equal("19.12", m[2][4]);
+            Assert.Equal("4200", RoomTable.ToRows(rows, true)[0][2]);
+            Assert.Equal(8, RoomTable.Headers("m").Length);
+            Assert.Equal(RoomTable.Headers("m").Length, m[0].Length);
+        }
+    }
 }

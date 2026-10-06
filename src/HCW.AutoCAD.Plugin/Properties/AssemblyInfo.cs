@@ -41,6 +41,7 @@ using Autodesk.AutoCAD.Runtime;
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.RailCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.LiftCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.EscalatorCommands))]
+[assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.RoomTableCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.LiveUpdateCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.CleanCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.RoomWallCommands))]
