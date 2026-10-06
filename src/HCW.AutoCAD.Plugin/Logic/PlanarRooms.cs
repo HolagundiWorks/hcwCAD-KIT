@@ -4,22 +4,88 @@ using System.Linq;
 
 namespace HCW.AutoCAD.Plugin.Logic
 {
+    /// <summary>A room found from wall faces: its outline, any free-standing islands (columns) inside it, and its areas.</summary>
+    public class RoomShape
+    {
+        public List<P2> Outline = new List<P2>();
+        public List<List<P2>> Holes = new List<List<P2>>();
+        public double GrossArea, NetArea;
+    }
+
     /// <summary>
-    /// Finds the room around a point from loose wall-face segments: the segments are cut where they cross, joined into
-    /// a planar graph, and the smallest closed region that contains the point is returned.
+    /// Finds rooms from loose wall-face segments: the segments are cut where they cross, joined into a planar graph, and its closed
+    /// regions are read off. A room is a region that is not a sliver of wall.
     /// </summary>
     public static class PlanarRooms
     {
+        private class Graph
+        {
+            public List<P2> Verts = new List<P2>();
+            public Dictionary<int, List<int>> Adj = new Dictionary<int, List<int>>();
+            public int Edges;
+        }
+
+        private class Face
+        {
+            public List<P2> Poly;
+            public double Area;
+            public double Perimeter;
+            /// <summary>Twice the area over the perimeter: the width of a strip. A wall body is thin, a room is not.</summary>
+            public double Thickness => Perimeter < 1e-12 ? 0 : 2.0 * Area / Perimeter;
+        }
+
         /// <summary>
         /// The outline (counter-clockwise, collinear points removed) of the smallest closed region around pt, or null with a
-        /// reason. A room that is not fully closed is not found: the point falls in the larger region around it, so check the area.
-        /// Detached islands inside a room (a free-standing column) are not cut out of it.
+        /// reason. closeGap bridges gaps up to that size between facing wall ends (an unframed door opening); 0 leaves them open.
+        /// A room that is not closed is not found: the point falls in the larger region around it, so check the area.
         /// </summary>
-        public static List<P2> Find(IList<Seg> segs, P2 pt, double tol, out string error)
+        public static List<P2> Find(IList<Seg> segs, P2 pt, double tol, out string error, double closeGap = 0)
         {
             error = null;
             if (tol <= 0) tol = 1e-9;
-            var verts = new List<P2>();
+            var g = Build(segs, tol, closeGap);
+            if (g.Adj.Count == 0) { error = "there are no closed outlines to find a room in"; return null; }
+
+            Face best = null;
+            foreach (var f in Faces(g, tol))
+                if (f.Area > tol * tol && (best == null || f.Area < best.Area) && Contains(f.Poly, pt)) best = f;
+            if (best == null) { error = "that point is not inside a closed room"; return null; }
+            return WallGeometry.Simplify(best.Poly, true, tol);
+        }
+
+        /// <summary>
+        /// Every room in the drawing. Regions thinner than minThickness (wall bodies, columns) are not rooms; a region that holds
+        /// another room (the outside of a wall ring) is not one either. Thin regions lying inside a room are its holes (free-standing
+        /// columns) and come off its net area. Rooms are listed bottom to top, then left to right.
+        /// </summary>
+        public static List<RoomShape> AllRooms(IList<Seg> segs, double tol, double minThickness, double closeGap = 0)
+        {
+            if (tol <= 0) tol = 1e-9;
+            var g = Build(segs, tol, closeGap);
+            var faces = Faces(g, tol).Where(f => f.Area > tol * tol).ToList();
+            var cand = faces.Where(f => f.Thickness >= minThickness).ToList();
+
+            var rooms = new List<RoomShape>();
+            foreach (var c in cand)
+            {
+                bool holdsRoom = cand.Any(d => !ReferenceEquals(d, c) && d.Area < c.Area && Contains(c.Poly, Centroid(d.Poly)));
+                if (holdsRoom) continue;
+                var shape = new RoomShape { Outline = WallGeometry.Simplify(c.Poly, true, tol), GrossArea = c.Area };
+                foreach (var h in faces.Where(f => f.Thickness < minThickness && f.Area < c.Area))
+                    if (h.Poly.All(p => Contains(c.Poly, p) || OnBoundary(c.Poly, p, tol)) && Contains(c.Poly, Centroid(h.Poly))
+                        && !h.Poly.All(p => OnBoundary(c.Poly, p, tol)))
+                        shape.Holes.Add(WallGeometry.Simplify(h.Poly, true, tol));
+                shape.NetArea = c.Area - shape.Holes.Sum(h => Math.Abs(SignedArea(h)));
+                rooms.Add(shape);
+            }
+            return rooms.OrderBy(r => Math.Round(Centroid(r.Outline).Y, 6)).ThenBy(r => Centroid(r.Outline).X).ToList();
+        }
+
+        // ---- the graph ----
+
+        private static Graph Build(IList<Seg> segs, double tol, double closeGap)
+        {
+            var g = new Graph();
             var grid = new Dictionary<long, List<int>>();
             double cell = tol * 4;
 
@@ -32,10 +98,10 @@ namespace HCW.AutoCAD.Plugin.Logic
                     {
                         List<int> l;
                         if (!grid.TryGetValue(Key(x, y), out l)) continue;
-                        foreach (int v in l) if (verts[v].DistanceTo(p) <= tol) return v;
+                        foreach (int v in l) if (g.Verts[v].DistanceTo(p) <= tol) return v;
                     }
-                int id = verts.Count;
-                verts.Add(p);
+                int id = g.Verts.Count;
+                g.Verts.Add(p);
                 List<int> own;
                 if (!grid.TryGetValue(Key(cx, cy), out own)) grid[Key(cx, cy)] = own = new List<int>();
                 own.Add(id);
@@ -71,7 +137,6 @@ namespace HCW.AutoCAD.Plugin.Logic
                     }
                     else if (Math.Abs(P2.Cross(da, b.A - a.A)) / la <= tol)
                     {
-                        // Collinear: each end that lies on the other splits it.
                         foreach (var p in new[] { b.A, b.B })
                         {
                             double t = P2.Dot(p - a.A, da) / (la * la);
@@ -86,61 +151,92 @@ namespace HCW.AutoCAD.Plugin.Logic
                 }
             }
 
-            // 2. Graph: vertices snapped within tol, one edge per piece.
+            // 2. Vertices snapped within tol, one edge per piece.
             var edges = new HashSet<long>();
-            var adj = new Dictionary<int, List<int>>();
+            Action<int, int> addEdge = (p, q) =>
+            {
+                if (p == q) return;
+                long k = Math.Min(p, q) * 1000003L + Math.Max(p, q);
+                if (!edges.Add(k)) return;
+                if (!g.Adj.ContainsKey(p)) g.Adj[p] = new List<int>();
+                if (!g.Adj.ContainsKey(q)) g.Adj[q] = new List<int>();
+                g.Adj[p].Add(q); g.Adj[q].Add(p);
+            };
             for (int i = 0; i < live.Count; i++)
             {
                 var s = live[i];
                 var d = s.B - s.A;
-                var ts = cuts[i].OrderBy(x => x).ToList();
                 int prev = -1;
-                foreach (double t in ts)
+                foreach (double t in cuts[i].OrderBy(x => x))
                 {
                     int v = Snap(s.A + d * t);
-                    if (prev >= 0 && v != prev)
-                    {
-                        long k = Math.Min(prev, v) * 1000003L + Math.Max(prev, v);
-                        if (edges.Add(k))
-                        {
-                            if (!adj.ContainsKey(prev)) adj[prev] = new List<int>();
-                            if (!adj.ContainsKey(v)) adj[v] = new List<int>();
-                            adj[prev].Add(v); adj[v].Add(prev);
-                        }
-                    }
+                    if (prev >= 0) addEdge(prev, v);
                     prev = v;
                 }
             }
 
-            // 3. Prune spurs: vertices with one edge cannot bound a room.
-            var queue = new Queue<int>(adj.Where(kv => kv.Value.Count < 2).Select(kv => kv.Key));
+            // 3. Bridge small gaps between facing wall ends (a door opening drawn without jambs).
+            if (closeGap > tol)
+            {
+                var ends = g.Adj.Where(kv => kv.Value.Count == 1).Select(kv => kv.Key).ToList();
+                var away = new Dictionary<int, P2>();
+                foreach (int v in ends)
+                {
+                    var d = g.Verts[g.Adj[v][0]] - g.Verts[v];
+                    away[v] = d * (1.0 / d.Length);                       // along its own edge, away from the end
+                }
+                var best = new Dictionary<int, int>();
+                foreach (int i in ends)
+                {
+                    int pick = -1; double bd = double.MaxValue;
+                    foreach (int j in ends)
+                    {
+                        if (j == i || g.Adj[i][0] == j) continue;
+                        var c = g.Verts[j] - g.Verts[i];
+                        double dist = c.Length;
+                        if (dist > closeGap || dist < tol || dist >= bd) continue;
+                        var cu = c * (1.0 / dist);
+                        // each end must point away from the other: the two wall faces face each other across the gap
+                        if (P2.Dot(away[i], cu) > -0.94 || P2.Dot(away[j], cu * -1) > -0.94) continue;
+                        pick = j; bd = dist;
+                    }
+                    if (pick >= 0) best[i] = pick;
+                }
+                foreach (var kv in best)
+                    if (best.ContainsKey(kv.Value) && best[kv.Value] == kv.Key && kv.Key < kv.Value) addEdge(kv.Key, kv.Value);
+            }
+
+            // 4. Prune spurs: vertices with one edge cannot bound a room.
+            var queue = new Queue<int>(g.Adj.Where(kv => kv.Value.Count < 2).Select(kv => kv.Key));
             while (queue.Count > 0)
             {
                 int v = queue.Dequeue();
                 List<int> nb;
-                if (!adj.TryGetValue(v, out nb)) continue;
-                if (nb.Count >= 2) continue;
+                if (!g.Adj.TryGetValue(v, out nb) || nb.Count >= 2) continue;
                 foreach (int w in nb)
                 {
-                    adj[w].Remove(v);
-                    if (adj[w].Count < 2) queue.Enqueue(w);
+                    g.Adj[w].Remove(v);
+                    if (g.Adj[w].Count < 2) queue.Enqueue(w);
                 }
-                adj.Remove(v);
+                g.Adj.Remove(v);
             }
-            if (adj.Count == 0) { error = "there are no closed outlines to find a room in"; return null; }
+            g.Edges = edges.Count;
+            return g;
+        }
 
-            // 4. Neighbours of each vertex in counter-clockwise order.
+        /// <summary>Walks every face with the face on the left. Counter-clockwise cycles are bounded regions; clockwise ones are the outside of a component.</summary>
+        private static List<Face> Faces(Graph g, double tol)
+        {
             var order = new Dictionary<int, List<int>>();
-            foreach (var kv in adj)
+            foreach (var kv in g.Adj)
             {
-                var p = verts[kv.Key];
-                order[kv.Key] = kv.Value.OrderBy(w => Math.Atan2(verts[w].Y - p.Y, verts[w].X - p.X)).ToList();
+                var p = g.Verts[kv.Key];
+                order[kv.Key] = kv.Value.OrderBy(w => Math.Atan2(g.Verts[w].Y - p.Y, g.Verts[w].X - p.X)).ToList();
             }
 
-            // 5. Walk every face with the face on the left; keep the counter-clockwise (bounded) ones that hold the point.
+            var faces = new List<Face>();
             var visited = new HashSet<long>();
-            List<P2> best = null; double bestArea = double.MaxValue;
-            int limit = 2 * edges.Count + 4;
+            int limit = 2 * g.Edges + 4;
             foreach (var start in order.Keys.ToList())
             {
                 foreach (int first in order[start])
@@ -164,15 +260,15 @@ namespace HCW.AutoCAD.Plugin.Logic
                     }
                     if (!closed || cycle.Count < 3) continue;
 
-                    var poly = cycle.Select(c => verts[c]).ToList();
+                    var poly = cycle.Select(c => g.Verts[c]).ToList();
                     double area = SignedArea(poly);
-                    if (area <= tol * tol) continue;                        // the outside of a component
-                    if (area >= bestArea || !Contains(poly, pt)) continue;
-                    best = poly; bestArea = area;
+                    if (area <= 0) continue;
+                    double per = 0;
+                    for (int i = 0; i < poly.Count; i++) per += poly[i].DistanceTo(poly[(i + 1) % poly.Count]);
+                    faces.Add(new Face { Poly = poly, Area = area, Perimeter = per });
                 }
             }
-            if (best == null) { error = "that point is not inside a closed room"; return null; }
-            return WallGeometry.Simplify(best, true, tol);
+            return faces;
         }
 
         public static double SignedArea(IList<P2> p)
@@ -211,6 +307,13 @@ namespace HCW.AutoCAD.Plugin.Logic
                     inside = !inside;
             }
             return inside;
+        }
+
+        private static bool OnBoundary(IList<P2> poly, P2 p, double tol)
+        {
+            for (int i = 0; i < poly.Count; i++)
+                if (OpeningCut.DistanceToSegment(new Seg(poly[i], poly[(i + 1) % poly.Count]), p) <= tol) return true;
+            return false;
         }
     }
 }

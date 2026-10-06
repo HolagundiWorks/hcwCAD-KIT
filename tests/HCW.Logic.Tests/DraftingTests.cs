@@ -1546,3 +1546,144 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class CurveSamplerTests
+    {
+        [Fact]
+        public void ArcPointsLieOnTheCircleAndKeepTheEnds()
+        {
+            var pts = CurveSampler.ArcPoints(new P2(1, 2), 5, 0, Math.PI / 2, 0.01);
+            Assert.True(pts.Count >= 4);
+            Assert.All(pts, p => Assert.Equal(5.0, p.DistanceTo(new P2(1, 2)), 9));
+            Assert.Equal(6.0, pts[0].X, 9); Assert.Equal(2.0, pts[0].Y, 9);
+            Assert.Equal(1.0, pts[pts.Count - 1].X, 9); Assert.Equal(7.0, pts[pts.Count - 1].Y, 9);
+        }
+
+        [Fact]
+        public void NoPieceIsFurtherFromTheArcThanTheSagitta()
+        {
+            double r = 10, tol = 0.02;
+            var pts = CurveSampler.ArcPoints(new P2(0, 0), r, 0, Math.PI, tol);
+            for (int i = 0; i + 1 < pts.Count; i++)
+            {
+                var mid = (pts[i] + pts[i + 1]) * 0.5;
+                Assert.True(r - mid.Length <= tol + 1e-9);
+            }
+            // a finer tolerance needs more pieces
+            Assert.True(CurveSampler.ArcPoints(new P2(0, 0), r, 0, Math.PI, 0.002).Count > pts.Count);
+        }
+
+        [Fact]
+        public void SweepCanBeNegativeAndZeroGivesOnePoint()
+        {
+            var cw = CurveSampler.ArcPoints(new P2(0, 0), 3, Math.PI / 2, -Math.PI / 2, 0.01);
+            Assert.Equal(3.0, cw[cw.Count - 1].X, 9);
+            Assert.Equal(0.0, cw[cw.Count - 1].Y, 9);
+            Assert.Single(CurveSampler.ArcPoints(new P2(0, 0), 3, 0, 0, 0.01));
+        }
+
+        [Fact]
+        public void BulgeArcsBowToTheRightOfThePathForPositiveBulge()
+        {
+            // quarter circle from (0,0) to (2,0), bulge tan(22.5 deg): counter-clockwise, so it dips below the chord; centre (1,1)
+            double bulge = Math.Tan(Math.PI / 8);
+            var pts = CurveSampler.BulgePoints(new P2(0, 0), new P2(2, 0), bulge, 0.001);
+            Assert.Equal(0.0, pts[0].X, 12); Assert.Equal(2.0, pts[pts.Count - 1].X, 12);
+            Assert.All(pts, p => Assert.Equal(Math.Sqrt(2), p.DistanceTo(new P2(1, 1)), 6));
+            Assert.True(pts.Min(p => p.Y) < -0.4);
+            // negative bulge bows the other way
+            var up = CurveSampler.BulgePoints(new P2(0, 0), new P2(2, 0), -bulge, 0.001);
+            Assert.True(up.Max(p => p.Y) > 0.4);
+            // zero bulge is the chord
+            Assert.Equal(2, CurveSampler.BulgePoints(new P2(0, 0), new P2(2, 0), 0, 0.001).Count);
+        }
+    }
+
+    public class AllRoomsTests
+    {
+        private static IEnumerable<Seg> Rect(double x0, double y0, double x1, double y1)
+        {
+            yield return new Seg(new P2(x0, y0), new P2(x1, y0));
+            yield return new Seg(new P2(x1, y0), new P2(x1, y1));
+            yield return new Seg(new P2(x1, y1), new P2(x0, y1));
+            yield return new Seg(new P2(x0, y1), new P2(x0, y0));
+        }
+
+        [Fact]
+        public void TwoRoomsInAWallRingAreBothFoundAndTheOutsideIsNot()
+        {
+            // outer face 0..8.46 x 0..4.46, inner face 0.23..8.23 x 0.23..4.23, partition faces at x = 4.0 and 4.23 (a 0.23 wall)
+            var segs = Rect(0, 0, 8.46, 4.46).Concat(Rect(0.23, 0.23, 8.23, 4.23)).ToList();
+            segs.Add(new Seg(new P2(4.0, 0.23), new P2(4.0, 4.23)));
+            segs.Add(new Seg(new P2(4.23, 0.23), new P2(4.23, 4.23)));
+            var rooms = PlanarRooms.AllRooms(segs, 1e-6, 0.6);
+            Assert.Equal(2, rooms.Count);
+            Assert.Equal(new[] { 3.77 * 4.0, 4.0 * 4.0 }, rooms.Select(r => Math.Round(r.NetArea, 6)).OrderBy(x => x).ToArray().Select(x => x).ToArray(), new DoubleComparer());
+            Assert.True(rooms[0].Outline.Min(p => p.X) < rooms[1].Outline.Min(p => p.X));       // bottom to top, then left to right
+        }
+
+        private class DoubleComparer : IEqualityComparer<double>
+        {
+            public bool Equals(double a, double b) => Math.Abs(a - b) < 1e-6;
+            public int GetHashCode(double d) => 0;
+        }
+
+        [Fact]
+        public void AFreeStandingColumnIsAHoleAndComesOffTheNetArea()
+        {
+            var segs = Rect(0, 0, 6, 4).Concat(Rect(2.5, 1.5, 2.8, 1.8)).ToList();           // a 300 x 300 column
+            var rooms = PlanarRooms.AllRooms(segs, 1e-6, 0.6);
+            Assert.Single(rooms);
+            Assert.Single(rooms[0].Holes);
+            Assert.Equal(24.0, rooms[0].GrossArea, 9);
+            Assert.Equal(24.0 - 0.09, rooms[0].NetArea, 9);
+        }
+
+        [Fact]
+        public void ADoorGapIsBridgedOnlyWhenAskedAndWideEnough()
+        {
+            // two rooms side by side sharing a wall line at x = 4 with a 1 m gap in it, between y = 1 and y = 2
+            var segs = Rect(0, 0, 8, 4).ToList();
+            segs.Add(new Seg(new P2(4, 0), new P2(4, 1)));
+            segs.Add(new Seg(new P2(4, 2), new P2(4, 4)));
+            // open: one room of 32 (the partition stubs are pruned)
+            var open = PlanarRooms.AllRooms(segs, 1e-6, 0.6);
+            Assert.Single(open);
+            // bridged: the gap closes and the two halves are separate rooms
+            var bridged = PlanarRooms.AllRooms(segs, 1e-6, 0.6, 1.2);
+            Assert.Equal(2, bridged.Count);
+            Assert.All(bridged, r => Assert.Equal(16.0, r.NetArea, 6));
+            // too narrow a bridge limit leaves it open
+            Assert.Single(PlanarRooms.AllRooms(segs, 1e-6, 0.6, 0.5));
+        }
+
+        [Fact]
+        public void FindWithAGapLimitFindsTheRoomBehindAGap()
+        {
+            var segs = Rect(0, 0, 4, 3).Where(s => !(s.A.X == 4 && s.B.X == 4)).ToList();      // east wall removed
+            segs.Add(new Seg(new P2(4, 0), new P2(4, 1)));
+            segs.Add(new Seg(new P2(4, 2), new P2(4, 3)));
+            string err;
+            Assert.Null(PlanarRooms.Find(segs, new P2(2, 1.5), 1e-6, out err));                // open to the outside: no closed room
+            var room = PlanarRooms.Find(segs, new P2(2, 1.5), 1e-6, out err, 1.5);
+            Assert.NotNull(room);
+            Assert.Equal(12.0, Math.Abs(PlanarRooms.SignedArea(room)), 9);
+        }
+
+        [Fact]
+        public void WallBodiesBetweenRoomsAreNotRooms()
+        {
+            // wall faces drawn as separate closed outlines for each wall (rectangles) overlapping at the corners
+            var segs = new List<Seg>();
+            segs.AddRange(Rect(0, 0, 5, 0.23));          // south wall body
+            segs.AddRange(Rect(0, 3.77, 5, 4));          // north
+            segs.AddRange(Rect(0, 0, 0.23, 4));          // west
+            segs.AddRange(Rect(4.77, 0, 5, 4));          // east
+            var rooms = PlanarRooms.AllRooms(segs, 1e-6, 0.6);
+            Assert.Single(rooms);
+            Assert.Equal(4.54 * 3.54, rooms[0].NetArea, 6);
+        }
+    }
+}
