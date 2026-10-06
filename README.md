@@ -758,3 +758,8 @@ src/
 hcwCAD-KIT is released under the MIT License. See [LICENSE](LICENSE).
 
 The ribbon icons are IBM Carbon Design System artwork, included under the Apache License 2.0. That license applies to the icon files only. The rest of this repository is MIT.
+
+### Electrical points by room, level marks from the levels
+
+* `ELSCHEDULE` has a **Room** layout: every point with the room it stands in (the smallest closed outline on the `RoomTableLayers` layers that contains it, named from the text inside), its type and the board it is wired to. Points in no room are listed last as "(no room)".
+* `HCWLEVEL` has a **Levels** option: pick a floor from the levels kept in the drawing and the mark is placed with that floor's finished floor level.

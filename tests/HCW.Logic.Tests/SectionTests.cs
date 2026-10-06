@@ -136,3 +136,30 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class ElectricalRoomsTests
+    {
+        private static HCW.AutoCAD.Plugin.Logic.RoomInput Sq(double x, double y, double s) => new HCW.AutoCAD.Plugin.Logic.RoomInput
+        {
+            Outline = new System.Collections.Generic.List<HCW.AutoCAD.Plugin.Logic.P2> { new HCW.AutoCAD.Plugin.Logic.P2(x, y), new HCW.AutoCAD.Plugin.Logic.P2(x + s, y), new HCW.AutoCAD.Plugin.Logic.P2(x + s, y + s), new HCW.AutoCAD.Plugin.Logic.P2(x, y + s) }
+        };
+
+        [Fact]
+        public void PointTakesTheSmallestRoomAroundIt()
+        {
+            var rooms = new[] { Sq(0, 0, 100), Sq(10, 10, 20) };
+            var names = new[] { "HALL", "STORE" };
+            Assert.Equal("STORE", HCW.AutoCAD.Plugin.Logic.ElectricalRooms.RoomOf(new HCW.AutoCAD.Plugin.Logic.P2(15, 15), rooms, names));
+            Assert.Equal("HALL", HCW.AutoCAD.Plugin.Logic.ElectricalRooms.RoomOf(new HCW.AutoCAD.Plugin.Logic.P2(60, 60), rooms, names));
+            Assert.Equal(HCW.AutoCAD.Plugin.Logic.ElectricalRooms.NoRoom, HCW.AutoCAD.Plugin.Logic.ElectricalRooms.RoomOf(new HCW.AutoCAD.Plugin.Logic.P2(500, 500), rooms, names));
+        }
+
+        [Fact]
+        public void UnnamedRoomGetsANumber()
+        {
+            Assert.Equal("ROOM 1", HCW.AutoCAD.Plugin.Logic.ElectricalRooms.RoomOf(new HCW.AutoCAD.Plugin.Logic.P2(5, 5), new[] { Sq(0, 0, 10) }, new[] { "" }));
+        }
+    }
+}

@@ -159,7 +159,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
             while (true)
             {
-                var o = new PromptPointOptions("\nPick the level point [Value/Datum/Ceiling/Floor]" + (_ceiling ? " (ceiling marks)" : "") + (_hasDatum ? " <level from the datum>" : "") + ": ", "Value Datum Ceiling Floor") { AllowNone = true };
+                var o = new PromptPointOptions("\nPick the level point [Value/Datum/Ceiling/Floor/Levels]" + (_ceiling ? " (ceiling marks)" : "") + (_hasDatum ? " <level from the datum>" : "") + ": ", "Value Datum Ceiling Floor Levels") { AllowNone = true };
                 var r = ed.GetPoint(o);
                 if (r.Status == PromptStatus.None || r.Status == PromptStatus.Cancel) return;
                 if (r.Status == PromptStatus.Keyword)
@@ -168,6 +168,17 @@ namespace HCW.AutoCAD.Plugin.Commands
                     {
                         _ceiling = r.StringResult == "Ceiling";
                         ed.WriteMessage(_ceiling ? "\nCeiling marks: the triangle points up at the level." : "\nFloor marks: the triangle points down at the level.");
+                        continue;
+                    }
+                    if (r.StringResult == "Levels")
+                    {
+                        // the finished floor level of a floor in the levels kept in the drawing
+                        var lv = LevelStore.Load();
+                        if (lv.Count == 0) { ed.WriteMessage("\nNo floors are defined in the drawing (MSCHED, Floors tab)."); continue; }
+                        var elev = SectionBuilder.Elevations(lv);
+                        ed.WriteMessage("\n" + string.Join(", ", lv.Select((l, i) => (i + 1) + " " + l.Name + " " + SymbolMath.LevelText(elev[i] / 1000.0))));
+                        var fi = ed.GetInteger(new PromptIntegerOptions("\nFloor number: ") { LowerLimit = 1, UpperLimit = lv.Count, AllowNone = true });
+                        if (fi.Status == PromptStatus.OK) typed = SymbolMath.LevelText(elev[fi.Value - 1] / 1000.0);
                         continue;
                     }
                     if (r.StringResult == "Value")

@@ -613,8 +613,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             var db = Util.Db;
             if (!EnsureBlocks(ed, db)) return;
 
-            var layoutOpt = new PromptKeywordOptions("\nSchedule [Matrix/Board/Point/Load/Circuit/Cable/Boq/Switch] <" + _layout + ">: ") { AllowNone = true };
-            foreach (var k in new[] { "Matrix", "Board", "Point", "Load", "Circuit", "Cable", "Boq", "Switch" }) layoutOpt.Keywords.Add(k);
+            var layoutOpt = new PromptKeywordOptions("\nSchedule [Matrix/Board/Point/Load/Circuit/Cable/Boq/Switch/Room] <" + _layout + ">: ") { AllowNone = true };
+            foreach (var k in new[] { "Matrix", "Board", "Point", "Load", "Circuit", "Cable", "Boq", "Switch", "Room" }) layoutOpt.Keywords.Add(k);
             var layout = ed.GetKeywords(layoutOpt);
             if (layout.Status == PromptStatus.OK) _layout = layout.StringResult;
             else if (layout.Status != PromptStatus.None) return;
@@ -850,6 +850,36 @@ namespace HCW.AutoCAD.Plugin.Commands
                 rows.AddRange(CableLength.Table(blocks.Where(b => b.Kind.IsBoard).Select(b => b.CurrentId), lt, pw));
                 title = "CABLE LENGTH SCHEDULE";
                 if (unattached > 0) title += " (" + unattached.ToString("0.0", CultureInfo.InvariantCulture) + " m of wiring reaches no board and is left out)";
+            }
+            else if (layout == "Room")
+            {
+                // rooms: closed outlines on the room layers, named from the text inside them
+                var rooms = new List<RoomInput>(); var texts = new List<RoomText>();
+                var roomLayers = new HashSet<string>(Settings.Get("RoomTableLayers", "ROOM-RECT;BP-ROOM;MEASURE-FLOOR;A-ROOM")
+                    .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()), StringComparer.OrdinalIgnoreCase);
+                var sp = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+                foreach (ObjectId oid in sp)
+                {
+                    var ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
+                    var pl = ent as Polyline; var tx = ent as DBText;
+                    if (pl != null && pl.Closed && pl.NumberOfVertices >= 3 && roomLayers.Contains(pl.Layer))
+                    {
+                        var pts = new List<P2>();
+                        for (int i = 0; i < pl.NumberOfVertices; i++) { var q = pl.GetPoint2dAt(i); pts.Add(new P2(q.X, q.Y)); }
+                        rooms.Add(new RoomInput { Outline = pts, Area = Math.Abs(pl.Area) });
+                    }
+                    else if (tx != null)
+                    {
+                        var at = tx.HorizontalMode == TextHorizontalMode.TextLeft && tx.VerticalMode == TextVerticalMode.TextBase ? tx.Position : tx.AlignmentPoint;
+                        texts.Add(new RoomText { At = new P2(at.X, at.Y), Text = tx.TextString });
+                    }
+                }
+                var names = rooms.Select(r => RoomTable.NameOf(texts.Where(t => PlanarRooms.Contains(r.Outline, t.At)),
+                    new P2(r.Outline.Average(p => p.X), r.Outline.Average(p => p.Y)))).ToList();
+                headers = ElectricalRooms.Header;
+                foreach (var a in analyses) rows.AddRange(ElectricalRooms.Rows(a.Nodes, a.Nets, rooms, names));
+                if (rooms.Count == 0) title += " - BY ROOM (no closed room outlines on " + string.Join(", ", roomLayers) + ")";
+                else title += " - BY ROOM";
             }
             else if (layout == "Point")
             {
