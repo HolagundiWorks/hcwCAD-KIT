@@ -295,6 +295,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 int row = 0;
                 foreach (var ld in LayerData.Hcw)
                 {
+                    Util.EnsureHcwLayer(tr, db, ld.Name);       // a layer not yet in the drawing would throw eKeyNotFound
                     var swatch = new Line(new Point3d(pt.X, pt.Y - row * rowH, 0), new Point3d(pt.X + 0.4, pt.Y - row * rowH, 0))
                     {
                         Layer = ld.Name
