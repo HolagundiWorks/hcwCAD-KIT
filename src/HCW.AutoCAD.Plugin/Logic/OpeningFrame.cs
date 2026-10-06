@@ -70,17 +70,34 @@ namespace HCW.AutoCAD.Plugin.Logic
             return c;
         }
 
-        private static readonly Regex NameRx = new Regex(@"^HCW_([DW])_(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$", RegexOptions.IgnoreCase);
+        private static readonly Regex NameRx = new Regex(@"^HCW_(DD|DS|D|W)_(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$", RegexOptions.IgnoreCase);
+
+        /// <summary>Block name prefix for a kind: HCW_D_ single door, HCW_DD_ double leaf, HCW_DS_ sliding, HCW_W_ window.</summary>
+        public static string NamePrefix(bool door, string type)
+        {
+            if (!door) return "HCW_W_";
+            return string.Equals(type, "double", StringComparison.OrdinalIgnoreCase) ? "HCW_DD_"
+                : string.Equals(type, "sliding", StringComparison.OrdinalIgnoreCase) ? "HCW_DS_" : "HCW_D_";
+        }
+
+        /// <summary>Reads HCW_D_900x230 / HCW_DD_ / HCW_DS_ / HCW_W_1200x230: kind, door type (single, double, sliding; "" for a window), width and wall thickness in millimetres.</summary>
+        public static bool TryParseName(string name, out bool door, out string type, out double widthMm, out double thicknessMm)
+        {
+            door = false; type = ""; widthMm = thicknessMm = 0;
+            var m = NameRx.Match(name ?? "");
+            if (!m.Success) return false;
+            string kind = m.Groups[1].Value.ToUpperInvariant();
+            door = kind != "W";
+            type = kind == "DD" ? "double" : kind == "DS" ? "sliding" : kind == "D" ? "single" : "";
+            return double.TryParse(m.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out widthMm)
+                && double.TryParse(m.Groups[3].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out thicknessMm);
+        }
 
         /// <summary>Reads HCW_D_900x230 / HCW_W_1200x230: door or window, width and wall thickness in millimetres.</summary>
         public static bool TryParseName(string name, out bool door, out double widthMm, out double thicknessMm)
         {
-            door = false; widthMm = thicknessMm = 0;
-            var m = NameRx.Match(name ?? "");
-            if (!m.Success) return false;
-            door = string.Equals(m.Groups[1].Value, "D", StringComparison.OrdinalIgnoreCase);
-            return double.TryParse(m.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out widthMm)
-                && double.TryParse(m.Groups[3].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out thicknessMm);
+            string type;
+            return TryParseName(name, out door, out type, out widthMm, out thicknessMm);
         }
     }
 }

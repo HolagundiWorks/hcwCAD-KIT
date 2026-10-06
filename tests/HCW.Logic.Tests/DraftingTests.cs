@@ -2137,3 +2137,103 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class WallRecordTests
+    {
+        [Fact]
+        public void RecordRoundTripsThroughItsLines()
+        {
+            var w = new WallRecord { Id = "W0007", ThicknessMm = 115, Justify = WallJustify.Left, Closed = true, Z = 1.5, Points = { new P2(0, 0), new P2(4.25, 0), new P2(4.25, 3.125) } };
+            var back = WallRecord.FromLines("W0007", w.ToLines());
+            Assert.Equal(115, back.ThicknessMm); Assert.Equal(WallJustify.Left, back.Justify); Assert.True(back.Closed); Assert.Equal(1.5, back.Z);
+            Assert.Equal(new[] { 0.0, 4.25, 4.25 }, back.Points.Select(p => p.X).ToArray());
+            Assert.Equal(3.125, back.Points[2].Y);
+            Assert.Null(WallRecord.FromLines("x", new[] { "EMPTY" }));
+            Assert.Null(WallRecord.FromLines("x", new[] { Fields.Join("T", "230", "Centre", "0", "0") }));       // no points
+        }
+
+        [Fact]
+        public void DistanceAndOutlinesFollowTheCentreLine()
+        {
+            var w = new WallRecord { ThicknessMm = 200, Points = { new P2(0, 0), new P2(4, 0) } };
+            Assert.Equal(1.0, w.DistanceTo(new P2(2, 1)), 9);
+            Assert.Equal(1.0, w.DistanceTo(new P2(5, 0)), 9);
+            var o = w.Outlines(0.001);                                           // drawing in metres
+            Assert.Single(o);
+            Assert.Equal(0.8, Math.Abs(PlanarRooms.SignedArea(o[0])), 9);
+            var closed = new WallRecord { Closed = true, Points = { new P2(0, 0), new P2(2, 0), new P2(2, 2), new P2(0, 2) } };
+            Assert.Equal(0.0, closed.DistanceTo(new P2(1, 0)), 9);              // the closing side counts
+            Assert.Equal(0.0, closed.DistanceTo(new P2(0, 1)), 9);
+        }
+
+        [Fact]
+        public void IdsPackIntoShortChunksAndComeBack()
+        {
+            var ids = Enumerable.Range(1, 100).Select(WallIds.Format).ToList();
+            var packed = WallIds.Pack(ids.Concat(new[] { "W0001", "" }));
+            Assert.All(packed, c => Assert.True(c.Length <= 255));
+            Assert.True(packed.Length > 1);
+            Assert.Equal(ids, WallIds.Unpack(packed));
+            Assert.Empty(WallIds.Pack(new string[0]));
+            Assert.Equal(7, WallIds.NumberOf("W0007"));
+            Assert.Equal(0, WallIds.NumberOf("S0007"));
+            Assert.Equal(0, WallIds.NumberOf(null));
+        }
+
+        [Fact]
+        public void OutlinesJoinAGroupThroughSharedIds()
+        {
+            var outlines = new List<IList<string>>
+            {
+                new List<string> { "W1", "W2" },        // a joined outline
+                new List<string> { "W2", "W3" },        // shares W2
+                new List<string> { "W9" },              // separate
+                new List<string> { "W3", "W4" },        // reached through W3
+            };
+            HashSet<string> ids; List<int> members;
+            WallIds.Group(outlines, new[] { "W1" }, out ids, out members);
+            Assert.Equal(new[] { 0, 1, 3 }, members.ToArray());
+            Assert.Equal(new[] { "W1", "W2", "W3", "W4" }, ids.OrderBy(x => x).ToArray());
+            WallIds.Group(outlines, new[] { "W9" }, out ids, out members);
+            Assert.Equal(new[] { 2 }, members.ToArray());
+            WallIds.Group(outlines, new[] { "none" }, out ids, out members);
+            Assert.Empty(members);
+        }
+    }
+}
+
+namespace HCW.Logic.Tests
+{
+    public class OpeningTypeNameTests
+    {
+        [Theory]
+        [InlineData("HCW_D_900x230", true, "single")]
+        [InlineData("HCW_DD_1500x230", true, "double")]
+        [InlineData("hcw_ds_2400x115", true, "sliding")]
+        [InlineData("HCW_W_1200x230", false, "")]
+        public void NamesGiveKindAndType(string name, bool door, string type)
+        {
+            bool d; string t; double w, th;
+            Assert.True(OpeningFrame.TryParseName(name, out d, out t, out w, out th));
+            Assert.Equal(door, d); Assert.Equal(type, t);
+        }
+
+        [Fact]
+        public void PrefixesAndParsingAgree()
+        {
+            foreach (var t in new[] { "single", "double", "sliding" })
+            {
+                string name = OpeningFrame.NamePrefix(true, t) + "900x230";
+                bool d; string back; double w, th;
+                Assert.True(OpeningFrame.TryParseName(name, out d, out back, out w, out th));
+                Assert.Equal(t, back); Assert.Equal(900, w);
+            }
+            Assert.Equal("HCW_W_", OpeningFrame.NamePrefix(false, "double"));
+            Assert.Equal("HCW_D_", OpeningFrame.NamePrefix(true, ""));
+            bool dd; string tt; double ww, tth;
+            Assert.False(OpeningFrame.TryParseName("HCW_DX_900x230", out dd, out tt, out ww, out tth));
+        }
+    }
+}

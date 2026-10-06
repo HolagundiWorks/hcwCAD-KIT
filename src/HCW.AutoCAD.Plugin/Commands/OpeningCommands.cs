@@ -25,6 +25,15 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private static double _doorMm = 900;
         private static double _windowMm = 1200;
+        private static string _doorType = "single";
+        private static double _doorHeightMm = 2100, _windowHeightMm = 1200, _windowSillMm = 900;
+
+        /// <summary>What a door or window carries besides its width: the door type (single, double, sliding), the sill and the height, in millimetres.</summary>
+        internal class OpeningParams
+        {
+            public string Type = "single";
+            public double SillMm, HeightMm;
+        }
 
         private class SegRef
         {
@@ -48,6 +57,30 @@ namespace HCW.AutoCAD.Plugin.Commands
                 { AllowNegative = false, AllowZero = false, DefaultValue = current, UseDefaultValue = true });
             if (wr.Status != PromptStatus.OK) return;
             if (door) _doorMm = wr.Value; else _windowMm = wr.Value;
+
+            if (door)
+            {
+                var to = new PromptKeywordOptions("\nDoor type [Single/Double/Sliding] <" + _doorType + ">: ", "Single Double Sliding") { AllowNone = true };
+                to.Keywords.Default = char.ToUpperInvariant(_doorType[0]) + _doorType.Substring(1);
+                var tr0 = ed.GetKeywords(to);
+                if (tr0.Status == PromptStatus.OK) _doorType = tr0.StringResult.ToLowerInvariant();
+                else if (tr0.Status != PromptStatus.None) return;
+            }
+            double height = door ? _doorHeightMm : _windowHeightMm;
+            var hr = ed.GetDouble(new PromptDoubleOptions("\nHeight of the " + what + " in mm <" + height + ">: ")
+                { AllowNegative = false, AllowZero = false, DefaultValue = height, UseDefaultValue = true });
+            if (hr.Status != PromptStatus.OK) return;
+            if (door) _doorHeightMm = hr.Value; else _windowHeightMm = hr.Value;
+            double sill = 0;
+            if (!door)
+            {
+                var sr0 = ed.GetDouble(new PromptDoubleOptions("\nSill height above the floor in mm <" + _windowSillMm + ">: ")
+                    { AllowNegative = false, AllowZero = true, DefaultValue = _windowSillMm, UseDefaultValue = true });
+                if (sr0.Status != PromptStatus.OK) return;
+                _windowSillMm = sr0.Value;
+                sill = sr0.Value;
+            }
+            var par = new OpeningParams { Type = door ? _doorType : "", SillMm = sill, HeightMm = door ? _doorHeightMm : _windowHeightMm };
 
             var ucs = ed.CurrentUserCoordinateSystem;
             while (true)
@@ -73,19 +106,19 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
 
                 string message;
-                try { message = Place(door, pick, side, flip, door ? _doorMm : _windowMm); }
+                try { message = Place(door, pick, side, flip, door ? _doorMm : _windowMm, par); }
                 catch (System.Exception ex) { message = "failed: " + ex.Message; }
                 ed.WriteMessage("\n" + (door ? "HCWDOOR: " : "HCWWINDOW: ") + message);
             }
         }
 
-        private static string Place(bool door, Point3d pickW, Point3d sideW, bool flip, double widthMm)
+        private static string Place(bool door, Point3d pickW, Point3d sideW, bool flip, double widthMm, OpeningParams par)
         {
             using (Util.Doc.LockDocument())
             using (var tr = Util.Db.TransactionManager.StartTransaction())
             {
                 string message;
-                if (!PlaceIn(tr, door, pickW, sideW, flip, widthMm, null, out message)) return message;
+                if (!PlaceIn(tr, door, pickW, sideW, flip, widthMm, par, null, out message)) return message;
                 tr.Commit();
                 return message;
             }
@@ -95,7 +128,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// Cuts the wall and inserts the block inside the caller's transaction. When it returns false nothing the caller
         /// should keep has been done (the caller leaves the transaction uncommitted). tagOverride reuses a tag such as D3.
         /// </summary>
-        private static bool PlaceIn(Transaction tr, bool door, Point3d pickW, Point3d sideW, bool flip, double widthMm, string tagOverride, out string message)
+        internal static bool PlaceIn(Transaction tr, bool door, Point3d pickW, Point3d sideW, bool flip, double widthMm, OpeningParams par, string tagOverride, out string message)
         {
             var db = Util.Db;
             double w = Util.MmToDrawingUnits(widthMm);
@@ -144,17 +177,17 @@ namespace HCW.AutoCAD.Plugin.Commands
                 // Tag on the side the door does not swing to, just outside the wall.
                 var oppA = place.HingeOnFirst ? p2a : p1a; var oppB = place.HingeOnFirst ? p2b : p1b;
                 tagAt = (oppA + oppB) * 0.5 + n * (-place.Sw * textH);
-                blockName = "HCW_D_" + size;
-                EnsureDoorBlock(tr, db, blockName, w, plan.Thickness);
+                blockName = OpeningFrame.NamePrefix(true, par.Type) + size;
+                EnsureDoorBlock(tr, db, blockName, par.Type, w, plan.Thickness);
             }
             else
             {
                 tagAt = (p1a + p1b) * 0.5 + n * (-place.S2 * textH);
-                blockName = "HCW_W_" + size;
+                blockName = OpeningFrame.NamePrefix(false, "") + size;
                 EnsureWindowBlock(tr, db, blockName, w, plan.Thickness);
             }
             tag = tagOverride ?? NextTag(tr, space, door ? "D" : "W");
-            InsertBlock(tr, space, blockName, new Point3d(place.Origin.X, place.Origin.Y, z), place.Angle, place.Sx, place.Sy, door ? LayerDoor : LayerWin);
+            InsertBlock(tr, space, blockName, new Point3d(place.Origin.X, place.Origin.Y, z), place.Angle, place.Sx, place.Sy, door ? LayerDoor : LayerWin, par);
 
             Util.EnsureHcwLayer(tr, db, LayerTag);
             var text = new DBText
@@ -174,16 +207,46 @@ namespace HCW.AutoCAD.Plugin.Commands
             return true;
         }
 
-        // ---- replace and move ----
+        // ---- replace, move and slide ----
 
-        private class OpeningInfo
+        internal class OpeningInfo
         {
             public ObjectId Id;
             public bool Door;
-            public double WidthMm, ThicknessMm;
+            public string Type = "";
+            public double WidthMm, ThicknessMm, SillMm, HeightMm;
             public OpeningFrame.Corners Corners;
             public double Z;
+            public string Layer = "";
         }
+
+        /// <summary>Reads a door or window block made by HCWDOOR or HCWWINDOW; null for any other block.</summary>
+        internal static OpeningInfo ReadOpening(Transaction tr, ObjectId id)
+        {
+            var br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+            if (br == null) return null;
+            bool door; string type; double wMm, tMm;
+            if (!OpeningFrame.TryParseName(BlockOpenings.EffectiveName(tr, br), out door, out type, out wMm, out tMm)) return null;
+            double mm = Util.MmToDrawingUnits(1.0);
+            var info = new OpeningInfo
+            {
+                Id = id, Door = door, Type = type, WidthMm = wMm, ThicknessMm = tMm, Z = br.Position.Z, Layer = br.Layer,
+                SillMm = 0, HeightMm = door ? Settings.GetDouble("DoorHeightMm", 2100) : Settings.GetDouble("WindowHeightMm", 1200),
+                Corners = OpeningFrame.FromBlock(door, new P2(br.Position.X, br.Position.Y), br.Rotation, br.ScaleFactors.X, br.ScaleFactors.Y, wMm * mm, tMm * mm),
+            };
+            if (!door) info.SillMm = Settings.GetDouble("WindowSillMm", 900);
+            foreach (ObjectId attId in br.AttributeCollection)
+            {
+                var att = (AttributeReference)tr.GetObject(attId, OpenMode.ForRead);
+                double v;
+                if (!double.TryParse(att.TextString, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v)) continue;
+                string tag = (att.Tag ?? "").ToUpperInvariant();
+                if (tag == "SILL") info.SillMm = v; else if (tag == "HEIGHT") info.HeightMm = v;
+            }
+            return info;
+        }
+
+        internal static OpeningParams ParamsOf(OpeningInfo i) => new OpeningParams { Type = i.Door ? (i.Type.Length > 0 ? i.Type : "single") : "", SillMm = i.SillMm, HeightMm = i.HeightMm };
 
         private static OpeningInfo SelectOpening(Editor ed, string prompt)
         {
@@ -196,31 +259,54 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (r.Status != PromptStatus.OK) return null;
                 using (var tr = Util.Db.TransactionManager.StartTransaction())
                 {
-                    var br = (BlockReference)tr.GetObject(r.ObjectId, OpenMode.ForRead);
-                    bool door; double wMm, tMm;
-                    if (!OpeningFrame.TryParseName(BlockOpenings.EffectiveName(tr, br), out door, out wMm, out tMm))
-                    {
-                        ed.WriteMessage("\nThat block is not a door or window made by HCWDOOR or HCWWINDOW (HCW_D_… or HCW_W_…).");
-                        continue;
-                    }
-                    double mm = Util.MmToDrawingUnits(1.0);
-                    var info = new OpeningInfo
-                    {
-                        Id = r.ObjectId, Door = door, WidthMm = wMm, ThicknessMm = tMm, Z = br.Position.Z,
-                        Corners = OpeningFrame.FromBlock(door, new P2(br.Position.X, br.Position.Y), br.Rotation,
-                            br.ScaleFactors.X, br.ScaleFactors.Y, wMm * mm, tMm * mm),
-                    };
+                    var info = ReadOpening(tr, r.ObjectId);
                     tr.Commit();
-                    return info;
+                    if (info != null) return info;
+                    ed.WriteMessage("\nThat block is not a door or window made by HCWDOOR or HCWWINDOW (HCW_D_, HCW_DD_, HCW_DS_ or HCW_W_ …).");
                 }
             }
         }
 
+        /// <summary>The doors and windows made by the tools among the selected blocks, and how many other objects were skipped.</summary>
+        private static List<OpeningInfo> SelectOpenings(Editor ed, string prompt, out int skipped)
+        {
+            skipped = 0;
+            var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = prompt },
+                new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "INSERT") }));
+            if (psr.Status != PromptStatus.OK) return null;
+            var list = new List<OpeningInfo>();
+            using (var tr = Util.Db.TransactionManager.StartTransaction())
+            {
+                foreach (var id in psr.Value.GetObjectIds())
+                {
+                    var info = ReadOpening(tr, id);
+                    if (info == null) skipped++; else list.Add(info);
+                }
+                tr.Commit();
+            }
+            return list;
+        }
+
+        /// <summary>The openings whose centre lies inside the box (drawing units).</summary>
+        internal static List<OpeningInfo> CollectInside(Transaction tr, BlockTableRecord space, double minX, double minY, double maxX, double maxY)
+        {
+            var found = new List<OpeningInfo>();
+            foreach (ObjectId id in space)
+            {
+                if (id.ObjectClass.DxfName != "INSERT") continue;
+                var info = ReadOpening(tr, id);
+                if (info == null) continue;
+                var c = info.Corners.Centre;
+                if (c.X >= minX && c.X <= maxX && c.Y >= minY && c.Y <= maxY) found.Add(info);
+            }
+            return found;
+        }
+
         /// <summary>
-        /// Takes an opening out of the wall: erases its block, tag and jamb lines and bridges the gap in both faces.
+        /// Takes an opening out of the wall: erases its block, tag and jamb lines and, when bridge is true, bridges the gap in both faces.
         /// Returns the tag text it had (null if no tag was found).
         /// </summary>
-        private static string Heal(Transaction tr, BlockTableRecord space, OpeningInfo info)
+        internal static string Heal(Transaction tr, BlockTableRecord space, OpeningInfo info, bool bridge = true)
         {
             double mm = Util.MmToDrawingUnits(1.0);
             double tol = 2 * mm;                         // the block name rounds the wall thickness to a whole mm
@@ -264,30 +350,33 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
 
             // Bridge each face across the gap, with the look of the face line next to it.
-            var faces = new[] { new[] { c.FaceAStart, c.FaceAEnd }, new[] { c.FaceBStart, c.FaceBEnd } };
-            foreach (var face in faces)
+            if (bridge)
             {
-                Line like = null;
-                foreach (var ln in lines)
+                var faces = new[] { new[] { c.FaceAStart, c.FaceAEnd }, new[] { c.FaceBStart, c.FaceBEnd } };
+                foreach (var face in faces)
                 {
-                    if (ln.IsErased) continue;
-                    if (wallLayer != null && !string.Equals(ln.Layer, wallLayer, StringComparison.OrdinalIgnoreCase)) continue;
-                    var a = new P2(ln.StartPoint.X, ln.StartPoint.Y); var b = new P2(ln.EndPoint.X, ln.EndPoint.Y);
-                    if (a.DistanceTo(face[0]) <= tol || a.DistanceTo(face[1]) <= tol || b.DistanceTo(face[0]) <= tol || b.DistanceTo(face[1]) <= tol) { like = ln; break; }
+                    Line like = null;
+                    foreach (var ln in lines)
+                    {
+                        if (ln.IsErased) continue;
+                        if (wallLayer != null && !string.Equals(ln.Layer, wallLayer, StringComparison.OrdinalIgnoreCase)) continue;
+                        var a = new P2(ln.StartPoint.X, ln.StartPoint.Y); var b = new P2(ln.EndPoint.X, ln.EndPoint.Y);
+                        if (a.DistanceTo(face[0]) <= tol || a.DistanceTo(face[1]) <= tol || b.DistanceTo(face[0]) <= tol || b.DistanceTo(face[1]) <= tol) { like = ln; break; }
+                    }
+                    Line bridgeLine;
+                    if (like != null)
+                    {
+                        bridgeLine = (Line)like.Clone();
+                        bridgeLine.StartPoint = new Point3d(face[0].X, face[0].Y, info.Z);
+                        bridgeLine.EndPoint = new Point3d(face[1].X, face[1].Y, info.Z);
+                    }
+                    else
+                    {
+                        bridgeLine = new Line(new Point3d(face[0].X, face[0].Y, info.Z), new Point3d(face[1].X, face[1].Y, info.Z)) { Layer = wallLayer ?? WallCommands.WallLayer };
+                    }
+                    space.AppendEntity(bridgeLine);
+                    tr.AddNewlyCreatedDBObject(bridgeLine, true);
                 }
-                Line bridge;
-                if (like != null)
-                {
-                    bridge = (Line)like.Clone();
-                    bridge.StartPoint = new Point3d(face[0].X, face[0].Y, info.Z);
-                    bridge.EndPoint = new Point3d(face[1].X, face[1].Y, info.Z);
-                }
-                else
-                {
-                    bridge = new Line(new Point3d(face[0].X, face[0].Y, info.Z), new Point3d(face[1].X, face[1].Y, info.Z)) { Layer = wallLayer ?? WallCommands.WallLayer };
-                }
-                space.AppendEntity(bridge);
-                tr.AddNewlyCreatedDBObject(bridge, true);
             }
 
             string tag = tagText?.TextString;
@@ -314,20 +403,88 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
         }
 
+        /// <summary>
+        /// Moves one opening to a point you pick on a wall, or several together by the distance between two points. Each is closed up
+        /// where it was and cut where it goes, keeping its width, type, heights and tag number. If any cannot be placed, nothing changes.
+        /// </summary>
         [CommandMethod("HCWOPENMOVE")]
         public void MoveOpening()
         {
             var ed = Util.Ed;
-            var info = SelectOpening(ed, "\nSelect the door or window to move: ");
+            int skipped;
+            var infos = SelectOpenings(ed, "\nSelect the doors and windows to move: ", out skipped);
+            if (infos == null) return;
+            if (infos.Count == 0) { ed.WriteMessage("\nHCWOPENMOVE: none of that is a door or window made by HCWDOOR or HCWWINDOW."); return; }
+            if (skipped > 0) ed.WriteMessage("\n" + skipped + " other object(s) skipped.");
+
+            var ucs = ed.CurrentUserCoordinateSystem;
+            var targets = new List<Point3d>();
+            var sides = new List<Point3d?>();
+            var flips = new List<bool>();
+            if (infos.Count == 1)
+            {
+                var info = infos[0];
+                var pr = ed.GetPoint(new PromptPointOptions("\nPick the new position on the wall: "));
+                if (pr.Status != PromptStatus.OK) return;
+                var pick = pr.Value.TransformBy(ucs);
+                bool flip = info.Corners.Flipped;
+                Point3d? side = null;
+                if (info.Door && !AskSwing(ed, true, ref flip, out side)) return;
+                targets.Add(new Point3d(pick.X, pick.Y, info.Z)); sides.Add(side); flips.Add(flip);
+            }
+            else
+            {
+                var bp = ed.GetPoint("\nBase point: ");
+                if (bp.Status != PromptStatus.OK) return;
+                var tp = ed.GetPoint(new PromptPointOptions("\nSecond point (the openings move by this distance): ") { UseBasePoint = true, BasePoint = bp.Value, UseDashedLine = true });
+                if (tp.Status != PromptStatus.OK) return;
+                var d = tp.Value.TransformBy(ucs) - bp.Value.TransformBy(ucs);
+                foreach (var i in infos)
+                {
+                    targets.Add(new Point3d(i.Corners.Centre.X + d.X, i.Corners.Centre.Y + d.Y, i.Z));
+                    sides.Add(null); flips.Add(i.Corners.Flipped);
+                }
+            }
+
+            string message;
+            using (Util.Doc.LockDocument())
+            using (var tr = Util.Db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(Util.Db.CurrentSpaceId, OpenMode.ForWrite);
+                var tags = infos.Select(i => Heal(tr, space, i)).ToList();
+                var report = new List<string>();
+                for (int k = 0; k < infos.Count; k++)
+                {
+                    var info = infos[k];
+                    Point3d sideW = sides[k] ?? PreviousSide(info, targets[k]);
+                    if (!PlaceIn(tr, info.Door, targets[k], sideW, flips[k], info.WidthMm, ParamsOf(info), tags[k], out message))
+                    {
+                        ed.WriteMessage("\nHCWOPENMOVE: " + (tags[k] ?? "an opening") + ": " + message + " Nothing was moved.");
+                        return;                                         // uncommitted: every heal is rolled back
+                    }
+                    report.Add(message);
+                }
+                tr.Commit();
+                ed.WriteMessage("\nHCWOPENMOVE: " + (infos.Count == 1 ? report[0] : infos.Count + " openings moved."));
+            }
+        }
+
+        /// <summary>HCWOPENSLIDE drags a door or window along its wall: a ghost of the opening follows the cursor and the move is made where you click.</summary>
+        [CommandMethod("HCWOPENSLIDE")]
+        public void SlideOpening()
+        {
+            var ed = Util.Ed;
+            var info = SelectOpening(ed, "\nSelect the door or window to slide: ");
             if (info == null) return;
-
-            var pr = ed.GetPoint(new PromptPointOptions("\nPick the new position on the wall: "));
-            if (pr.Status != PromptStatus.OK) return;
-            var pick = pr.Value.TransformBy(ed.CurrentUserCoordinateSystem);
-
-            bool flip = info.Corners.Flipped;
-            Point3d? side = null;
-            if (info.Door && !AskSwing(ed, true, ref flip, out side)) return;
+            var along = info.Corners.FaceAEnd - info.Corners.FaceAStart;
+            double len = along.Length;
+            if (len < 1e-9) return;
+            var jig = new SlideJig(new Point3d(info.Corners.Centre.X, info.Corners.Centre.Y, info.Z), new Vector3d(along.X / len, along.Y / len, 0),
+                len, info.ThicknessMm * Util.MmToDrawingUnits(1.0));
+            var res = ed.Drag(jig);
+            if (res.Status != PromptStatus.OK) return;
+            double slide = jig.Distance;
+            if (Math.Abs(slide) < 1e-9) return;
 
             string message;
             using (Util.Doc.LockDocument())
@@ -335,15 +492,50 @@ namespace HCW.AutoCAD.Plugin.Commands
             {
                 var space = (BlockTableRecord)tr.GetObject(Util.Db.CurrentSpaceId, OpenMode.ForWrite);
                 string tag = Heal(tr, space, info);
-                Point3d sideW = side ?? PreviousSide(info, pick);
-                if (!PlaceIn(tr, info.Door, new Point3d(pick.X, pick.Y, info.Z), sideW, flip, info.WidthMm, tag, out message))
+                var target = new Point3d(info.Corners.Centre.X + jig.Direction.X * slide, info.Corners.Centre.Y + jig.Direction.Y * slide, info.Z);
+                if (!PlaceIn(tr, info.Door, target, PreviousSide(info, target), info.Corners.Flipped, info.WidthMm, ParamsOf(info), tag, out message))
                 {
-                    ed.WriteMessage("\nHCWOPENMOVE: " + message + " The opening was left where it was.");
-                    return;                                             // uncommitted: the heal is rolled back
+                    ed.WriteMessage("\nHCWOPENSLIDE: " + message + " The opening was left where it was.");
+                    return;
                 }
                 tr.Commit();
             }
-            ed.WriteMessage("\nHCWOPENMOVE: " + message);
+            ed.WriteMessage("\nHCWOPENSLIDE: " + message);
+        }
+
+        private class SlideJig : DrawJig
+        {
+            private readonly Point3d _centre;
+            private readonly double _length, _thickness;
+            public Vector3d Direction { get; }
+            public double Distance { get; private set; }
+
+            public SlideJig(Point3d centre, Vector3d direction, double length, double thickness)
+            { _centre = centre; Direction = direction; _length = length; _thickness = thickness; }
+
+            protected override SamplerStatus Sampler(JigPrompts prompts)
+            {
+                var o = new JigPromptPointOptions("\nSlide to (click where the opening should go): ")
+                    { UserInputControls = UserInputControls.Accept3dCoordinates | UserInputControls.NullResponseAccepted };
+                var r = prompts.AcquirePoint(o);
+                if (r.Status != PromptStatus.OK) return SamplerStatus.Cancel;
+                double d = (r.Value - _centre).DotProduct(Direction);
+                if (Math.Abs(d - Distance) < 1e-9) return SamplerStatus.NoChange;
+                Distance = d;
+                return SamplerStatus.OK;
+            }
+
+            protected override bool WorldDraw(Autodesk.AutoCAD.GraphicsInterface.WorldDraw draw)
+            {
+                var c = _centre + Direction * Distance;
+                var n = new Vector3d(-Direction.Y, Direction.X, 0);
+                var a = c - Direction * (_length / 2) - n * (_thickness / 2);
+                var b = c + Direction * (_length / 2) - n * (_thickness / 2);
+                var d = c + Direction * (_length / 2) + n * (_thickness / 2);
+                var e = c - Direction * (_length / 2) + n * (_thickness / 2);
+                draw.Geometry.WorldLine(a, b); draw.Geometry.WorldLine(b, d); draw.Geometry.WorldLine(d, e); draw.Geometry.WorldLine(e, a);
+                return true;
+            }
         }
 
         [CommandMethod("HCWOPENREPLACE")]
@@ -366,6 +558,30 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (wr.Status != PromptStatus.OK) return;
             double widthMm = wr.Value;
 
+            string type = "";
+            if (door)
+            {
+                string cur = info.Door && info.Type.Length > 0 ? info.Type : _doorType;
+                var to = new PromptKeywordOptions("\nDoor type [Single/Double/Sliding] <" + cur + ">: ", "Single Double Sliding") { AllowNone = true };
+                to.Keywords.Default = char.ToUpperInvariant(cur[0]) + cur.Substring(1);
+                var tr0 = ed.GetKeywords(to);
+                type = tr0.Status == PromptStatus.OK ? tr0.StringResult.ToLowerInvariant() : cur;
+                if (tr0.Status != PromptStatus.OK && tr0.Status != PromptStatus.None) return;
+            }
+            double defHeight = door == info.Door ? info.HeightMm : (door ? _doorHeightMm : _windowHeightMm);
+            var hr = ed.GetDouble(new PromptDoubleOptions("\nHeight in mm <" + defHeight + ">: ")
+                { AllowNegative = false, AllowZero = false, DefaultValue = defHeight, UseDefaultValue = true });
+            if (hr.Status != PromptStatus.OK) return;
+            double sill = 0;
+            if (!door)
+            {
+                double defSill = !info.Door ? info.SillMm : _windowSillMm;
+                var sr = ed.GetDouble(new PromptDoubleOptions("\nSill height in mm <" + defSill + ">: ")
+                    { AllowNegative = false, AllowZero = true, DefaultValue = defSill, UseDefaultValue = true });
+                if (sr.Status != PromptStatus.OK) return;
+                sill = sr.Value;
+            }
+
             bool flip = door && info.Door && info.Corners.Flipped;
             Point3d? side = null;
             if (door && !AskSwing(ed, info.Door, ref flip, out side)) return;
@@ -379,14 +595,15 @@ namespace HCW.AutoCAD.Plugin.Commands
                 string tag = Heal(tr, space, info);
                 Point3d sideW = side ?? PreviousSide(info, centre);
                 string keep = door == info.Door ? tag : null;           // the same kind keeps its number
-                if (!PlaceIn(tr, door, centre, sideW, flip, widthMm, keep, out message))
+                var par = new OpeningParams { Type = type, SillMm = sill, HeightMm = hr.Value };
+                if (!PlaceIn(tr, door, centre, sideW, flip, widthMm, par, keep, out message))
                 {
                     ed.WriteMessage("\nHCWOPENREPLACE: " + message + " The opening was left as it was.");
                     return;
                 }
                 tr.Commit();
             }
-            if (door) _doorMm = widthMm; else _windowMm = widthMm;
+            if (door) { _doorMm = widthMm; _doorType = type; _doorHeightMm = hr.Value; } else { _windowMm = widthMm; _windowHeightMm = hr.Value; _windowSillMm = sill; }
             ed.WriteMessage("\nHCWOPENREPLACE: " + message);
         }
 
@@ -502,19 +719,47 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         /// <summary>
-        /// Door block: wall body below the x axis (y from -thickness to 0), the leaf opened 90 degrees up from the
-        /// hinge at the origin and its swing arc, and the opening length on MEASURE-DEDUCT through the middle of the wall.
+        /// Door block: wall body below the x axis (y from -thickness to 0), a frame at each jamb (DoorFrameMm), and the leaf or leaves
+        /// opened 90 degrees up from the hinge at the origin with their swing arcs (single), or two leaves hinged at each end (double),
+        /// or two panels sliding past each other in the middle of the wall (sliding). The opening length is a line on MEASURE-DEDUCT
+        /// through the middle of the wall. The SILL, HEIGHT and LINTEL attributes are invisible and carry the schedule figures.
         /// </summary>
-        private static void EnsureDoorBlock(Transaction tr, Database db, string name, double w, double thickness)
+        private static void EnsureDoorBlock(Transaction tr, Database db, string name, string type, double w, double thickness)
         {
             var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
             if (bt.Has(name)) return;
             Util.EnsureHcwLayer(tr, db, LayerDoor);
             Util.EnsureLayer(tr, db, MeasureCommands.LayDed, 6);
             var def = NewBlock(tr, bt, name);
-            Add(tr, def, new Line(Point3d.Origin, new Point3d(0, w, 0)) { Layer = LayerDoor });
-            Add(tr, def, new Arc(Point3d.Origin, w, 0, Math.PI / 2) { Layer = LayerDoor });
+            double mm = Util.MmToDrawingUnits(1.0);
+            double leaf = Settings.GetDouble("DoorLeafMm", 40) * mm, frame = Settings.GetDouble("DoorFrameMm", 50) * mm;
+
+            if (frame > 0)
+            {
+                Add(tr, def, Rect(0, -thickness, frame, 0, LayerDoor));
+                Add(tr, def, Rect(w - frame, -thickness, w, 0, LayerDoor));
+            }
+            if (string.Equals(type, "sliding", StringComparison.OrdinalIgnoreCase))
+            {
+                double lap = 0.05 * w;
+                double l = Math.Max(leaf, thickness / 10);
+                Add(tr, def, Rect(0, -thickness / 2 - l, w / 2 + lap, -thickness / 2, LayerDoor));
+                Add(tr, def, Rect(w / 2 - lap, -thickness / 2, w, -thickness / 2 + l, LayerDoor));
+            }
+            else if (string.Equals(type, "double", StringComparison.OrdinalIgnoreCase))
+            {
+                Add(tr, def, LeafOrLine(0, 0, leaf, w / 2, LayerDoor));
+                Add(tr, def, Rect(w - leaf, 0, w, w / 2, LayerDoor));
+                Add(tr, def, new Arc(Point3d.Origin, w / 2, 0, Math.PI / 2) { Layer = LayerDoor });
+                Add(tr, def, new Arc(new Point3d(w, 0, 0), w / 2, Math.PI / 2, Math.PI) { Layer = LayerDoor });
+            }
+            else
+            {
+                Add(tr, def, LeafOrLine(0, 0, leaf, w, LayerDoor));
+                Add(tr, def, new Arc(Point3d.Origin, w, 0, Math.PI / 2) { Layer = LayerDoor });
+            }
             Add(tr, def, new Line(new Point3d(0, -thickness / 2, 0), new Point3d(w, -thickness / 2, 0)) { Layer = MeasureCommands.LayDed });
+            AddScheduleAttributes(tr, def, thickness);
         }
 
         /// <summary>Window block: four lines across the opening (the two faces and two frame lines), wall body above the x axis.</summary>
@@ -531,6 +776,34 @@ namespace HCW.AutoCAD.Plugin.Commands
                 Add(tr, def, new Line(new Point3d(0, y, 0), new Point3d(w, y, 0)) { Layer = LayerWin });
             }
             Add(tr, def, new Line(new Point3d(0, thickness / 2, 0), new Point3d(w, thickness / 2, 0)) { Layer = MeasureCommands.LayDed });
+            AddScheduleAttributes(tr, def, thickness);
+        }
+
+        private static Entity Rect(double x1, double y1, double x2, double y2, string layer)
+        {
+            var pl = new Polyline();
+            pl.AddVertexAt(0, new Point2d(x1, y1), 0, 0, 0);
+            pl.AddVertexAt(1, new Point2d(x2, y1), 0, 0, 0);
+            pl.AddVertexAt(2, new Point2d(x2, y2), 0, 0, 0);
+            pl.AddVertexAt(3, new Point2d(x1, y2), 0, 0, 0);
+            pl.Closed = true;
+            pl.Layer = layer;
+            return pl;
+        }
+
+        /// <summary>A door leaf as a thin rectangle, or a plain line when the leaf has no thickness.</summary>
+        private static Entity LeafOrLine(double x, double y, double leaf, double length, string layer) =>
+            leaf > 0 ? Rect(x, y, x + leaf, y + length, layer) : new Line(new Point3d(x, y, 0), new Point3d(x, y + length, 0)) { Layer = layer };
+
+        private static void AddScheduleAttributes(Transaction tr, BlockTableRecord def, double thickness)
+        {
+            double h = Math.Max(thickness / 4, 1e-6);
+            foreach (var tag in new[] { "SILL", "HEIGHT", "LINTEL" })
+                Add(tr, def, new AttributeDefinition
+                {
+                    Position = Point3d.Origin, Height = h, Tag = tag, Prompt = tag.Substring(0, 1) + tag.Substring(1).ToLowerInvariant() + " (mm)",
+                    TextString = "0", Invisible = true, Layer = "0",
+                });
         }
 
         private static BlockTableRecord NewBlock(Transaction tr, BlockTable bt, string name)
@@ -548,12 +821,21 @@ namespace HCW.AutoCAD.Plugin.Commands
             tr.AddNewlyCreatedDBObject(ent, true);
         }
 
-        private static void InsertBlock(Transaction tr, BlockTableRecord space, string name, Point3d at, double angle, double sx, double sy, string layer)
+        private static void InsertBlock(Transaction tr, BlockTableRecord space, string name, Point3d at, double angle, double sx, double sy, string layer, OpeningParams par)
         {
             var bt = (BlockTable)tr.GetObject(Util.Db.BlockTableId, OpenMode.ForRead);
             var br = new BlockReference(at, bt[name]) { Layer = layer, Rotation = angle, ScaleFactors = new Scale3d(sx, sy, 1) };
             space.AppendEntity(br);
             tr.AddNewlyCreatedDBObject(br, true);
+            TitleBlockCommands.AddAttributes(tr, br);
+            foreach (ObjectId id in br.AttributeCollection)
+            {
+                var att = (AttributeReference)tr.GetObject(id, OpenMode.ForWrite);
+                string tag = (att.Tag ?? "").ToUpperInvariant();
+                if (tag == "SILL") att.TextString = Math.Round(par.SillMm).ToString();
+                else if (tag == "HEIGHT") att.TextString = Math.Round(par.HeightMm).ToString();
+                else if (tag == "LINTEL") att.TextString = Math.Round(par.SillMm + par.HeightMm).ToString();
+            }
         }
 
         /// <summary>The next free tag: one more than the highest D or W number already on the tag layer.</summary>
@@ -570,6 +852,74 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (m.Success && int.TryParse(m.Groups[1].Value, out n)) max = Math.Max(max, n);
             }
             return prefix + (max + 1);
+        }
+
+        // ---- schedule ----
+
+        /// <summary>
+        /// HCWOPENSYNC reads the doors and windows made by the tools (their block names, SILL and HEIGHT attributes) and puts them in the opening
+        /// schedule of the take-off: one entry for each kind, width, height and sill, with its count, block name and lintel bottom (sill plus height).
+        /// Entries already in the schedule for the same blocks and sizes keep their mark and type; new ones get the next free D or W mark.
+        /// </summary>
+        [CommandMethod("HCWOPENSYNC")]
+        public void SyncSchedule()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            if (!MeasureCommands.Prepare()) return;
+            bool imperial = MeasureCommands.MeasureState.Units == MeasureCommands.UnitSys.Imperial;
+            Func<double, double> toBook = mm => imperial ? mm / 25.4 : mm / 1000.0;
+
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+                var all = new List<OpeningInfo>();
+                foreach (ObjectId id in space)
+                {
+                    if (id.ObjectClass.DxfName != "INSERT") continue;
+                    var info = ReadOpening(tr, id);
+                    if (info != null) all.Add(info);
+                }
+                if (all.Count == 0) { ed.WriteMessage("\nHCWOPENSYNC: no doors or windows made by HCWDOOR or HCWWINDOW in this space."); return; }
+
+                var book = MeasureBook.Load(tr, db);
+                int added = 0, updated = 0;
+                foreach (var g in all.GroupBy(i => string.Join("|", i.Door ? "Door" : "Window", i.Type, Math.Round(i.WidthMm), Math.Round(i.HeightMm), Math.Round(i.SillMm))))
+                {
+                    var first = g.First();
+                    string blockName = OpeningFrame.NamePrefix(first.Door, first.Type) + Math.Round(first.WidthMm) + "x" + Math.Round(first.ThicknessMm);
+                    var blocks = g.Select(i => OpeningFrame.NamePrefix(i.Door, i.Type) + Math.Round(i.WidthMm) + "x" + Math.Round(i.ThicknessMm)).Distinct().ToList();
+                    string kind = first.Door ? "Door" : "Window";
+                    double width = toBook(first.WidthMm), height = toBook(first.HeightMm), sill = toBook(first.SillMm);
+
+                    var entry = book.Openings.FirstOrDefault(o => o.Kind == kind && blocks.Any(b => (o.BlockName ?? "").Split(';').Any(x => string.Equals(x.Trim(), b, StringComparison.OrdinalIgnoreCase)))
+                            && Math.Abs(o.Height - height) < 1e-3 && Math.Abs(o.Sill - sill) < 1e-3)
+                        ?? book.Openings.FirstOrDefault(o => o.Kind == kind && Math.Abs(o.Width - width) < 1e-3 && Math.Abs(o.Height - height) < 1e-3 && Math.Abs(o.Sill - sill) < 1e-3);
+                    if (entry == null)
+                    {
+                        string prefix = first.Door ? "D" : "W";
+                        int next = book.Openings.Select(o => o.Mark ?? "").Where(m => m.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                            .Select(m => { int n; return int.TryParse(m.Substring(1), out n) ? n : 0; }).DefaultIfEmpty(0).Max() + 1;
+                        entry = new MeasureBook.OpeningSpec
+                        {
+                            Mark = prefix + next, Kind = kind, Width = width, Height = height, Sill = sill,
+                            Type = first.Type == "double" ? "Double leaf" : first.Type == "sliding" ? "Sliding" : "",
+                        };
+                        book.Openings.Add(entry);
+                        added++;
+                    }
+                    else updated++;
+                    entry.Count = g.Count();
+                    entry.LintelBottom = toBook(first.SillMm + first.HeightMm);
+                    var names = new HashSet<string>((entry.BlockName ?? "").Split(';').Select(x => x.Trim()).Where(x => x.Length > 0), StringComparer.OrdinalIgnoreCase);
+                    foreach (var b in blocks) names.Add(b);
+                    entry.BlockName = string.Join(";", names);
+                }
+                book.Save(tr, db);
+                tr.Commit();
+                ed.WriteMessage("\nHCWOPENSYNC: " + all.Count + " opening(s) in the schedule: " + added + " new entr" + (added == 1 ? "y" : "ies") + ", " + updated + " updated. Open MSCHED to see or change them.");
+            }
         }
     }
 }
