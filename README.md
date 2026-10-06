@@ -260,7 +260,7 @@ Commands that did closely related jobs share a button, and the command asks whic
 | `HCWRAIL` | Handrail view [Plan/Elevation] | `HCWBALUSTRADE` |
 | `HCWOPENMOVE` | Edit openings [Move/Slide/Replace/Sync] | `HCWOPENSLIDE`, `HCWOPENREPLACE`, `HCWOPENSYNC` |
 | `FIXTXT` | Separate overlapping text [Vertical/Horizontal] | `FIXTXTH` |
-| `HCWAUDIT` | Check [Layers/Overrides/Info/Counts] | `HCWAUDIT2`, `HCWINFO`, `HCWSCHEDULE` |
+| `HCWAUDIT` | Check [Layers/Overrides/Info/Counts/Rooms/Rects/Text] | `HCWAUDIT2`, `HCWINFO`, `HCWSCHEDULE`, `HCWROOMAUDIT`, `HCWROOMCHECK`, `TXTAUDIT` |
 | `MEXPORT` | Export as [Csv/Xlsx] | `MEXPORTX` |
 | `HCWROOMREPORT` | Read the rooms from [Outlines/Labels]; for Labels, [Table/Csv/Total] | `HCWROOMTABLE`, `HCWROOMSCHEDULE`, `HCWROOMTOTAL` |
 | `POLYAREA` | Area [Table/Live/Field/Room/Measure] | `AREALABEL` (`AT`), `AREAFIELD` (`A2F`), `RAREA`, `MAREA` (`MARE`) |

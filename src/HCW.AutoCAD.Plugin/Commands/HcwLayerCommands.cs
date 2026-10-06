@@ -78,8 +78,11 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("HCWAUDIT")]
         public void HcwAudit()
         {
-            string check = Util.AskMode("Check", "Layers", "Overrides", "Info", "Counts");
+            string check = Util.AskMode("Check", "Layers", "Overrides", "Info", "Counts", "Rooms", "Rects", "Text");
             if (check == null) return;
+            if (check == "Rooms") { HcwRoomAudit(); return; }
+            if (check == "Rects") { HcwRoomCheck(); return; }
+            if (check == "Text") { new TextToolCommands().TxtAudit(); return; }
             if (check == "Overrides") { HcwAudit2(); return; }
             if (check == "Info") { HcwInfo(); return; }
             if (check == "Counts") { HcwSchedule(); return; }

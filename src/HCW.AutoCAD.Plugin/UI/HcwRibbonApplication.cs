@@ -272,7 +272,7 @@ namespace HCW.AutoCAD.Plugin.UI
         {
             var src = NewSource("Layer Checks");
             AddSmallGroup(src,
-                ("HCWAUDIT", "Audit", "checkmark--outline", "Check the standard layers, colour and linetype overrides, layer info or object counts per layer"),
+                ("HCWAUDIT", "Audit", "checkmark--outline", "Check the standard layers, colour and linetype overrides, layer info, object counts per layer, room labels against rectangles, room rectangles are closed, or text with explicit colours"),
                 ("HCWLAYERSTATE", "Layer State", "save", "Save or restore a named layer state"),
                 ("HCWPURGE", "Purge All", "clean", "Run PURGE All twice"));
             return Wrap(src);
@@ -282,8 +282,6 @@ namespace HCW.AutoCAD.Plugin.UI
         {
             var src = NewSource("Room Checks");
             AddSmallGroup(src,
-                ("HCWROOMAUDIT", "Audit", "checkmark--outline", "Compare label and rectangle counts"),
-                ("HCWROOMCHECK", "Check Rects", "rule", "Verify room rectangles are closed"),
                 ("HCWROOMREPORT", "Room Report", "report--data", "Rooms as a table with names, sizes, dimensions and areas, from outlines or from room labels; saved as a take-off, drawn, exported to CSV or Excel, or totalled"),
                 ("HCWROOMHELP", "Help", "help", "How ROOM reads the drawing units"));
             return Wrap(src);
@@ -309,7 +307,6 @@ namespace HCW.AutoCAD.Plugin.UI
         {
             var src = NewSource("Text Checks");
             AddSmallGroup(src,
-                ("TXTAUDIT", "Audit Overrides", "rule--data-quality", "Report TEXT and MTEXT with an explicit colour"),
                 ("TXTEXPORT", "Export CSV", "document--export", "Export every TEXT and MTEXT object to CSV"));
             return Wrap(src);
         }
