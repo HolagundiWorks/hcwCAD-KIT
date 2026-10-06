@@ -215,10 +215,12 @@ namespace HCW.AutoCAD.Plugin.Commands
                 foreach (var id in FindTitleBlocks(db))
                     TitleBlockCommands.WriteFields(tr, (BlockReference)tr.GetObject(id, OpenMode.ForRead), fields);
             }
-            if (!cfg.TableAt.HasValue || !inModel) return;
+            if (!cfg.TableAt.HasValue) return;
 
+            // The table lives in model space, so it can be redrawn from a layout too.
             TitleBlockCommands.EnsureRegApp(tr, db);
-            var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+            var modelId = ((BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead))[BlockTableRecord.ModelSpace];
+            var space = (BlockTableRecord)tr.GetObject(modelId, OpenMode.ForWrite);
             foreach (ObjectId id in space)
             {
                 var old = tr.GetObject(id, OpenMode.ForRead) as Entity;
@@ -238,7 +240,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
             Util.EnsureHcwLayer(tr, db, "AN-TEXT");
             var at = cfg.TableAt.Value;
-            var ids = MeasureCommands.DrawTable(tr, db, new Point3d(at.X, at.Y - 2.5 * h, 0), new[] { "Floor", "Gross (sq m)", "Deduction", "Net" }, rows, h, "AN-TEXT");
+            var ids = MeasureCommands.DrawTable(tr, db, new Point3d(at.X, at.Y - 2.5 * h, 0), new[] { "Floor", "Gross (sq m)", "Deduction", "Net" }, rows, h, "AN-TEXT", modelId);
             var title = new DBText { Height = h * 1.2, TextString = "AREA STATEMENT", Layer = "AN-TEXT", Position = new Point3d(at.X, at.Y - 1.2 * h, 0) };
             ids.Add(space.AppendEntity(title));
             tr.AddNewlyCreatedDBObject(title, true);

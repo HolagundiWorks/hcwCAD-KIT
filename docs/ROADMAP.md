@@ -13,14 +13,14 @@ These are limits of what was built, or items that need something the plugin cann
 - **Everything is untested in a host.** Nothing has been run inside AutoCAD, BricsCAD or ZWCAD. The pure logic (geometry, tables, schedules) has unit tests; the command layer (prompts, entity creation, the live update events, jigs) is checked only by compiling against the AutoCAD .NET 24.3 package. Expect fixes once it meets a real drawing.
 - **BricsCAD and ZWCAD** pick up the same source but are not built here (they need the host API DLLs, which are not on public runners). The live service, the slide jig and viewport layer freezing in particular may behave differently there.
 - **Bylaw figures.** Nothing here carries a local rule. `AreaExemptRules`, `AreaPermTable`, `LiftTable`, the stair checks, the escalator limits, the breaker and cable tables and the balustrade gap are starting values or inputs. Set them from your own bylaws and design rules.
-- **Associative dimensions** are the plugin's own tracking of wall vertices (see the README), not the host's dimension associativity. They do not follow a wall that is erased and redrawn, and dimensions on door, window, grid and column points stay where they are.
-- **Wall objects** cover walls drawn by `HCWWALL`. Walls drawn by hand or before this version have no record and cannot be edited with `HCWWALLEDIT`. A wall that a door or window has cut is loose lines, so join on draw does not merge new walls into it.
-- **Live updates** act when a command ends, not while you drag, and the area table redraws only on the Model tab.
-- **Copy/array.** `INCARRAY` and `INCCOPY` deep-clone the selection once per copy. Cloning entities directly would be lighter but can lose block attributes. Measure on a large drawing before changing it.
-- **Single-line (centreline) walls** and mixed drawings are not handled by the auto dimensions: only faces (two lines or a closed outline).
-- **Lift and escalator** are drawings from sizes, not a design; a lift pit, machine room and overhead are inputs.
-- **Winders** are for L and U stairs. Dog-leg stairs keep landings, and the winder slab is worked along the walkline, not as exact kite areas.
-- **Deduction matching.** Index walls by bounding box for very large selections (a box test already rejects most pairs).
+- **Associative dimensions** are the plugin's own tracking (wall, column and grid vertices, door and window points), not the host's dimension associativity. They re-tie to a vertex within `AutoDimReanchorMm` when a wall is redrawn, but not to a door or window block that is deleted and inserted again.
+- **Wall objects** cover walls drawn by `HCWWALL` and walls adopted with `HCWWALLADOPT` (straight outlines). A joined outline with unusual junctions may not rebuild exactly as drawn, and curved hand-drawn outlines cannot be adopted.
+- **Live updates** act when a command ends, not while you drag: the host does not let the drawing be edited from inside a change event, and how grips and undo report changes differs between hosts.
+- **Copy/array.** `INCARRAY` and `INCCOPY` deep-clone the selection once per copy. Cloning entities directly would be lighter but can lose block attributes. This is not changed because it has not been measured on a large drawing in a host.
+- **Single-line walls** are handled with `AutoDimCentreLineMm` for horizontal and vertical lines; angled centre lines are skipped.
+- **Lift and escalator** are drawings from sizes, not a design: the lift pit, machine room and overhead, and the escalator limits, are inputs.
+- **Winders** are for L and U stairs and use their true plan areas; dog-leg stairs keep landings.
+- **Deduction matching** already indexes walls by bounding box (`BoxIndex`), so a very large selection is not compared pair by pair. Nothing further is planned until a real drawing is slow.
 
 ## Quality
 

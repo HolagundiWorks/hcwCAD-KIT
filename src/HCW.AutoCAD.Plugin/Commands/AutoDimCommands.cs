@@ -707,6 +707,9 @@ namespace HCW.AutoCAD.Plugin.Commands
             var fitments = new HashSet<string>(choice.Furniture, StringComparer.OrdinalIgnoreCase);
             var gridLayers = Layers("AutoDimGridLayers", "AN-GRID;A-GRID");
             double tol = Util.MmToDrawingUnits(1.0);
+            // Single-line walls: with AutoDimCentreLineMm set to the wall thickness, each wall line stands for a wall and its two faces are dimensioned.
+            double centreHalf = Settings.GetDouble("AutoDimCentreLineMm", 0) * tol / 2.0;
+            var centreLayers = Layers("AutoDimCentreLineLayers", "");        // when set, only these wall layers are centre lines: the rest are faces (a mixed drawing)
 
             // door and window blocks: the line inside them is the opening (on the window layers, or anywhere when none are chosen)
             var blocks = new BlockOpenings.Reader(choice.Windows.Count > 0 ? choice.Windows : null);
@@ -748,8 +751,12 @@ namespace HCW.AutoCAD.Plugin.Commands
 
                 if (walls.Contains(layer))
                 {
-                    Collect(curve, plan.Structural, ref plan.Skipped);
-                    AddSegments(curve, plan.WallSegments);
+                    if (centreHalf > 0 && (centreLayers.Count == 0 || centreLayers.Contains(layer))) AddCentreFaces(curve, centreHalf, tol, plan);
+                    else
+                    {
+                        Collect(curve, plan.Structural, ref plan.Skipped);
+                        AddSegments(curve, plan.WallSegments);
+                    }
                 }
                 else if (windows.Contains(layer))
                 {
@@ -836,6 +843,42 @@ namespace HCW.AutoCAD.Plugin.Commands
                     foreach (double u in new[] { lo, hi })
                         plan.Jambs.Add(g.Horizontal ? new Point3d(u, face, 0) : new Point3d(face, u, 0));
                 plan.GapOpenings++;
+            }
+        }
+
+        /// <summary>
+        /// Treats a straight horizontal or vertical wall line as the centre of a wall: the two faces, half the thickness either side, give the wall points and
+        /// segments. The wall's ends are the line's ends. Angled and curved pieces are counted as skipped (AUTODIMWALL does those).
+        /// </summary>
+        private static void AddCentreFaces(Curve curve, double half, double tol, Plan plan)
+        {
+            var pieces = new List<KeyValuePair<Point3d, Point3d>>();
+            var line = curve as Line;
+            var poly = curve as Polyline;
+            if (line != null) pieces.Add(new KeyValuePair<Point3d, Point3d>(line.StartPoint, line.EndPoint));
+            else if (poly != null)
+            {
+                int n = poly.NumberOfVertices, last = poly.Closed ? n : n - 1;
+                for (int i = 0; i < last; i++)
+                {
+                    if (poly.GetSegmentType(i) != SegmentType.Line) { plan.Skipped++; continue; }
+                    pieces.Add(new KeyValuePair<Point3d, Point3d>(poly.GetPoint3dAt(i), poly.GetPoint3dAt((i + 1) % n)));
+                }
+            }
+            else { plan.Skipped++; return; }
+            foreach (var pc in pieces)
+            {
+                var a = pc.Key; var b = pc.Value;
+                bool horizontal = Math.Abs(a.Y - b.Y) <= tol, vertical = Math.Abs(a.X - b.X) <= tol;
+                if (!horizontal && !vertical) { plan.Skipped++; continue; }
+                foreach (double side in new[] { -half, half })
+                {
+                    double ax = horizontal ? a.X : a.X + side, ay = horizontal ? a.Y + side : a.Y;
+                    double bx = horizontal ? b.X : b.X + side, by = horizontal ? b.Y + side : b.Y;
+                    plan.Structural.Add(new Point3d(ax, ay, 0));
+                    plan.Structural.Add(new Point3d(bx, by, 0));
+                    plan.WallSegments.Add(new WallSegment(ax, ay, bx, by));
+                }
             }
         }
 

@@ -516,9 +516,9 @@ namespace HCW.AutoCAD.Plugin.Commands
             catch { ed.WriteMessage("\nCould not write CSV file (is it open elsewhere?)."); }
         }
 
-        internal static List<ObjectId> DrawTable(Transaction tr, Database db, Point3d pt, string[] headers, List<string[]> rows, double h, string layer = null)
+        internal static List<ObjectId> DrawTable(Transaction tr, Database db, Point3d pt, string[] headers, List<string[]> rows, double h, string layer = null, ObjectId? space = null)
         {
-            var btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+            var btr = (BlockTableRecord)tr.GetObject(space ?? db.CurrentSpaceId, OpenMode.ForWrite);
             var made = new List<ObjectId>();
             layer = layer ?? LayTbl;
             var all = new List<string[]> { headers };

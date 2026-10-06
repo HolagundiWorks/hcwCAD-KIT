@@ -52,12 +52,14 @@ namespace HCW.AutoCAD.Plugin.Commands
                 Util.EnsureHcwLayer(tr, db, WallLayer);
                 var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                 var fresh = new List<Polyline>();
+                var newIds = new List<string>();
                 foreach (var c in chains)
                 {
                     var loops = WallGeometry.Outline(c.Points, c.Closed, thick, _justify);
                     if (loops.Count == 0) { skipped++; continue; }
                     var rec = new WallRecord { Id = WallStore.NextId(tr, db), ThicknessMm = _thicknessMm, Justify = _justify, Closed = c.Closed, Z = c.Z, Points = c.Points };
                     WallStore.Save(tr, db, rec);
+                    newIds.Add(rec.Id);
                     foreach (var loop in loops)
                     {
                         fresh.Add(Outline(tr, db, space, loop, c.Z, new[] { rec.Id }));
@@ -70,6 +72,36 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var group = new List<Polyline>(fresh);
                     var boxes = fresh.Select(p => p.GeometricExtents).ToList();
                     double reach = Util.MmToDrawingUnits(1);
+
+                    // A wall a door or window has cut is loose lines, which cannot be merged as outlines. When the new wall touches one, the walls it touches
+                    // are drawn again together from their records, which also cuts the openings back in.
+                    var seeds = new HashSet<string>(newIds);
+                    bool touchesCut = false;
+                    foreach (ObjectId id in space)
+                    {
+                        var other = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                        if (other == null || other.IsErased || fresh.Any(f => f.ObjectId == id)) continue;
+                        var oids = WallStore.IdsOf(other);
+                        if (oids.Count == 0) continue;
+                        var oe = other.GeometricExtents;
+                        if (!boxes.Any(b => oe.MinPoint.X <= b.MaxPoint.X + reach && oe.MaxPoint.X >= b.MinPoint.X - reach
+                                         && oe.MinPoint.Y <= b.MaxPoint.Y + reach && oe.MaxPoint.Y >= b.MinPoint.Y - reach)) continue;
+                        foreach (var oid in oids) seeds.Add(oid);
+                        var op = other as Polyline;
+                        if (op == null || !op.Closed) touchesCut = true;
+                    }
+                    if (touchesCut)
+                    {
+                        int rw, ro; string err;
+                        if (Rebuild(tr, db, space, seeds, null, out rw, out ro, out err)) { merged = rw; group.Clear(); }
+                        else
+                        {
+                            // the rebuild already changed the drawing inside this transaction, so none of it is kept
+                            ed.WriteMessage("\nHCWWALL: the new wall touches walls that openings are cut in, and they could not be redrawn (" + err + "). Nothing was drawn.");
+                            return;
+                        }
+                        if (merged > 0) { tr.Commit(); ed.WriteMessage("\nHCWWALL: " + made + " wall outline(s) on " + WallLayer + ", " + _thicknessMm + " mm thick. Rebuilt with the walls it touches (" + rw + " wall(s), " + ro + " opening(s) re-cut)."); return; }
+                    }
                     foreach (ObjectId id in space)
                     {
                         if (id.ObjectClass.DxfName != "LWPOLYLINE") continue;
@@ -216,6 +248,85 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         /// <summary>
+        /// Rebuilds a group of walls: every outline (or loose line left by a cut) that carries any of the given wall IDs, directly or through a wall it is joined to,
+        /// is erased and the walls are drawn again from their records and joined. The doors and windows in them are taken out first and cut back in at the same
+        /// places. <paramref name="change"/> may alter the records first (and returns false to stop). Nothing is committed here: on false the caller leaves the
+        /// transaction uncommitted so the whole thing is undone.
+        /// </summary>
+        internal static bool Rebuild(Transaction tr, Database db, BlockTableRecord space, IEnumerable<string> startIds, Func<List<WallRecord>, bool> change,
+            out int wallCount, out int openingCount, out string error)
+        {
+            wallCount = openingCount = 0; error = null;
+            double mm = Util.MmToDrawingUnits(1.0);
+            var tagged = new List<Entity>();
+            var tagIds = new List<IList<string>>();
+            foreach (ObjectId id in space)
+            {
+                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null || ent.IsErased) continue;
+                var ids = WallStore.IdsOf(ent);
+                if (ids.Count == 0) continue;
+                tagged.Add(ent); tagIds.Add(ids);
+            }
+            HashSet<string> group; List<int> members;
+            WallIds.Group(tagIds, startIds, out group, out members);
+
+            var records = new List<WallRecord>();
+            foreach (var id in group.OrderBy(i => i))
+            {
+                var r = WallStore.Load(tr, db, id);
+                if (r != null) records.Add(r);
+            }
+            if (records.Count == 0) { error = "the wall's record is missing from the drawing"; return false; }
+            if (change != null && !change(records)) { error = "cancelled"; return false; }
+
+            // doors and windows sitting in any of these walls are lifted out first and cut back in once the walls are redrawn
+            var inGroup = new List<OpeningCommands.OpeningInfo>();
+            double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+            foreach (var m in members)
+            {
+                var e = tagged[m].GeometricExtents;
+                minX = Math.Min(minX, e.MinPoint.X); minY = Math.Min(minY, e.MinPoint.Y);
+                maxX = Math.Max(maxX, e.MaxPoint.X); maxY = Math.Max(maxY, e.MaxPoint.Y);
+            }
+            foreach (var o in OpeningCommands.CollectInside(tr, space, minX, minY, maxX, maxY))
+                if (records.Any(r => r.DistanceTo(o.Corners.Centre) <= Math.Max(r.ThicknessMm, o.ThicknessMm) * mm)) inGroup.Add(o);
+            var tags = inGroup.Select(o => OpeningCommands.Heal(tr, space, o, false)).ToList();
+
+            foreach (var m in members)
+            {
+                var ent = tagged[m];
+                if (ent.IsErased) continue;
+                ent.UpgradeOpen();
+                ent.Erase();
+            }
+
+            var fresh = new List<Polyline>();
+            foreach (var r in records)
+            {
+                WallStore.Save(tr, db, r);
+                foreach (var loop in r.Outlines(mm)) fresh.Add(Outline(tr, db, space, loop, r.Z, new[] { r.Id }));
+            }
+            int jm, jk, jb;
+            if (fresh.Count > 1) JoinOutlines(tr, db, space, fresh, out jm, out jk, out jb);
+
+            for (int k = 0; k < inGroup.Count; k++)
+            {
+                var o = inGroup[k];
+                var centre = new Point3d(o.Corners.Centre.X, o.Corners.Centre.Y, o.Z);
+                string message;
+                if (!OpeningCommands.PlaceIn(tr, o.Door, centre, OpeningCommands.PreviousSide(o, centre), o.Corners.Flipped, o.WidthMm,
+                        OpeningCommands.ParamsOf(o), tags[k], out message))
+                {
+                    error = (tags[k] ?? "an opening") + " does not fit: " + message;
+                    return false;
+                }
+            }
+            wallCount = records.Count; openingCount = inGroup.Count;
+            return true;
+        }
+
+        /// <summary>
         /// HCWWALLEDIT changes the thickness or line position of one wall drawn by HCWWALL. The walls it is joined to are rebuilt with it,
         /// and the doors and windows in them are cut again so they follow.
         /// </summary>
@@ -224,7 +335,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed;
             var db = Util.Db;
-            var per = new PromptEntityOptions("\nPick the wall to edit (a wall outline): ");
+            var per = new PromptEntityOptions("\nPick the wall to edit (a wall outline or a piece of one): ");
             per.SetRejectMessage("\nPick a wall outline.");
             per.AddAllowedClass(typeof(Polyline), true);
             per.AddAllowedClass(typeof(Line), true);
@@ -232,95 +343,100 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (pr.Status != PromptStatus.OK) return;
             var pick = pr.PickedPoint;
 
-            double mm = Util.MmToDrawingUnits(1.0);
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                 var picked = tr.GetObject(pr.ObjectId, OpenMode.ForRead) as Entity;
                 var start = picked == null ? new List<string>() : WallStore.IdsOf(picked);
-                if (start.Count == 0) { ed.WriteMessage("\nHCWWALLEDIT: that outline is not tied to a wall object (it was not drawn by HCWWALL)."); return; }
-
-                var tagged = new List<Entity>();
-                var tagIds = new List<IList<string>>();
-                foreach (ObjectId id in space)
+                if (start.Count == 0)
                 {
-                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                    if (ent == null || ent.IsErased) continue;
-                    var ids = WallStore.IdsOf(ent);
-                    if (ids.Count == 0) continue;
-                    tagged.Add(ent); tagIds.Add(ids);
+                    ed.WriteMessage("\nHCWWALLEDIT: that outline is not tied to a wall object. HCWWALLADOPT makes wall objects from walls drawn by hand.");
+                    return;
                 }
-                HashSet<string> group; List<int> members;
-                WallIds.Group(tagIds, start, out group, out members);
-
-                var records = new List<WallRecord>();
-                foreach (var id in group.OrderBy(i => i))
+                WallRecord target = null;
+                int walls, openings; string error;
+                bool ok = Rebuild(tr, db, space, start, records =>
                 {
-                    var r = WallStore.Load(tr, db, id);
-                    if (r != null) records.Add(r);
-                }
-                if (records.Count == 0) { ed.WriteMessage("\nHCWWALLEDIT: the wall's record is missing from the drawing."); return; }
-                var here = new P2(pick.X, pick.Y);
-                var target = records.OrderBy(r => r.DistanceTo(here)).First();
-
-                var t = ed.GetDouble(new PromptDoubleOptions("\nThickness of wall " + target.Id + " in mm <" + target.ThicknessMm + ">: ")
-                    { AllowNegative = false, AllowZero = false, DefaultValue = target.ThicknessMm, UseDefaultValue = true });
-                if (t.Status != PromptStatus.OK) return;
-                var jo = new PromptKeywordOptions("\nLine position [Centre/Left/Right] <" + target.Justify + ">: ", "Centre Left Right") { AllowNone = true };
-                jo.Keywords.Default = target.Justify.ToString();
-                var jr = ed.GetKeywords(jo);
-                var justify = target.Justify;
-                if (jr.Status == PromptStatus.OK) Enum.TryParse(jr.StringResult, out justify);
-                else if (jr.Status != PromptStatus.None) return;
-                target.ThicknessMm = t.Value;
-                target.Justify = justify;
-
-                // Doors and windows sitting in any of these walls are lifted out first and cut back in once the walls are redrawn.
-                var inGroup = new List<OpeningCommands.OpeningInfo>();
-                double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
-                foreach (var m in members)
+                    var here = new P2(pick.X, pick.Y);
+                    target = records.OrderBy(r => r.DistanceTo(here)).First();
+                    var t = ed.GetDouble(new PromptDoubleOptions("\nThickness of wall " + target.Id + " in mm <" + target.ThicknessMm + ">: ")
+                        { AllowNegative = false, AllowZero = false, DefaultValue = target.ThicknessMm, UseDefaultValue = true });
+                    if (t.Status != PromptStatus.OK) return false;
+                    var jo = new PromptKeywordOptions("\nLine position [Centre/Left/Right] <" + target.Justify + ">: ", "Centre Left Right") { AllowNone = true };
+                    jo.Keywords.Default = target.Justify.ToString();
+                    var jr = ed.GetKeywords(jo);
+                    var justify = target.Justify;
+                    if (jr.Status == PromptStatus.OK) Enum.TryParse(jr.StringResult, out justify);
+                    else if (jr.Status != PromptStatus.None) return false;
+                    target.ThicknessMm = t.Value;
+                    target.Justify = justify;
+                    return true;
+                }, out walls, out openings, out error);
+                if (!ok)
                 {
-                    var e = tagged[m].GeometricExtents;
-                    minX = Math.Min(minX, e.MinPoint.X); minY = Math.Min(minY, e.MinPoint.Y);
-                    maxX = Math.Max(maxX, e.MaxPoint.X); maxY = Math.Max(maxY, e.MaxPoint.Y);
-                }
-                foreach (var o in OpeningCommands.CollectInside(tr, space, minX, minY, maxX, maxY))
-                    if (records.Any(r => r.DistanceTo(o.Corners.Centre) <= Math.Max(r.ThicknessMm, o.ThicknessMm) * mm)) inGroup.Add(o);
-                var tags = inGroup.Select(o => OpeningCommands.Heal(tr, space, o, false)).ToList();
-
-                foreach (var m in members)
-                {
-                    var ent = tagged[m];
-                    if (ent.IsErased) continue;
-                    ent.UpgradeOpen();
-                    ent.Erase();
-                }
-
-                WallStore.Save(tr, db, target);
-                var fresh = new List<Polyline>();
-                foreach (var r in records)
-                    foreach (var loop in r.Outlines(mm))
-                        fresh.Add(Outline(tr, db, space, loop, r.Z, new[] { r.Id }));
-                int jm, jk, jb;
-                if (fresh.Count > 1) JoinOutlines(tr, db, space, fresh, out jm, out jk, out jb);
-
-                for (int k = 0; k < inGroup.Count; k++)
-                {
-                    var o = inGroup[k];
-                    var centre = new Point3d(o.Corners.Centre.X, o.Corners.Centre.Y, o.Z);
-                    string message;
-                    if (!OpeningCommands.PlaceIn(tr, o.Door, centre, OpeningCommands.PreviousSide(o, centre), o.Corners.Flipped, o.WidthMm,
-                            OpeningCommands.ParamsOf(o), tags[k], out message))
-                    {
-                        ed.WriteMessage("\nHCWWALLEDIT: " + (tags[k] ?? "an opening") + " does not fit the new wall: " + message + " Nothing was changed.");
-                        return;                                         // uncommitted: the whole edit is rolled back
-                    }
+                    if (error != "cancelled") ed.WriteMessage("\nHCWWALLEDIT: " + error + ". Nothing was changed.");
+                    return;                                         // uncommitted: the whole edit is rolled back
                 }
                 tr.Commit();
                 ed.WriteMessage("\nHCWWALLEDIT: wall " + target.Id + " is now " + target.ThicknessMm + " mm, line on the " + target.Justify.ToString().ToLowerInvariant()
-                    + ". " + records.Count + " joined wall(s) rebuilt" + (inGroup.Count > 0 ? ", " + inGroup.Count + " opening(s) re-cut." : "."));
+                    + ". " + walls + " joined wall(s) rebuilt" + (openings > 0 ? ", " + openings + " opening(s) re-cut." : "."));
             }
+        }
+
+        /// <summary>
+        /// HCWWALLADOPT makes wall objects from walls drawn some other way. Select closed wall outlines: wherever two straight faces a wall's thickness apart
+        /// (HCWWALLMINMM to HCWWALLMAXMM, 60 to 600) face each other and overlap, that is a wall, and its centre line and thickness are saved so HCWWALLEDIT
+        /// can change it. The outline is tagged with the walls found in it. A curved outline, or faces that are not parallel, give no wall.
+        /// </summary>
+        [CommandMethod("HCWWALLADOPT")]
+        public void AdoptWalls()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect the closed wall outlines to make wall objects from: " },
+                new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "LWPOLYLINE") }));
+            if (psr.Status != PromptStatus.OK) return;
+            double mm = Util.MmToDrawingUnits(1.0);
+            int outlines = 0, walls = 0, skipped = 0;
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                foreach (var id in psr.Value.GetObjectIds())
+                {
+                    var pl = (Polyline)tr.GetObject(id, OpenMode.ForRead);
+                    if (!pl.Closed || WallStore.IdsOf(pl).Count > 0) { skipped++; continue; }
+                    var pts = new List<P2>();
+                    bool curved = false;
+                    for (int i = 0; i < pl.NumberOfVertices; i++)
+                    {
+                        var p = pl.GetPoint2dAt(i); pts.Add(new P2(p.X, p.Y));
+                        if (Math.Abs(pl.GetBulgeAt(i)) > 1e-9) curved = true;
+                    }
+                    if (curved) { skipped++; continue; }
+                    var found = WallInference.Infer(pts, Settings.GetDouble("WallMinMm", 60) * mm, Settings.GetDouble("WallMaxMm", 600) * mm, 1 * mm);
+                    if (found.Count == 0) { skipped++; continue; }
+                    var ids = new List<string>();
+                    foreach (var w in found)
+                    {
+                        var rec = new WallRecord
+                        {
+                            Id = WallStore.NextId(tr, db), ThicknessMm = Math.Round(w.Thickness / mm, 1), Justify = WallJustify.Centre, Closed = false, Z = pl.Elevation,
+                            Points = new List<P2> { w.A, w.B },
+                        };
+                        WallStore.Save(tr, db, rec);
+                        ids.Add(rec.Id);
+                        walls++;
+                    }
+                    pl.UpgradeOpen();
+                    WallStore.Tag(tr, db, pl, ids);
+                    outlines++;
+                }
+                tr.Commit();
+            }
+            ed.WriteMessage("\nHCWWALLADOPT: " + walls + " wall object(s) from " + outlines + " outline(s)."
+                + (skipped > 0 ? " " + skipped + " outline(s) skipped (open, curved, already wall objects, or no pair of faces a wall's thickness apart)." : "")
+                + " Edit them with HCWWALLEDIT.");
         }
     }
 }

@@ -3255,4 +3255,53 @@ namespace HCW.Logic.Tests
             Assert.Equal(1000, turned.X, 9); Assert.Equal(2450, turned.Y, 9);
         }
     }
+
+    public class WallInferenceTests
+    {
+        private static List<P2> Poly(params double[] xy) { var l = new List<P2>(); for (int i = 0; i < xy.Length; i += 2) l.Add(new P2(xy[i], xy[i + 1])); return l; }
+
+        [Fact]
+        public void ARectangleIsOneWallOfItsShortSide()
+        {
+            var w = WallInference.Infer(Poly(0, 0, 4000, 0, 4000, 230, 0, 230), 60, 600, 1);
+            var one = Assert.Single(w);
+            Assert.Equal(230, one.Thickness, 6);
+            Assert.Equal(4000, one.A.DistanceTo(one.B), 6);
+            Assert.Equal(115, one.A.Y, 6);
+            Assert.Equal(115, one.B.Y, 6);
+        }
+
+        [Fact]
+        public void AnLOutlineGivesTwoWallsThatRunToTheOuterCorner()
+        {
+            // legs 230 thick: along the bottom 0..4000 and up the left side 0..3000
+            var l = Poly(0, 0, 4000, 0, 4000, 230, 230, 230, 230, 3000, 0, 3000);
+            var w = WallInference.Infer(l, 60, 600, 1);
+            Assert.Equal(2, w.Count);
+            var horiz = w.First(x => Math.Abs(x.A.Y - x.B.Y) < 1e-6);
+            var vert = w.First(x => Math.Abs(x.A.X - x.B.X) < 1e-6);
+            Assert.Equal(4000, horiz.A.DistanceTo(horiz.B), 6);           // runs through the corner square
+            Assert.Equal(3000, vert.A.DistanceTo(vert.B), 6);
+            Assert.All(w, x => Assert.Equal(230, x.Thickness, 6));
+        }
+
+        [Fact]
+        public void ATOutlineGivesTheMainWallOnceAndTheStem()
+        {
+            // main wall along y 0..230 from x 0..6000, stem up from x 2885..3115 to y 3000
+            var t = Poly(0, 0, 6000, 0, 6000, 230, 3115, 230, 3115, 3000, 2885, 3000, 2885, 230, 0, 230);
+            var w = WallInference.Infer(t, 60, 600, 1);
+            Assert.Equal(2, w.Count);
+            Assert.Contains(w, x => Math.Abs(x.A.Y - x.B.Y) < 1e-6 && Math.Abs(x.A.DistanceTo(x.B) - 6000) < 1e-6);
+            Assert.Contains(w, x => Math.Abs(x.A.X - x.B.X) < 1e-6 && Math.Abs(x.Thickness - 230) < 1e-6);
+        }
+
+        [Fact]
+        public void FacesOutsideTheThicknessRangeOrTooShortGiveNoWall()
+        {
+            Assert.Empty(WallInference.Infer(Poly(0, 0, 4000, 0, 4000, 1500, 0, 1500), 60, 600, 1));      // 1500 apart: a room, not a wall
+            Assert.Empty(WallInference.Infer(Poly(0, 0, 300, 0, 300, 300, 0, 300), 60, 600, 1));          // a square: a column, not a wall
+            Assert.Empty(WallInference.Infer(Poly(0, 0, 4000, 0, 4000, 30, 0, 30), 60, 600, 1));          // thinner than a wall
+        }
+    }
 }
