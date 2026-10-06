@@ -58,10 +58,6 @@ namespace HCW.AutoCAD.Plugin.Commands
             bool byLayer = _readFrom == "Layers";
 
             var cfg = new AreaConfig();
-            var rules = ExemptRules.Parse(Settings.Get("AreaExemptRules", ""));
-            if (byLayer && !rules.IsEmpty)
-                ed.WriteMessage("\nExemption rules from settings (AreaExemptRules) apply to the exemption layers you name.");
-
             // Site.
             if (!AskSource(ed, byLayer, "the site boundary", Settings.Get("AreaSiteLayer", "BP-SITE-BOUNDARY"), toSqm, out cfg.Site)) return;
 
@@ -216,10 +212,9 @@ namespace HCW.AutoCAD.Plugin.Commands
             return total;
         }
 
-        /// <summary>Works the statement out from what the configuration points at now, including the permissible values for the plot.</summary>
+        /// <summary>Works the statement out from what the configuration points at now, </summary>
         internal static AreaStatement Compute(Transaction tr, Database db, AreaConfig cfg, double toSqm)
         {
-            var rules = ExemptRules.Parse(Settings.Get("AreaExemptRules", ""));
             double site = Measure(tr, db, cfg.Site, toSqm, new Dictionary<string, double>());
             var floors = new List<FloorInput>();
             foreach (var f in cfg.Floors)
@@ -227,17 +222,10 @@ namespace HCW.AutoCAD.Plugin.Commands
                 double gross = Measure(tr, db, f.Gross, toSqm, new Dictionary<string, double>());
                 var byLayer = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
                 double all = Measure(tr, db, f.Deduction, toSqm, byLayer);
-                // Outlines picked by hand count in full; outlines on layers count by the exemption rules (every layer in full when there are none).
-                double deduction = f.Deduction.Layers.Count > 0 ? rules.Deduction(byLayer, true) : all;
+                double deduction = all;                  // every outline picked, or on the layers named, counts in full
                 floors.Add(new FloorInput { Name = f.Name, Gross = gross, Deduction = deduction });
             }
-            double far = Settings.GetDouble("AreaFarPermittedPercent", 0), gc = Settings.GetDouble("AreaGroundCoverPermittedPercent", 0);
-            var table = PermissibleTable.Parse(Settings.Get("AreaPermTable", ""));
-            var row = table.Rows.Count > 0 && site > 0 ? table.Lookup(Settings.Get("AreaZone", ""), site) : null;
-            if (row != null) { far = row.Far; gc = row.GroundCover; }
-            var stmt = AreaStatement.Compute(floors, site, far, gc);
-            if (table.Rows.Count > 0 && site > 0 && row == null)
-                stmt.Warnings.Add("The permissible table (AreaPermTable) has no row for zone \"" + Settings.Get("AreaZone", "") + "\" and a plot of " + AreaStatement.Fmt(site) + " sq m; the single settings values were used.");
+            var stmt = AreaStatement.Compute(floors, site);
             return stmt;
         }
 
@@ -357,9 +345,6 @@ namespace HCW.AutoCAD.Plugin.Commands
                 ed.WriteMessage("\n  Site area " + AreaStatement.Fmt(s.Site)
                     + "   F.A.R. " + AreaStatement.Fmt(s.FarPercent.Value) + " %"
                     + "   Ground cover " + AreaStatement.Fmt(s.GroundCover) + " (" + AreaStatement.Fmt(s.GroundCoverPercent.Value) + " %)");
-                if (s.FarPermittedPercent > 0 || s.GroundCoverPermittedPercent > 0)
-                    ed.WriteMessage("\n  Permissible: F.A.R. " + (s.FarPermittedPercent > 0 ? AreaStatement.Fmt(s.FarPermittedPercent) + " %" : "not set")
-                        + "   ground cover " + (s.GroundCoverPermitted.HasValue ? AreaStatement.Fmt(s.GroundCoverPermitted.Value) + " sq m (" + AreaStatement.Fmt(s.GroundCoverPermittedPercent) + " %)" : "not set"));
             }
             foreach (var w in s.Warnings) ed.WriteMessage("\n  WARNING: " + w);
         }

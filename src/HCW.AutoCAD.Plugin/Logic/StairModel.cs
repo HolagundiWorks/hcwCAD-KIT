@@ -135,16 +135,6 @@ namespace HCW.AutoCAD.Plugin.Logic
         }
     }
 
-    /// <summary>The limits the checks use. They are settings, so an office can apply its own code.</summary>
-    public class StairLimits
-    {
-        public double MaxRise = 190;
-        public double MinRise = 100;
-        public double MinGoing = 250;
-        public double Min2RG = 550;
-        public double Max2RG = 700;
-    }
-
     public class StairCheck
     {
         public string Name = "";
@@ -176,9 +166,8 @@ namespace HCW.AutoCAD.Plugin.Logic
         public List<StairCheck> Checks = new List<StairCheck>();
         public bool CanDraw => Checks.All(c => !c.Error);
 
-        public static StairCalc Calculate(StairSpec s, StairLimits limits = null)
+        public static StairCalc Calculate(StairSpec s)
         {
-            limits = limits ?? new StairLimits();
             var c = new StairCalc { Going = s.Going, BottomLevel = s.StartLevel, TopLevel = s.StartLevel + s.FloorHeight };
             c.Rise = s.Rise;
             c.TwoRPlusG = 2 * c.Rise + s.Going;
@@ -211,9 +200,10 @@ namespace HCW.AutoCAD.Plugin.Logic
             }
             if (!valid) return c;
 
-            add("Rise", mm(c.Rise), c.Rise <= limits.MaxRise && c.Rise >= limits.MinRise, false);
-            add("Going", mm(s.Going), s.Going >= limits.MinGoing, false);
-            add("2R + G", mm(c.TwoRPlusG), c.TwoRPlusG >= limits.Min2RG && c.TwoRPlusG <= limits.Max2RG, false);
+            // The rise, going and 2R + G are reported; there are no limits to pass or fail (the plugin does not check a code).
+            add("Rise", mm(c.Rise), true, false);
+            add("Going", mm(s.Going), true, false);
+            add("2R + G", mm(c.TwoRPlusG), true, false);
             add("Riser consistency", s.TotalRisers + " equal risers", true, false);
             if (s.TwoFlights)
                 add("Flight distribution", r1 + " / " + r2, Math.Abs(r1 - r2) <= 1, false);
@@ -221,7 +211,7 @@ namespace HCW.AutoCAD.Plugin.Logic
                 Math.Abs(s.TotalRisers * c.Rise - s.FloorHeight) < 0.01, false);
             if (s.HasWinders)
             {
-                add("Winders", s.WinderTreads + " winders, going " + mm(c.WinderGoing) + " on the walkline", c.WinderGoing >= limits.MinGoing, false);
+                add("Winders", s.WinderTreads + " winders, going " + mm(c.WinderGoing) + " on the walkline", true, false);
                 add("Winder level", StairFormat.Level(c.LandingLevel, false) + " to " + StairFormat.Level(c.LandingLevel + s.WinderExtraRisers * c.Rise, false), true, false);
             }
             else if (s.TwoFlights)

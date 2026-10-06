@@ -93,7 +93,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             double planStep = 0;
             if (_floorCount > 1)
             {
-                var calc0 = StairCalc.Calculate(spec, Limits());
+                var calc0 = StairCalc.Calculate(spec);
                 var opt0 = new StairOptions { TextHeight = Settings.GetDouble("StairTextMm", 2.5) * spec.PlotScale, DimOffset = Settings.GetDouble("StairDimOffsetMm", 10) * spec.PlotScale };
                 var box0 = StairGeometry.Plan(spec, calc0, opt0).Extents();
                 planStep = (Math.Abs(Math.Cos(spec.PlanAngleDegrees * Math.PI / 180)) * (box0.MaxY - box0.MinY)
@@ -200,7 +200,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// </summary>
         private static void SaveQuantities(Editor ed, Transaction tr, Database db, string id, StairSpec spec)
         {
-            var calc = StairCalc.Calculate(spec, Limits());
+            var calc = StairCalc.Calculate(spec);
             if (!calc.CanDraw) return;
             var q = StairQuantities.Compute(spec, calc, Settings.GetDouble("StairLandingWallEdgeMm", 0));
             var rows = q.Rows();
@@ -227,7 +227,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             while (true)
             {
                 if (!Ask(ed, spec, u, editing)) return false;
-                var calc = StairCalc.Calculate(spec, Limits());
+                var calc = StairCalc.Calculate(spec);
                 Report(ed, spec, calc, u);
                 if (!calc.CanDraw)
                 {
@@ -244,15 +244,6 @@ namespace HCW.AutoCAD.Plugin.Commands
                 return true;
             }
         }
-
-        private static StairLimits Limits() => new StairLimits
-        {
-            MaxRise = Settings.GetDouble("StairMaxRiseMm", 190),
-            MinRise = Settings.GetDouble("StairMinRiseMm", 100),
-            MinGoing = Settings.GetDouble("StairMinGoingMm", 250),
-            Min2RG = Settings.GetDouble("Stair2RGMinMm", 550),
-            Max2RG = Settings.GetDouble("Stair2RGMaxMm", 700)
-        };
 
         private static bool Ask(Editor ed, StairSpec s, Units u, bool editing)
         {
@@ -390,7 +381,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private static void Generate(Transaction tr, Database db, StairSpec spec, string id, Units u)
         {
-            var calc = StairCalc.Calculate(spec, Limits());
+            var calc = StairCalc.Calculate(spec);
             var opt = new StairOptions
             {
                 TextHeight = Settings.GetDouble("StairTextMm", 2.5) * spec.PlotScale,

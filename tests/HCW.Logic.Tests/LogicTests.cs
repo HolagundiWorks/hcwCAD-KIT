@@ -929,26 +929,6 @@ namespace HCW.Logic.Tests
         }
 
         [Fact]
-        public void SteepRiseFailsTheOfficeLimit()
-        {
-            var s = Dog();
-            s.FloorHeight = 4600; // 230 mm rise
-            var c = StairCalc.Calculate(s);
-            Assert.False(c.Checks.Single(x => x.Name == "Rise").Ok);
-            Assert.False(c.Checks.Single(x => x.Name == "2R + G").Ok);
-        }
-
-        [Fact]
-        public void LimitsAreConfigurable()
-        {
-            var s = Dog();
-            s.FloorHeight = 4200; // 210 mm rise, 2R+G 690
-            var c = StairCalc.Calculate(s, new StairLimits { MaxRise = 220, Max2RG = 720 });
-            Assert.True(c.Checks.Single(x => x.Name == "Rise").Ok);
-            Assert.True(c.Checks.Single(x => x.Name == "2R + G").Ok);
-        }
-
-        [Fact]
         public void OneRiserFlightCannotBeDrawn()
         {
             var s = Dog();

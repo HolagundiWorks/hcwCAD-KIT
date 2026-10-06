@@ -5,42 +5,6 @@ using System.Linq;
 
 namespace HCW.AutoCAD.Plugin.Logic
 {
-    /// <summary>One row of the lift table: a capacity with its car, clear shaft and door sizes (mm).</summary>
-    public class LiftSpec
-    {
-        public int Persons;
-        public double CarW, CarD, ShaftW, ShaftD, DoorW;
-        public string CarText => CarW.ToString("0", CultureInfo.InvariantCulture) + "x" + CarD.ToString("0", CultureInfo.InvariantCulture);
-        public string ShaftText => ShaftW.ToString("0", CultureInfo.InvariantCulture) + "x" + ShaftD.ToString("0", CultureInfo.InvariantCulture);
-    }
-
-    /// <summary>The lift sizes by capacity, read from a setting such as "6=1100x1400:1800x1900:800; 8=1350x1400:2000x1900:800" (car : shaft : door).</summary>
-    public static class LiftTable
-    {
-        public const string Default = "6=1100x1400:1800x1900:800; 8=1350x1400:2000x1900:800; 10=1500x1500:2100x2000:900; 13=1800x1500:2400x2000:1000";
-
-        public static List<LiftSpec> Parse(string text)
-        {
-            var list = new List<LiftSpec>();
-            foreach (var row in (text ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                var eq = row.Split('=');
-                int persons;
-                if (eq.Length != 2 || !int.TryParse(eq[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out persons) || persons <= 0) continue;
-                var parts = eq[1].Split(':');
-                if (parts.Length != 3) continue;
-                double cw, cd, sw, sd, door; string err;
-                if (!LiftLayout.ParseSize(parts[0], out cw, out cd, out err) || !LiftLayout.ParseSize(parts[1], out sw, out sd, out err)
-                    || !double.TryParse(parts[2].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out door) || door <= 0) continue;
-                list.Add(new LiftSpec { Persons = persons, CarW = cw, CarD = cd, ShaftW = sw, ShaftD = sd, DoorW = door });
-            }
-            return list.OrderBy(l => l.Persons).ToList();
-        }
-
-        /// <summary>The smallest lift that carries at least this many persons, or null when the table has none that large.</summary>
-        public static LiftSpec For(IList<LiftSpec> table, int persons) => table.Where(l => l.Persons >= persons).OrderBy(l => l.Persons).FirstOrDefault();
-    }
-
     public class LiftSectionOptions
     {
         public int Floors = 4;

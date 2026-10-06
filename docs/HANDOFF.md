@@ -5,8 +5,12 @@ State of the work on 2026-10-06 (updated after the structure summary and angled 
 ## Verified
 
 - `main` builds clean (0 warnings, 0 errors) against an AutoCAD 2022 install.
-- `dotnet test tests/HCW.Logic.Tests`: 519 passed, 0 failed, no analyzer warnings (last run on the commit that added angled centre-line walls).
+- `dotnet test tests/HCW.Logic.Tests`: 507 passed, 0 failed, no analyzer warnings (last run after the bylaw tables and limits were removed; 12 tests for the removed features went with them).
 - The xUnit analyzer fixes (xUnit2012, xUnit2017, xUnit2029, xUnit2031) in `LogicTests.cs` and `DraftingTests.cs` are in this branch.
+
+## Removed
+
+The bylaw tables and limits: `AreaExemptRules`, `AreaPermTable`, `AreaZone`, `AreaFarPermittedPercent`, `AreaGroundCoverPermittedPercent` (the area statement no longer works out or fills permissible values, and exempt layers count in full), `LiftTable` (lift sizes are always typed), and `StairMaxRiseMm`, `StairMinRiseMm`, `StairMinGoingMm`, `Stair2RGMinMm`, `Stair2RGMaxMm` (the stair reports rise, going and 2R + G with no pass or fail). Old `settings.ini` files that still list them are harmless. The title block still has `FAR_PERM` and `GC_PERM` fields; the plugin leaves them for you to type.
 
 ## Not verified
 

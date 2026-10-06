@@ -1404,56 +1404,6 @@ namespace HCW.Logic.Tests
 
 namespace HCW.Logic.Tests
 {
-    public class AreaPermissibleTests
-    {
-        private static List<FloorInput> Floors() => new List<FloorInput>
-        {
-            new FloorInput { Name = "GROUND", Gross = 100, Deduction = 10 },
-            new FloorInput { Name = "FIRST", Gross = 90, Deduction = 12.5 },
-        };
-
-        [Fact]
-        public void PermissibleValuesFillTheFieldsAndPassWhenInside()
-        {
-            var s = AreaStatement.Compute(Floors(), 200, 125, 60);            // FAR 83.75 %, cover 50 %
-            Assert.Empty(s.Warnings);
-            Assert.Equal(120, s.GroundCoverPermitted.Value, 9);
-            var f = s.ToFields();
-            Assert.Equal("125.00", f["FAR_PERM"]);
-            Assert.Equal("120.00", f["GC_PERM"]);
-        }
-
-        [Fact]
-        public void GoingOverIsWarned()
-        {
-            var s = AreaStatement.Compute(Floors(), 200, 80, 40);
-            Assert.Contains(s.Warnings, w => w.Contains("F.A.R.") && w.Contains("80.00"));
-            Assert.Contains(s.Warnings, w => w.Contains("Ground cover") && w.Contains("40.00"));
-            // exactly on the limit is not over
-            Assert.Empty(AreaStatement.Compute(Floors(), 200, 83.75, 50).Warnings);
-        }
-
-        [Fact]
-        public void NotGivenLeavesTheFieldsOutSoTypedValuesStay()
-        {
-            var f = AreaStatement.Compute(Floors(), 200).ToFields();
-            Assert.False(f.ContainsKey("FAR_PERM"));
-            Assert.False(f.ContainsKey("GC_PERM"));
-        }
-
-        [Fact]
-        public void NoSiteMeansNoPermittedGroundCoverArea()
-        {
-            var s = AreaStatement.Compute(Floors(), 0, 125, 60);
-            Assert.Null(s.GroundCoverPermitted);
-            Assert.False(s.ToFields().ContainsKey("GC_PERM"));
-            Assert.Equal("125.00", s.ToFields()["FAR_PERM"]);
-        }
-    }
-}
-
-namespace HCW.Logic.Tests
-{
     public class LevelScheduleTests
     {
         [Theory]
@@ -2020,14 +1970,6 @@ namespace HCW.Logic.Tests
         }
 
         [Fact]
-        public void TooNarrowAWinderGoingIsFlagged()
-        {
-            var s = L(); s.Width = 600;                                        // 157 mm on the walkline
-            var c = StairCalc.Calculate(s);
-            Assert.Contains(c.Checks, k => k.Name == "Winders" && !k.Ok);
-        }
-
-        [Fact]
         public void WinderPlanHasTwoDividingLinesFromTheInnerCorner()
         {
             var s = L();
@@ -2337,25 +2279,6 @@ namespace HCW.Logic.Tests
 
     public class LiftDataTests
     {
-        [Fact]
-        public void TableIsReadAndTheSmallestLiftThatCarriesTheLoadIsChosen()
-        {
-            var t = LiftTable.Parse(LiftTable.Default);
-            Assert.Equal(4, t.Count);
-            Assert.Equal(8, LiftTable.For(t, 7).Persons);
-            Assert.Equal(6, LiftTable.For(t, 6).Persons);
-            Assert.Null(LiftTable.For(t, 20));
-            Assert.Equal("1100x1400", t[0].CarText);
-            Assert.Equal(1800, t[0].ShaftW);
-        }
-
-        [Fact]
-        public void BadTableRowsAreSkipped()
-        {
-            var t = LiftTable.Parse("6=1100x1400:1800x1900:800; x=1:1:1; 8=bad; 10=1500x1500:2100x2000:900");
-            Assert.Equal(new[] { 6, 10 }, t.Select(l => l.Persons).ToArray());
-        }
-
         private static LiftLayout Plan()
         {
             string e;
@@ -2655,29 +2578,6 @@ namespace HCW.Logic.Tests
             Assert.Contains("bp-lift", back.AllLayers());
             Assert.Contains(5L, back.AllHandles());
             Assert.Null(AreaConfig.FromLines(new[] { "EMPTY" }));
-        }
-
-        [Fact]
-        public void ExemptionRulesTakeAShareWithACap()
-        {
-            var r = ExemptRules.Parse("BP-LIFT=100; BP-BALCONY=50:10; junk; BP-X=150");
-            var areas = new Dictionary<string, double> { { "BP-LIFT", 8 }, { "BP-BALCONY", 40 }, { "BP-OTHER", 5 } };
-            Assert.Equal(8 + 10, r.Deduction(areas, false), 9);          // balcony: 50 % of 40 = 20, capped at 10
-            Assert.Equal(8 + 10 + 5, r.Deduction(areas, true), 9);
-            Assert.False(r.IsEmpty);
-            Assert.True(ExemptRules.Parse("").IsEmpty);
-        }
-
-        [Fact]
-        public void PermissibleTableChoosesByZoneAndPlotSize()
-        {
-            var t = PermissibleTable.Parse("R1|0|250|175|65; R1|250|500|150|60; R1|500|0|125|50; *|0|0|100|40");
-            Assert.Equal(175, t.Lookup("R1", 100).Far);
-            Assert.Equal(150, t.Lookup("r1", 250).Far);          // lower limit inclusive, upper exclusive
-            Assert.Equal(50, t.Lookup("R1", 9999).GroundCover);
-            Assert.Equal(100, t.Lookup("C2", 300).Far);         // any other zone: the * row
-            Assert.Null(PermissibleTable.Parse("R1|0|250|175|65").Lookup("R2", 100));
-            Assert.Empty(PermissibleTable.Parse("bad row; R1|10|5|1|1").Rows);
         }
 
         [Fact]
@@ -3084,13 +2984,6 @@ namespace HCW.Logic.Tests
             Assert.DoesNotContain(rows, r => r.Mark == "ML");
         }
 
-        [Fact]
-        public void TooNarrowAWinderGoingIsFlaggedAndDogLegsStillHaveNoWinders()
-        {
-            var s = U(true, 0); s.Width = 600;
-            Assert.Contains(StairCalc.Calculate(s).Checks, k => k.Name == "Winders" && !k.Ok);
-            Assert.False(new StairSpec { Kind = StairKind.DogLeg, Winders = true }.HasWinders);
-        }
     }
 
     public class RoomTableTests

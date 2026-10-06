@@ -38,17 +38,6 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (drawing == null) return;
             if (drawing == "Section") { DrawSection(); return; }
 
-            var table = LiftTable.Parse(Settings.Get("LiftTable", LiftTable.Default));
-            var pers = ed.GetInteger(new PromptIntegerOptions("\nCapacity in persons, to take the sizes from the lift table (Enter to type the sizes) <none>: ") { AllowNone = true, AllowNegative = false, AllowZero = true });
-            if (pers.Status == PromptStatus.OK && pers.Value > 0)
-            {
-                var spec = LiftTable.For(table, pers.Value);
-                if (spec == null) { ed.WriteMessage("\nHCWLIFT: the lift table (setting LiftTable) has no lift for " + pers.Value + " persons; its largest is " + (table.Count > 0 ? table[table.Count - 1].Persons.ToString() : "empty") + "."); return; }
-                _clear = spec.ShaftText; _car = spec.CarText; _doorMm = spec.DoorW;
-                ed.WriteMessage("\n" + spec.Persons + " persons: car " + spec.CarText + ", shaft " + spec.ShaftText + ", door " + spec.DoorW + " (Enter keeps each).");
-            }
-            else if (pers.Status != PromptStatus.None && pers.Status != PromptStatus.OK) return;
-
             double cw, cd, carW, carD;
             if (!AskSize(ed, "\nClear size of the shaft in mm, width x depth <" + _clear + ">: ", ref _clear, out cw, out cd)) return;
             if (!AskNumber(ed, "\nShaft wall thickness in mm <" + _wallMm + ">: ", ref _wallMm)) return;
