@@ -84,5 +84,29 @@ namespace HCW.AutoCAD.Plugin.Logic
             }
             return rows;
         }
+    
+        /// <summary>How the rows of text of one chain are spaced.</summary>
+        public struct RowSpacing
+        {
+            public int MaxRow;
+            public double Step;
+            /// <summary>False when even one row of moved text would reach the next chain's dimension line.</summary>
+            public bool Fits;
+        }
+
+        /// <summary>
+        /// Row spacing that keeps a chain's moved text clear of the chain outside it: the furthest row ends a text height short of the next
+        /// dimension line (chains are <paramref name="chainStep"/> apart). Rows are at most 1.5 text heights apart and at most maxRow of them.
+        /// </summary>
+        public static RowSpacing RowPlan(double textHeight, double chainStep, int maxRow = 2)
+        {
+            double room = chainStep - 1.3 * textHeight;
+            double need = 1.1 * textHeight;
+            int rows = room > 0 ? Math.Min(maxRow, (int)Math.Floor(room / need + 1e-9)) : 0;
+            bool fits = rows >= 1;
+            if (rows < 1) rows = 1;
+            double step = Math.Min(1.5 * textHeight, fits ? room / rows : need);
+            return new RowSpacing { MaxRow = rows, Step = step, Fits = fits };
+        }
     }
 }

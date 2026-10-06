@@ -34,6 +34,8 @@ namespace HCW.AutoCAD.Plugin.Commands
         private static string _sides = "All";
         private static string _levels = "All";
         private static string _wallSide = "Outward";
+        /// <summary>Chains whose spacing leaves no clear row for moved text, counted per command.</summary>
+        private static int Crowded;
 
         /// <summary>The geometry AUTODIM reads: wall points, opening jamb points, grid lines and columns.</summary>
         private class Plan
@@ -45,7 +47,9 @@ namespace HCW.AutoCAD.Plugin.Commands
             /// <summary>Extents of each loose piece of window and door geometry, grouped into openings once the units are known.</summary>
             public readonly List<Box> WindowBoxes = new List<Box>();
             public readonly List<WallSegment> WallSegments = new List<WallSegment>();
-            public int GeometryOpenings;
+            /// <summary>Opening tags (D1, W2 ...) found as text, with where they stand.</summary>
+            public readonly List<KeyValuePair<Point3d, string>> TagTexts = new List<KeyValuePair<Point3d, string>>();
+            public int GeometryOpenings, GapOpenings;
             public int Skipped;
         }
 
@@ -117,6 +121,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             double minX = plan.Structural.Min(p => p.X), maxX = plan.Structural.Max(p => p.X);
             double minY = plan.Structural.Min(p => p.Y), maxY = plan.Structural.Max(p => p.Y);
             int made, staggered = 0;
+            Crowded = 0;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -126,7 +131,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                     bool horizontal = chain.Side == PlanSide.Bottom || chain.Side == PlanSide.Top;
                     double edge = chain.Side == PlanSide.Bottom ? minY : chain.Side == PlanSide.Top ? maxY : chain.Side == PlanSide.Left ? minX : maxX;
                     double outward = chain.Side == PlanSide.Bottom || chain.Side == PlanSide.Left ? -1 : 1;
-                    staggered += DrawChain(sink, chain.Segments, horizontal, edge, outward * (gap + chain.Level * step), step);
+                    staggered += DrawChain(sink, chain.Segments, horizontal, edge, outward * (gap + chain.Level * step), step,
+                        Labeler(plan, horizontal, edge, input.Band, input.Merge));
                 }
                 made = sink.Count;
                 tr.Commit();
@@ -136,6 +142,8 @@ namespace HCW.AutoCAD.Plugin.Commands
 
             ed.WriteMessage("\nAUTODIM: " + made + " dimension(s) on " + DimLayer + " at 1:" + _scale
                 + (tiedA > 0 ? "; " + tiedA + " follow their walls when moved (HCWLIVE)" : "")
+                + (plan.GapOpenings > 0 ? "; " + plan.GapOpenings + " gap(s) in the walls read as openings" : "")
+                + (Crowded > 0 ? "; " + Crowded + " chain(s) are too close for their text rows (raise AutoDimStepMm)" : "")
                 + (staggered > 0 ? "; " + staggered + " short one(s) moved to a second row" : "")
                 + (repeated > 0 ? "; " + repeated + " repeated dimension(s) left out" : "")
                 + (plan.Skipped > 0 ? "; " + plan.Skipped + " angled or curved segment(s) skipped (use AUTODIMWALL)" : "") + ".");
@@ -152,29 +160,43 @@ namespace HCW.AutoCAD.Plugin.Commands
             var choice = AskLayers(ed, db, "Furniture blocks inside each room get their width and depth dimensioned.");
             if (choice == null) return;
             var filter = new SelectionFilter(new[] { new TypedValue(0, "LWPOLYLINE") });
-            var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect the room outlines (closed polylines, such as ROOM-RECT or MEASURE-FLOOR): " }, filter);
-            if (psr.Status != PromptStatus.OK) return;
+            var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect the room outlines (closed polylines, such as ROOM-RECT or MEASURE-FLOOR), or press Enter to find every room from the wall lines: " }, filter);
+            if (psr.Status != PromptStatus.OK && psr.Status != PromptStatus.None) return;
+            bool findRooms = psr.Status == PromptStatus.None;
             if (!AskScale(ed)) return;
 
             var plan = new Plan();
             var furniture = new List<Extents3d>();
             var rooms = new List<List<Point3d>>();
+            var names = new List<KeyValuePair<P2, string>>();
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                foreach (SelectedObject so in psr.Value)
+                if (!findRooms)
+                    foreach (SelectedObject so in psr.Value)
+                    {
+                        var poly = tr.GetObject(so.ObjectId, OpenMode.ForRead) as Polyline;
+                        if (poly == null || !poly.Closed || poly.NumberOfVertices < 3) continue;
+                        var pts = new List<Point3d>();
+                        for (int i = 0; i < poly.NumberOfVertices; i++) pts.Add(poly.GetPoint3dAt(i));
+                        rooms.Add(pts);
+                    }
+                else
                 {
-                    var poly = tr.GetObject(so.ObjectId, OpenMode.ForRead) as Polyline;
-                    if (poly == null || !poly.Closed || poly.NumberOfVertices < 3) continue;
-                    var pts = new List<Point3d>();
-                    for (int i = 0; i < poly.NumberOfVertices; i++) pts.Add(poly.GetPoint3dAt(i));
-                    rooms.Add(pts);
+                    double u = Util.MmToDrawingUnits(1.0);
+                    var segs = RoomWallCommands.WallSegments(tr, (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead),
+                        new HashSet<string>(choice.Walls, StringComparer.OrdinalIgnoreCase));
+                    foreach (var shape in PlanarRooms.AllRooms(segs, 1 * u, 600 * u, Settings.GetDouble("AutoDimRoomGapMm", 1200) * u))
+                        rooms.Add(shape.Outline.Select(p => new Point3d(p.X, p.Y, 0)).ToList());
                 }
                 ReadPlan(tr, db, choice, plan, furniture);
+                if (Settings.GetInt("AutoDimRoomNames", 1) != 0) ReadRoomNames(tr, db, names);
                 tr.Commit();
             }
             if (rooms.Count == 0)
             {
-                ed.WriteMessage("\nAUTODIMROOM: select closed polylines.");
+                ed.WriteMessage(findRooms
+                    ? "\nAUTODIMROOM: no closed rooms were found from the wall lines on " + string.Join(", ", choice.Walls) + ". Check that the walls close, or select room outlines instead."
+                    : "\nAUTODIMROOM: select closed polylines.");
                 return;
             }
 
@@ -189,6 +211,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             double band = Settings.GetDouble("AutoDimBandM", 0.6) * 1000 * mm;
 
             int made, staggered = 0, skipped = 0, furnished = 0;
+            Crowded = 0;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -218,7 +241,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                             var pts = DimChains.Merge(new[] { lo, hi }.Concat(onEdge), merge);
                             var segs = DimChains.Segments(pts, minLen);
                             if (segs.Count == 0) continue;
-                            staggered += DrawChain(sink, segs, horizontal, edge, inward * inset, step);
+                            staggered += DrawChain(sink, segs, horizontal, edge, inward * inset, step, Labeler(plan, horizontal, edge, band, merge));
                             if (e == PlanSide.Bottom) bottomLevels = 1;
                             if (e == PlanSide.Left) leftLevels = 1;
                         }
@@ -242,9 +265,24 @@ namespace HCW.AutoCAD.Plugin.Commands
                             double edge = horizontal ? a.Y : a.X;
                             double centreOnAxis = horizontal ? cen.Y : cen.X;
                             double inward = centreOnAxis >= edge ? 1 : -1;
-                            var seg = new List<KeyValuePair<double, double>> { new KeyValuePair<double, double>(u1, u2) };
-                            staggered += DrawChain(sink, seg, horizontal, edge, inward * inset, step);
+                            // openings along this edge split it into pieces, as on a rectangular room
+                            var onEdge = plan.Jambs.Where(p => Math.Abs((horizontal ? p.Y : p.X) - edge) <= band
+                                && (horizontal ? p.X : p.Y) >= u1 - merge && (horizontal ? p.X : p.Y) <= u2 + merge)
+                                .Select(p => horizontal ? p.X : p.Y).ToList();
+                            var seg = onEdge.Count == 0
+                                ? new List<KeyValuePair<double, double>> { new KeyValuePair<double, double>(u1, u2) }
+                                : DimChains.Segments(DimChains.Merge(new[] { u1, u2 }.Concat(onEdge), merge), minLen);
+                            if (seg.Count == 0) continue;
+                            staggered += DrawChain(sink, seg, horizontal, edge, inward * inset, step, Labeler(plan, horizontal, edge, band, merge));
                         }
+                    }
+
+                    // the room's name, under its dimensions
+                    var inside = names.Where(n => PlanarRooms.Contains(room.Select(p => new P2(p.X, p.Y)).ToList(), n.Key)).Select(n => n.Value).FirstOrDefault();
+                    if (inside != null)
+                    {
+                        double textH = sink.TextHeight;
+                        sink.Label(inside, new Point3d((minX + maxX) / 2, minY + inset + 1.2 * step + textH, 0), textH);
                     }
 
                     // furniture inside this room: width under it, depth beside it
@@ -266,6 +304,9 @@ namespace HCW.AutoCAD.Plugin.Commands
             Isolate(db, choice);
             ed.WriteMessage("\nAUTODIMROOM: " + made + " dimension(s) in " + rooms.Count + " room(s) at 1:" + _scale
                 + (tiedB > 0 ? "; " + tiedB + " follow their walls when moved (HCWLIVE)" : "")
+                + (findRooms ? "; rooms found from the walls" : "")
+                + (plan.GapOpenings > 0 ? "; " + plan.GapOpenings + " gap(s) in the walls read as openings" : "")
+                + (Crowded > 0 ? "; " + Crowded + " chain(s) are too close for their text rows (raise AutoDimStepMm)" : "")
                 + (furnished > 0 ? "; " + furnished / 2 + " furniture item(s) dimensioned" : "")
                 + (staggered > 0 ? "; " + staggered + " short one(s) moved to a second row" : "")
                 + (skipped > 0 ? "; " + skipped + " angled edge(s) skipped" : "") + ".");
@@ -378,8 +419,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                 var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
                 foreach (ObjectId id in space)
                 {
-                    var dim = tr.GetObject(id, OpenMode.ForRead) as Dimension;
-                    if (dim == null || dim.GetXDataForApplication(AppName) == null) continue;
+                    var dim = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                    if (dim == null || !(dim is Dimension || dim is DBText) || dim.GetXDataForApplication(AppName) == null) continue;
                     dim.UpgradeOpen();
                     dim.Erase();
                     removed++;
@@ -427,6 +468,23 @@ namespace HCW.AutoCAD.Plugin.Commands
                 return dim;
             }
 
+            /// <summary>A line of text on the dimension layer, tagged like the dimensions so AUTODIMCLEAR removes it.</summary>
+            public void Label(string text, Point3d at, double height)
+            {
+                var t = new DBText
+                {
+                    Height = height, TextString = text, Layer = DimLayer, Position = at,
+                    HorizontalMode = TextHorizontalMode.TextMid, VerticalMode = TextVerticalMode.TextVerticalMid,
+                };
+                t.AlignmentPoint = at;
+                t.XData = new ResultBuffer(
+                    new TypedValue((int)DxfCode.ExtendedDataRegAppName, AppName),
+                    new TypedValue((int)DxfCode.ExtendedDataAsciiString, "ROOMNAME"));
+                _btr.AppendEntity(t);
+                _tr.AddNewlyCreatedDBObject(t, true);
+                Count++;
+            }
+
             public void Radial(Point3d centre, Point3d onArc, double leader)
             {
                 Add(new RadialDimension(centre, onArc, leader, "", _style));
@@ -451,15 +509,18 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// Returns how many texts were moved.
         /// </summary>
         private static int DrawChain(Sink sink, List<KeyValuePair<double, double>> segments, bool horizontal,
-            double edge, double lineOffset, double step)
+            double edge, double lineOffset, double step, Func<double, double, string> label = null)
         {
             if (segments.Count == 0) return 0;
             double textH = sink.TextHeight;
             // text width from the longest number in the chain; the text is about 0.75 of its height wide per character
             int chars = segments.Max(s => (s.Value - s.Key).ToString("0.###", CultureInfo.InvariantCulture).Length);
             double textWidth = chars * textH * Settings.GetDouble("AutoDimTextWidthFactor", 0.75);
-            var rows = DimChains.Rows(segments, textWidth, 2);
-            double rowStep = Math.Min(1.5 * textH, step / 2.0);
+            // Moved text stays clear of the chain outside this one: the furthest row ends a text height before the next dimension line.
+            var spacing = DimChains.RowPlan(textH, step);
+            double rowStep = spacing.Step;
+            if (!spacing.Fits) Crowded++;
+            var rows = DimChains.Rows(segments, textWidth, spacing.MaxRow);
 
             int moved = 0;
             for (int i = 0; i < segments.Count; i++)
@@ -475,6 +536,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                     a = new Point3d(edge, u1, 0); b = new Point3d(edge, u2, 0); line = new Point3d(edge + lineOffset, u1, 0);
                 }
                 var dim = sink.Aligned(a, b, line);
+                string tag = label == null ? null : label(u1, u2);
+                if (!string.IsNullOrEmpty(tag)) dim.DimensionText = tag + "\\X<>";       // the tag above the line, the measurement below
                 if (rows[i] > 0)
                 {
                     double mid = (u1 + u2) / 2.0;
@@ -488,6 +551,47 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
             }
             return moved;
+        }
+
+        /// <summary>
+        /// Room names found as text: the first line of each text on the AutoDimRoomNameLayers layers (default ROOM-LABELS), leaving out lines that
+        /// are only a room number or an area, with where the text stands.
+        /// </summary>
+        private static void ReadRoomNames(Transaction tr, Database db, List<KeyValuePair<P2, string>> into)
+        {
+            var layers = Layers("AutoDimRoomNameLayers", "ROOM-LABELS;A-ROOM-NAME");
+            var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+            var skip = new System.Text.RegularExpressions.Regex("^(R?\\d+(\\.\\d+)?|[\\d.,]+\\s*(m2|sq\\.? ?m|sqm|m\\u00B2)?)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            foreach (ObjectId id in space)
+            {
+                string type = id.ObjectClass.DxfName;
+                if (type != "TEXT" && type != "MTEXT") continue;
+                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null || !layers.Contains(ent.Layer)) continue;
+                var text = ent as DBText; var mtext = ent as MText;
+                string raw = text != null ? text.TextString : mtext != null ? mtext.Text : null;
+                var at = text != null ? text.Position : mtext != null ? mtext.Location : Point3d.Origin;
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                foreach (var line in raw.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string t = line.Trim();
+                    if (t.Length == 0 || skip.IsMatch(t)) continue;
+                    into.Add(new KeyValuePair<P2, string>(new P2(at.X, at.Y), t.ToUpperInvariant()));
+                    break;
+                }
+            }
+        }
+
+        /// <summary>Gives a dimension segment the tag of the opening it measures: both ends are jamb points and a D or W tag stands between them.</summary>
+        private static Func<double, double, string> Labeler(Plan plan, bool horizontal, double edge, double band, double merge)
+        {
+            if (plan.TagTexts.Count == 0) return null;
+            var tags = plan.TagTexts.Select(t => new TagPoint
+            {
+                Along = horizontal ? t.Key.X : t.Key.Y, Across = horizontal ? t.Key.Y : t.Key.X, Text = t.Value,
+            }).ToList();
+            Func<double, bool> isJamb = u => plan.Jambs.Any(p => Math.Abs((horizontal ? p.X : p.Y) - u) <= merge && Math.Abs((horizontal ? p.Y : p.X) - edge) <= band);
+            return (u1, u2) => isJamb(u1) && isJamb(u2) ? WallGaps.TagFor(tags, u1, u2, edge, band, merge) : null;
         }
 
         private const string StoreDictionary = "HCW_AUTODIM";
@@ -604,12 +708,22 @@ namespace HCW.AutoCAD.Plugin.Commands
 
             // One pass over the space. Objects that cannot matter (text, hatches, dimensions ...) are skipped
             // from their type alone, without being opened.
+            bool readTags = Settings.GetInt("AutoDimOpeningTags", 1) != 0;
+            var tagPattern = new System.Text.RegularExpressions.Regex("^[DW]\\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             foreach (ObjectId id in space)
             {
-                if (!Relevant(id)) continue;
+                if (!Relevant(id) && !(readTags && id.ObjectClass.DxfName == "TEXT")) continue;
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                 if (ent == null) continue;
                 string layer = ent.Layer;
+
+                var tagText = ent as DBText;
+                if (tagText != null)
+                {
+                    string t = (tagText.TextString ?? "").Trim();
+                    if (tagPattern.IsMatch(t)) plan.TagTexts.Add(new KeyValuePair<Point3d, string>(tagText.Position, t.ToUpperInvariant()));
+                    continue;
+                }
 
                 var block = ent as BlockReference;
                 if (block != null)
@@ -681,6 +795,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// </summary>
         private static void FinishOpenings(Plan plan, double mm)
         {
+            AddGapOpenings(plan, mm);
             if (plan.WindowBoxes.Count == 0) return;
             double join = Settings.GetDouble("AutoDimOpeningJoinMm", 20) * mm;
             foreach (var opening in OpeningClusters.Cluster(plan.WindowBoxes, join))
@@ -691,6 +806,31 @@ namespace HCW.AutoCAD.Plugin.Commands
                 plan.GeometryOpenings++;
             }
             plan.WindowBoxes.Clear();
+        }
+
+        /// <summary>
+        /// Openings that are only gaps in the wall: a break at the same place in both faces of a straight wall, between AutoDimGapMinMm and
+        /// AutoDimGapMaxMm wide. Their edges become jamb points, unless a door or window block already gave that opening.
+        /// </summary>
+        private static void AddGapOpenings(Plan plan, double mm)
+        {
+            if (Settings.GetInt("AutoDimGapOpenings", 1) == 0 || plan.WallSegments.Count < 4) return;
+            double covered = 30 * mm;
+            var gaps = WallGaps.Find(plan.WallSegments, 1 * mm, Settings.GetDouble("AutoDimGapMinMm", 400) * mm,
+                Settings.GetDouble("AutoDimGapMaxMm", 4000) * mm, Settings.GetDouble("AutoDimWallMaxMm", 600) * mm, 5 * mm);
+            foreach (var g in gaps)
+            {
+                Func<Point3d, double> along = p => g.Horizontal ? p.X : p.Y;
+                Func<Point3d, double> across = p => g.Horizontal ? p.Y : p.X;
+                double lo = g.Lo, hi = g.Hi;
+                bool haveLo = plan.Jambs.Any(p => Math.Abs(along(p) - lo) <= covered && Math.Abs(across(p) - g.Face1) <= Math.Abs(g.Face2 - g.Face1) + covered);
+                bool haveHi = plan.Jambs.Any(p => Math.Abs(along(p) - hi) <= covered && Math.Abs(across(p) - g.Face1) <= Math.Abs(g.Face2 - g.Face1) + covered);
+                if (haveLo && haveHi) continue;
+                foreach (double face in new[] { g.Face1, g.Face2 })
+                    foreach (double u in new[] { lo, hi })
+                        plan.Jambs.Add(g.Horizontal ? new Point3d(u, face, 0) : new Point3d(face, u, 0));
+                plan.GapOpenings++;
+            }
         }
 
         /// <summary>Straight segments of a wall line or polyline, for finding which way the nearest wall runs.</summary>

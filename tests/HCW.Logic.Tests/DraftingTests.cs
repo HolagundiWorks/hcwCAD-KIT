@@ -2745,4 +2745,101 @@ namespace HCW.Logic.Tests
             Assert.False(DimAnchorLogic.TryDecode("A|X|zz|0", out axis, out handle, out index));
         }
     }
+
+    public class WallGapTests
+    {
+        private static WallSegment H(double x1, double x2, double y) => new WallSegment(x1, y, x2, y);
+        private static WallSegment V(double y1, double y2, double x) => new WallSegment(x, y1, x, y2);
+
+        [Fact]
+        public void AGapInBothFacesAtTheSamePlaceIsAnOpening()
+        {
+            var segs = new List<WallSegment> { H(0, 1000, 0), H(1900, 5000, 0), H(0, 1000, 230), H(1900, 5000, 230) };
+            var gaps = WallGaps.Find(segs, 1, 300, 4000, 600, 5);
+            Assert.Single(gaps);
+            Assert.True(gaps[0].Horizontal);
+            Assert.Equal(900, gaps[0].Width, 6);
+            Assert.Equal(1000, gaps[0].Lo, 6);
+            Assert.Equal(0, gaps[0].Face1, 6);
+            Assert.Equal(230, gaps[0].Face2, 6);
+        }
+
+        [Fact]
+        public void AGapInOneFaceOnlyIsNotAnOpening()
+        {
+            var segs = new List<WallSegment> { H(0, 1000, 0), H(1900, 5000, 0), H(0, 5000, 230) };
+            Assert.Empty(WallGaps.Find(segs, 1, 300, 4000, 600, 5));
+        }
+
+        [Fact]
+        public void GapsOutsideTheSizeLimitsAreIgnored()
+        {
+            var tiny = new List<WallSegment> { H(0, 1000, 0), H(1100, 5000, 0), H(0, 1000, 230), H(1100, 5000, 230) };
+            Assert.Empty(WallGaps.Find(tiny, 1, 300, 4000, 600, 5));
+            var huge = new List<WallSegment> { H(0, 1000, 0), H(9000, 12000, 0), H(0, 1000, 230), H(9000, 12000, 230) };
+            Assert.Empty(WallGaps.Find(huge, 1, 300, 4000, 600, 5));
+        }
+
+        [Fact]
+        public void VerticalWallsAndSplitSegmentsAreRead()
+        {
+            // The first face is drawn in two pieces that meet; a window gap lies between 2000 and 3200.
+            var segs = new List<WallSegment> { V(0, 1000, 0), V(1000, 2000, 0), V(3200, 6000, 0), V(0, 2000, 200), V(3200, 6000, 200) };
+            var gaps = WallGaps.Find(segs, 1, 300, 4000, 600, 5);
+            Assert.Single(gaps);
+            Assert.False(gaps[0].Horizontal);
+            Assert.Equal(2000, gaps[0].Lo, 6);
+            Assert.Equal(3200, gaps[0].Hi, 6);
+        }
+
+        [Fact]
+        public void WallsFurtherApartThanAWallAreNotPaired()
+        {
+            var segs = new List<WallSegment> { H(0, 1000, 0), H(1900, 5000, 0), H(0, 1000, 3000), H(1900, 5000, 3000) };
+            Assert.Empty(WallGaps.Find(segs, 1, 300, 4000, 600, 5));
+        }
+
+        [Fact]
+        public void TagsMatchTheSegmentTheyLieIn()
+        {
+            var tags = new List<TagPoint>
+            {
+                new TagPoint { Along = 1450, Across = 100, Text = "D1" },
+                new TagPoint { Along = 3000, Across = 100, Text = "W1" },
+                new TagPoint { Along = 1450, Across = 5000, Text = "D9" },
+            };
+            Assert.Equal("D1", WallGaps.TagFor(tags, 1000, 1900, 0, 500, 5));
+            Assert.Equal("W1", WallGaps.TagFor(tags, 2500, 3500, 0, 500, 5));
+            Assert.Null(WallGaps.TagFor(tags, 3600, 4000, 0, 500, 5));
+        }
+    }
+
+    public class RowPlanTests
+    {
+        [Fact]
+        public void RoomyChainsUseTwoRowsAtTheUsualSpacing()
+        {
+            var p = DimChains.RowPlan(2.5, 10);
+            Assert.True(p.Fits);
+            Assert.Equal(2, p.MaxRow);
+            Assert.True(2 * p.Step <= 10 - 1.3 * 2.5 + 1e-9);          // the furthest row stays clear of the next chain
+        }
+
+        [Fact]
+        public void TightChainsGetFewerRows()
+        {
+            var p = DimChains.RowPlan(2.5, 6);
+            Assert.True(p.Fits);
+            Assert.Equal(1, p.MaxRow);
+            Assert.True(p.Step <= 6 - 1.3 * 2.5 + 1e-9);
+        }
+
+        [Fact]
+        public void ChainsTooCloseAreReportedNotFitting()
+        {
+            var p = DimChains.RowPlan(2.5, 3);
+            Assert.False(p.Fits);
+            Assert.Equal(1, p.MaxRow);
+        }
+    }
 }
