@@ -869,15 +869,14 @@ namespace HCW.AutoCAD.Plugin.Commands
             foreach (var pc in pieces)
             {
                 var a = pc.Key; var b = pc.Value;
-                bool horizontal = Math.Abs(a.Y - b.Y) <= tol, vertical = Math.Abs(a.X - b.X) <= tol;
-                if (!horizontal && !vertical) { plan.Skipped++; continue; }
-                foreach (double side in new[] { -half, half })
+                // any angle: each face is the line moved half a thickness along its normal
+                var faces = CentreFaces.Of(new P2(a.X, a.Y), new P2(b.X, b.Y), half, tol);
+                if (faces == null) { plan.Skipped++; continue; }
+                foreach (var f in faces)
                 {
-                    double ax = horizontal ? a.X : a.X + side, ay = horizontal ? a.Y + side : a.Y;
-                    double bx = horizontal ? b.X : b.X + side, by = horizontal ? b.Y + side : b.Y;
-                    plan.Structural.Add(new Point3d(ax, ay, 0));
-                    plan.Structural.Add(new Point3d(bx, by, 0));
-                    plan.WallSegments.Add(new WallSegment(ax, ay, bx, by));
+                    plan.Structural.Add(new Point3d(f[0].X, f[0].Y, 0));
+                    plan.Structural.Add(new Point3d(f[1].X, f[1].Y, 0));
+                    plan.WallSegments.Add(new WallSegment(f[0].X, f[0].Y, f[1].X, f[1].Y));
                 }
             }
         }

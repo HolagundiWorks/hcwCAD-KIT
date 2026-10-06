@@ -138,3 +138,23 @@ namespace HCW.AutoCAD.Plugin.Logic
         }
     }
 }
+
+namespace HCW.AutoCAD.Plugin.Logic
+{
+    /// <summary>The two faces of a wall drawn as a single centre line, at any angle.</summary>
+    public static class CentreFaces
+    {
+        /// <summary>
+        /// The two faces of the line a to b for a wall of thickness 2 x half: each is the line moved half a thickness along the normal.
+        /// Returns null for a line shorter than minLength.
+        /// </summary>
+        public static P2[][] Of(P2 a, P2 b, double half, double minLength)
+        {
+            var d = b - a;
+            double len = d.Length;
+            if (len < minLength || len < 1e-12) return null;
+            var n = new P2(-d.Y / len, d.X / len) * half;
+            return new[] { new[] { a + n, b + n }, new[] { a - n, b - n } };
+        }
+    }
+}

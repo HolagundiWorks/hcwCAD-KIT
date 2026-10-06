@@ -192,3 +192,33 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class CentreFacesTests
+    {
+        [Fact]
+        public void HorizontalLineGivesFacesAboveAndBelow()
+        {
+            var f = HCW.AutoCAD.Plugin.Logic.CentreFaces.Of(new HCW.AutoCAD.Plugin.Logic.P2(0, 0), new HCW.AutoCAD.Plugin.Logic.P2(1000, 0), 115, 1);
+            Assert.Equal(2, f.Length);
+            Assert.Equal(115, f[0][0].Y, 6); Assert.Equal(-115, f[1][1].Y, 6);
+        }
+
+        [Fact]
+        public void AngledLineFacesAreHalfAThicknessAwayAndParallel()
+        {
+            var a = new HCW.AutoCAD.Plugin.Logic.P2(0, 0); var b = new HCW.AutoCAD.Plugin.Logic.P2(1000, 1000);
+            var f = HCW.AutoCAD.Plugin.Logic.CentreFaces.Of(a, b, 115, 1);
+            double dist = System.Math.Abs((f[0][0].X - a.X) * 1 - (f[0][0].Y - a.Y) * 1) / System.Math.Sqrt(2);
+            Assert.Equal(115, dist, 6);
+            Assert.Equal((f[0][1] - f[0][0]).Length, (b - a).Length, 6);
+        }
+
+        [Fact]
+        public void TinyLineGivesNothing()
+        {
+            Assert.Null(HCW.AutoCAD.Plugin.Logic.CentreFaces.Of(new HCW.AutoCAD.Plugin.Logic.P2(0, 0), new HCW.AutoCAD.Plugin.Logic.P2(0.1, 0), 115, 1));
+        }
+    }
+}
