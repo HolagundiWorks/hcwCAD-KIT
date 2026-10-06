@@ -42,6 +42,7 @@ using Autodesk.AutoCAD.Runtime;
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.LiftCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.EscalatorCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.RoomTableCommands))]
+[assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.UI.HcwRibbonApplication))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.PermitLayerCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.SectionCommands))]
 [assembly: CommandClass(typeof(HCW.AutoCAD.Plugin.Commands.LiveUpdateCommands))]

@@ -20,8 +20,8 @@ namespace HCW.AutoCAD.Plugin.UI
 
         public void Initialize()
         {
-            // The ribbon may not exist yet this early in AutoCAD startup -
-            // build it once idle, same pattern Autodesk's own samples use.
+            // The ribbon may not exist yet this early in AutoCAD startup (or the workspace has none until the user switches to one):
+            // keep trying on idle until it does, then build it once.
             AcAp.Idle += BuildRibbonOnce;
             try { if (Settings.GetInt("LiveUpdate", 1) != 0) HCW.AutoCAD.Plugin.Commands.LiveUpdate.Start(); }
             catch (System.Exception) { /* live updates are a convenience; the commands work without them */ }
@@ -29,14 +29,50 @@ namespace HCW.AutoCAD.Plugin.UI
 
         public void Terminate() { }
 
+        private bool _waitNoticeShown;
+
         private void BuildRibbonOnce(object sender, EventArgs e)
         {
+            if (ComponentManager.Ribbon == null)
+            {
+                // No ribbon yet (still starting, or the classic workspace). Stay subscribed and try again on the next idle.
+                if (!_waitNoticeShown) { _waitNoticeShown = true; Say("waiting for the ribbon; it is built as soon as one exists (or type HCWRIBBON)."); }
+                return;
+            }
             AcAp.Idle -= BuildRibbonOnce;
             try { BuildRibbon(); }
             catch (System.Exception ex)
             {
-                AcAp.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\n[hcwCAD-KIT] ribbon build error: " + ex.Message);
+                Say("ribbon build error: " + ex.GetType().Name + ": " + ex.Message + " (type HCWRIBBON to try again; the commands work without the ribbon).");
             }
+        }
+
+        /// <summary>Command line message, or an alert when there is no drawing open yet.</summary>
+        private static void Say(string message)
+        {
+            try
+            {
+                var doc = AcAp.DocumentManager.MdiActiveDocument;
+                if (doc != null) doc.Editor.WriteMessage("\n[hcwCAD-KIT] " + message);
+                else AcAp.ShowAlertDialog("hcwCAD-KIT: " + message);
+            }
+            catch (System.Exception) { }
+        }
+
+        /// <summary>HCWRIBBON builds the hcwCAD-KIT ribbon tabs again (any tabs of ours already there are replaced).</summary>
+        [CommandMethod("HCWRIBBON")]
+        public void RebuildRibbon()
+        {
+            var rc = ComponentManager.Ribbon;
+            if (rc == null)
+            {
+                Say("there is no ribbon in this workspace. Switch to a workspace with the ribbon (RIBBON command), then run HCWRIBBON.");
+                return;
+            }
+            for (int i = rc.Tabs.Count - 1; i >= 0; i--)
+                if (rc.Tabs[i].Id == ToolsTabId || rc.Tabs[i].Id == SettingsTabId) rc.Tabs.RemoveAt(i);
+            try { BuildRibbon(); Say("ribbon built."); }
+            catch (System.Exception ex) { Say("ribbon build error: " + ex.GetType().Name + ": " + ex.Message + (ex.InnerException != null ? " / " + ex.InnerException.Message : "")); }
         }
 
         private void BuildRibbon()
@@ -47,8 +83,8 @@ namespace HCW.AutoCAD.Plugin.UI
             foreach (RibbonTab existing in rc.Tabs)
                 if (existing.Id == ToolsTabId) return; // already built (e.g. NETLOAD run twice)
 
+            // Build everything first and add the tabs last, so a failure in one panel leaves no half-built tab behind.
             var toolsTab = new RibbonTab { Title = "hcwCAD-KIT", Id = ToolsTabId };
-            rc.Tabs.Add(toolsTab);
             toolsTab.Panels.Add(BuildWallsPanel());
             toolsTab.Panels.Add(BuildStructurePanel());
             toolsTab.Panels.Add(BuildLevelsPanel());
@@ -60,13 +96,14 @@ namespace HCW.AutoCAD.Plugin.UI
             toolsTab.Panels.Add(BuildNotesPanel());
 
             var settingsTab = new RibbonTab { Title = "hcwCAD-KIT Settings", Id = SettingsTabId };
-            rc.Tabs.Add(settingsTab);
             settingsTab.Panels.Add(BuildLayerPanel());
             settingsTab.Panels.Add(BuildLayerChecksPanel());
             settingsTab.Panels.Add(BuildBpltSetupPanel());
             settingsTab.Panels.Add(BuildTextChecksPanel());
             settingsTab.Panels.Add(BuildPluginPanel());
 
+            rc.Tabs.Add(toolsTab);
+            rc.Tabs.Add(settingsTab);
             rc.ActiveTab = toolsTab;
         }
 
