@@ -139,7 +139,7 @@ The ribbon uses one panel. It does not ask you to pick Metric, Feet, or Inches �
 4. Draw a closed rectangle on the corners you picked (unless rectangle drawing is off) and three centred text lines: room name, width × height, and `Area: …`.
 5. Save the room in the drawing's room log, used by the schedule, table and total commands.
 
-Text height, floor prefix, and the rectangle toggle are on the Room Labels panel. `RAREA` labels the area of a selected polyline at its centre. `RTAG` replaces the text of one existing TEXT object. The new name is upper case, and includes the floor prefix when one is set.
+Text height, floor prefix, and the rectangle toggle are on the Rooms & Areas panel. `RAREA` labels the area of a selected polyline at its centre. `RTAG` replaces the text of one existing TEXT object. The new name is upper case, and includes the floor prefix when one is set.
 
 The old per-unit commands (`MBR`, `FBR`, `IBR`, and the rest) are removed. Use `ROOM`.
 
@@ -147,7 +147,7 @@ The old per-unit commands (`MBR`, `FBR`, `IBR`, and the rest) are removed. Use `
 
 The tools were called Measure in earlier versions. Only the display names changed: the commands (`MLIN`, `MBRK`, `MPAINT`, `MSCHED`, …), the `MEASURE-*` layers and the data stored in drawings keep their names.
 
-The **TakeOff** panel starts with **Start**, then one button for each element. There is no unit dropdown and no element dropdown.
+The **Take-off** panel starts with **Start**, then one button for each element. There is no unit dropdown and no element dropdown.
 
 1. **Start** (`TOSTART`, also registered as `MSETUP`) reads the drawing units and creates the take-off layers. It asks only when `INSUNITS` is unset, then stores millimetres or metres on the drawing. Later take-off commands use that and do not ask again. Label text is about 125 mm. An opening is matched to a wall when it lies within about 10 mm.
 2. Draw each element on its layer. Draw openings on `MEASURE-DEDUCT`.
@@ -300,7 +300,7 @@ Commands that did closely related jobs share a button, and the command asks whic
 
 ### Walls, doors, windows, axis grid and columns
 
-These tools are on the **Walls & Openings** panel of the hcwCAD-KIT tab. They draw plan geometry that the auto-dimension and take-off tools already read. Draw in a UCS whose Z axis is the world Z.
+These tools are on the **Walls & Openings** and **Structure** panels of the hcwCAD-KIT tab (walls, doors, windows, hatch and the opening schedule on the first; grid, columns, handrail, stairs, lift and escalator on the second). They draw plan geometry that the auto-dimension and take-off tools already read. Draw in a UCS whose Z axis is the world Z.
 
 | Command | What it does |
 |---|---|
@@ -348,7 +348,7 @@ The **Symbols** panel (hcwCAD-KIT tab) draws symbols sized for the sheet. Each c
 
 ### Area statement (`HCWAREASTMT`)
 
-The **Area Statement** button (Area & Text panel) builds the building permit area statement and fills the title block. Run it from any tab; it switches to Model to select and switches back. Areas are in square metres whatever the drawing units.
+The **Area Statement** button (Rooms & Areas panel) builds the building permit area statement and fills the title block. Run it from any tab; it switches to Model to select and switches back. Areas are in square metres whatever the drawing units.
 
 1. Select the **site boundary** (a closed polyline; Enter skips it, and then the floor area ratio and ground cover are not worked out).
 2. Give the **number of floors** (1 to 12) and a name for each (defaults GROUND, FIRST, SECOND …).
@@ -575,6 +575,48 @@ Settings (see `HCWSETTINGS`): the default block names, `ElectricalColumns`, the 
 
 ---
 
+### Levels and sections
+
+Floor to floor height, ceiling height, lintel bottom and slab thickness for each floor are kept in the drawing with the take-off book (record `HCW_MEASURE`), on the **Floors** tab of `MSCHED`. `HCWLEVELS` lists them. One set of figures serves:
+
+* `HCWSECTIONDRAW` draws a building section along a line you pick: the walls and columns it cuts (on the wall and column layers), slabs under each floor and on the roof, openings cut at their sill and head with a lintel band above, and a level text per floor. Drawn 1:1 on the section layer (`BP-SECTION` when permit layers are on). Floors: all (plan repeated) or one.
+* `AECSTAIR` takes its FFL to FFL height from the first floor the first time it runs in a drawing.
+* `HCWDOOR` and `HCWWINDOW` default their heights to the first floor's lintel bottom the first time they run in a drawing.
+* `HCWOPENHEIGHT` applies the same levels to doors and windows already drawn.
+* Columns are drawn full height in the section (floor to the slab above). Column heights are kept in the column schedule (see Column table and quantities).
+
+### Take-off lines with walls
+
+`HCWWALL` also draws each wall's centre line on the take-off layer (`MEASURE-LINEAR`), tagged with the wall's ID, so `MLIN`, `MBRK` and the wall paint take-off find it with no hand-drawn lines. Doors and windows made by the tools already carry their `MEASURE-DEDUCT` line. `HCWWALLEDIT` and a rebuild redraw the line with the wall. Walls adopted with `HCWWALLADOPT` get no line (they may already have your own). Settings: `WallMeasureLines` (0 turns it off) and `WallMeasureLayer` (`MEASURE-FULLBRICK`, `MEASURE-HALFBRICK`, `MEASURE-BEAM`, `MEASURE-LINTEL`). A line sits on the wall's drawn centre line, so with Left or Right line position it follows that edge.
+
+### Linked elements
+
+* `HCWCOLSCHED` also writes the column marks and sizes into the take-off book (MSCHED, Columns tab).
+* `HCWROOMWALLS` and the `ROOM` rectangles also draw the room outline on `MEASURE-FLOOR` and `MEASURE-CEILING`, ready for `MFLOOR` and `MCEIL` (setting `RoomMeasureOutlines`, 1 by default).
+* `HCWLIFT` section takes the number of floors and floor to floor height from the levels the first time it runs in a drawing.
+* Wall paint (`MPAINT`) already offers the ceiling heights of the floors in the levels.
+
+### Ribbon layout (hcwCAD-KIT tab)
+
+Walls & Openings; Structure (grid, columns, handrail, stairs, lift, escalator); Levels & Sections; Rooms & Areas (room labels, rooms from walls, poly area, area statement, room report); Take-off; Electrical; Symbols; Drawing & Text Tools; Notes. The Settings tab keeps layers, layer checks, BPLT, text checks and the plugin file.
+
+### Column table and quantities
+
+The column schedule is a table you can fill in: `HCWCOLQTY` > Edit opens the Columns tab of `MSCHED` with Mark, Width, Depth (0 = round, Width is the diameter), Name, Count, Height and Floor. `HCWCOLSCHED` fills in the sizes from the drawing and keeps any height or floor you entered for the same size. A height of 0 is worked out from the levels: floor to floor less the slab above (the roof slab for the top floor). `HCWCOLQTY` > Quantities gives concrete (section x height x number) and shuttering (perimeter x height x number) for each line and the total, saves them as the take-off "Columns" (written by `MEXPORT`) and can draw them as a table.
+
+### Stairs
+
+RCC stairs take the waist slab thickness as an input (`AECSTAIR`, `AECSTAIREDIT`, `AECSTAIRQTY`). The quantities (waist, steps and landing concrete, shuttering, finishes) and the bar estimate are saved as take-offs "Stair ST-nn" and "Stair ST-nn bars".
+
+### Lintels
+
+`HCWDOOR`, `HCWWINDOW` and everything that re-cuts an opening (move, slide, replace, convert, wall edit) now draw a lintel over each opening: a line on `MEASURE-LINTEL` as long as the opening plus the bearing at each end, which `MBML` measures as a concrete lintel, and a dashed outline as wide as the wall on `A-LINTEL`. They are tagged with the opening's centre and removed or redrawn with it. Settings: `LintelAuto` (0 turns it off) and `LintelBearingMm` (230). Openings cut before this version have no lintel; move or replace them to get one. The lintel depth and bottom height come from the levels and the opening's own LINTEL figure, not from the plan.
+
+### Window numbers and wall hatch
+
+* Windows are tagged `<window code>/<number>`, such as `W1/3`: the code is the window's mark in the opening schedule (windows of the same width, height and sill share a code; a new size gets the next free code and is added to the schedule at once) and the number counts the windows of that code. Setting `WindowTagFormat` changes the pattern (`{code}/{no}`). Doors keep `D1`, `D2` … . Replacing a window with a different size gives it a new code and number.
+* `HCWWALL` hatches the walls: all walls are joined into one shape, doors and windows are cut out of it, and it is hatched on `A-WALL-HATCH`. The hatch is redrawn when walls are drawn, edited or rebuilt and after every door and window command. Settings: `WallHatch` (0 turns it off), `WallHatchPattern` (ANSI31), `WallHatchSpacingMm` (60). It is not tied to the outlines, so after moving walls by hand run `HCWWALLHATCH` (Refresh Hatch on the Walls & Openings panel) to redraw it.
+
 ## hcwCAD-KIT Settings
 
 ### Layers
@@ -714,46 +756,3 @@ src/
 hcwCAD-KIT is released under the MIT License. See [LICENSE](LICENSE).
 
 The ribbon icons are IBM Carbon Design System artwork, included under the Apache License 2.0. That license applies to the icon files only. The rest of this repository is MIT.
-
-
-## Levels and sections
-
-Floor to floor height, ceiling height, lintel bottom and slab thickness for each floor are kept in the drawing with the take-off book (record `HCW_MEASURE`), on the **Floors** tab of `MSCHED`. `HCWLEVELS` lists them. One set of figures serves:
-
-* `HCWSECTIONDRAW` draws a building section along a line you pick: the walls and columns it cuts (on the wall and column layers), slabs under each floor and on the roof, openings cut at their sill and head with a lintel band above, and a level text per floor. Drawn 1:1 on the section layer (`BP-SECTION` when permit layers are on). Floors: all (plan repeated) or one.
-* `AECSTAIR` takes its FFL to FFL height from the first floor the first time it runs in a drawing.
-* `HCWDOOR` and `HCWWINDOW` default their heights to the first floor's lintel bottom the first time they run in a drawing.
-* `HCWOPENHEIGHT` applies the same levels to doors and windows already drawn.
-* Columns are drawn full height in the section (floor to the slab above). Column height is not stored on the plan block.
-
-## Take-off lines with walls
-
-`HCWWALL` also draws each wall's centre line on the take-off layer (`MEASURE-LINEAR`), tagged with the wall's ID, so `MLIN`, `MBRK` and the wall paint take-off find it with no hand-drawn lines. Doors and windows made by the tools already carry their `MEASURE-DEDUCT` line. `HCWWALLEDIT` and a rebuild redraw the line with the wall. Walls adopted with `HCWWALLADOPT` get no line (they may already have your own). Settings: `WallMeasureLines` (0 turns it off) and `WallMeasureLayer` (`MEASURE-FULLBRICK`, `MEASURE-HALFBRICK`, `MEASURE-BEAM`, `MEASURE-LINTEL`). A line sits on the wall's drawn centre line, so with Left or Right line position it follows that edge.
-
-## Linked elements
-
-* `HCWCOLSCHED` also writes the column marks and sizes into the take-off book (MSCHED, Columns tab).
-* `HCWROOMWALLS` and the `ROOM` rectangles also draw the room outline on `MEASURE-FLOOR` and `MEASURE-CEILING`, ready for `MFLOOR` and `MCEIL` (setting `RoomMeasureOutlines`, 1 by default).
-* `HCWLIFT` section takes the number of floors and floor to floor height from the levels the first time it runs in a drawing.
-* Wall paint (`MPAINT`) already offers the ceiling heights of the floors in the levels.
-
-## Ribbon layout (hcwCAD-KIT tab)
-
-Walls & Openings; Structure (grid, columns, handrail, stairs, lift, escalator); Levels & Sections; Rooms & Areas (room labels, rooms from walls, poly area, area statement, room report); Take-off; Electrical; Symbols; Drawing & Text Tools; Notes. The Settings tab keeps layers, layer checks, BPLT, text checks and the plugin file.
-
-## Column table and quantities
-
-The column schedule is a table you can fill in: `HCWCOLQTY` > Edit opens the Columns tab of `MSCHED` with Mark, Width, Depth (0 = round, Width is the diameter), Name, Count, Height and Floor. `HCWCOLSCHED` fills in the sizes from the drawing and keeps any height or floor you entered for the same size. A height of 0 is worked out from the levels: floor to floor less the slab above (the roof slab for the top floor). `HCWCOLQTY` > Quantities gives concrete (section x height x number) and shuttering (perimeter x height x number) for each line and the total, saves them as the take-off "Columns" (written by `MEXPORT`) and can draw them as a table.
-
-## Stairs
-
-RCC stairs take the waist slab thickness as an input (`AECSTAIR`, `AECSTAIREDIT`, `AECSTAIRQTY`). The quantities (waist, steps and landing concrete, shuttering, finishes) and the bar estimate are saved as take-offs "Stair ST-nn" and "Stair ST-nn bars".
-
-## Lintels
-
-`HCWDOOR`, `HCWWINDOW` and everything that re-cuts an opening (move, slide, replace, convert, wall edit) now draw a lintel over each opening: a line on `MEASURE-LINTEL` as long as the opening plus the bearing at each end, which `MBML` measures as a concrete lintel, and a dashed outline as wide as the wall on `A-LINTEL`. They are tagged with the opening's centre and removed or redrawn with it. Settings: `LintelAuto` (0 turns it off) and `LintelBearingMm` (230). Openings cut before this version have no lintel; move or replace them to get one. The lintel depth and bottom height come from the levels and the opening's own LINTEL figure, not from the plan.
-
-## Window numbers and wall hatch
-
-* Windows are tagged `<window code>/<number>`, such as `W1/3`: the code is the window's mark in the opening schedule (windows of the same width, height and sill share a code; a new size gets the next free code and is added to the schedule at once) and the number counts the windows of that code. Setting `WindowTagFormat` changes the pattern (`{code}/{no}`). Doors keep `D1`, `D2` … . Replacing a window with a different size gives it a new code and number.
-* `HCWWALL` hatches the walls: all walls are joined into one shape, doors and windows are cut out of it, and it is hatched on `A-WALL-HATCH`. The hatch is redrawn when walls are drawn, edited or rebuilt and after every door and window command. Settings: `WallHatch` (0 turns it off), `WallHatchPattern` (ANSI31), `WallHatchSpacingMm` (60). It is not tied to the outlines, so after moving walls by hand run `HCWWALLHATCH` (Refresh Hatch on the Walls & Openings panel) to redraw it.
