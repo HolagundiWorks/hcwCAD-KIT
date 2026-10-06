@@ -106,13 +106,7 @@ namespace HCW.AutoCAD.Plugin.Logic
                 if (s.Kind == StairKind.L)
                 {
                     Rect(d, L1, 0, L1 + LL, W, "PLAN");                                    // landing, or the winder square
-                    if (s.HasWinders)
-                    {
-                        // kite winders: lines at 30 and 60 degrees from the inner corner divide the quarter turn into three treads
-                        double tan30 = Math.Tan(Math.PI / 6);
-                        Seg(d, L1, W, L1 + W * tan30, 0, "TREAD");
-                        Seg(d, L1, W, L1 + W, W - W * tan30, "TREAD");
-                    }
+                    if (s.HasWinders) WinderLines(d, L1, WinderLayout.Build(W, 0, false));
                     double u0 = L1 + LL - W;
                     Rect(d, u0, W, u0 + W, W + L2, "PLAN");                                 // flight 2, turned
                     for (int k = 1; k <= r2 - 2; k++) Seg(d, u0, W + k * G, u0 + W, W + k * G, "TREAD");
@@ -127,7 +121,7 @@ namespace HCW.AutoCAD.Plugin.Logic
                 else
                 {
                     Rect(d, L1, 0, L1 + LL, LW, "PLAN");                                   // landing across both flights, or the winder zone
-                    if (s.HasWinders) WinderLinesU(d, L1, W, well, c.WinderGoing);
+                    if (s.HasWinders) WinderLines(d, L1, WinderLayout.Build(W, well, true));
                     Rect(d, L1 - L2, W + well, L1, LW, "PLAN");                            // flight 2, returning
                     for (int k = 1; k <= r2 - 2; k++) Seg(d, L1 - k * G, W + well, L1 - k * G, LW, "TREAD");
                     if (s.Nosing > 0)
@@ -161,41 +155,10 @@ namespace HCW.AutoCAD.Plugin.Logic
             return d;
         }
 
-        /// <summary>
-        /// The lines between the six winders of a U stair, in the zone one stair width long beyond the first flight. The walkline runs a quarter circle
-        /// of radius W/2 round the inner corner of the first flight, straight across the well, then a quarter circle round the inner corner of the second
-        /// flight; it is divided into six equal goings and each division line is drawn square to it, from the inner corner (in the bends) to the outer edge.
-        /// </summary>
-        private static void WinderLinesU(GDrawing d, double L1, double W, double well, double going)
+        /// <summary>The lines between the winders, from the layout, moved to where the zone starts along the first flight.</summary>
+        private static void WinderLines(GDrawing d, double L1, WinderLayout layout)
         {
-            double a = Math.PI * W / 4;                       // one quarter circle on the walkline
-            for (int i = 1; i <= 5; i++)
-            {
-                double sd = i * going;
-                if (sd <= a + 1e-9)
-                {
-                    double phi = sd / (W / 2);
-                    double sx = Math.Sin(phi), cy = Math.Cos(phi);
-                    double t = double.MaxValue;
-                    if (sx > 1e-9) t = Math.Min(t, W / sx);
-                    if (cy > 1e-9) t = Math.Min(t, W / cy);
-                    Seg(d, L1, W, L1 + sx * t, W - cy * t, "TREAD");
-                }
-                else if (sd >= a + well - 1e-9)
-                {
-                    double psi = (sd - a - well) / (W / 2);
-                    double cx = Math.Cos(psi), sy = Math.Sin(psi);
-                    double t = double.MaxValue;
-                    if (cx > 1e-9) t = Math.Min(t, W / cx);
-                    if (sy > 1e-9) t = Math.Min(t, W / sy);
-                    Seg(d, L1, W + well, L1 + cx * t, W + well + sy * t, "TREAD");
-                }
-                else
-                {
-                    double v = W + (sd - a);
-                    Seg(d, L1, v, L1 + W, v, "TREAD");
-                }
-            }
+            foreach (var l in layout.Lines) Seg(d, L1 + l.A.X, l.A.Y, L1 + l.B.X, l.B.Y, "TREAD");
         }
 
         /// <summary>"9 x 270 = 2430": treads, going, and the length they make.</summary>

@@ -53,18 +53,25 @@ namespace HCW.AutoCAD.Plugin.Logic
 
             if (s.HasWinders)
             {
-                // the winders are their treads and one fewer risers on one slab one stair width wide, at their going on the walkline
+                // The winders are worked from their real plan shape: the treads are the kite-shaped pieces between the dividing lines, so the slab, the
+                // soffit and the finishes use the zone's true area, and each riser is as wide as its dividing line is long.
                 int nw = s.WinderTreads;
-                double gw = c.WinderGoing * mm;
-                double slope = Math.Sqrt(nw * gw * nw * gw + (nw - 1) * rise * (nw - 1) * rise);
-                double stepArea = 0.5 * gw * rise * (nw - 1);
-                q.WaistConcrete += width * waist * slope;
-                q.StepsConcrete += stepArea * width;
-                q.Soffit += width * slope;
-                q.FlightSides += 2.0 * (waist * slope + stepArea);
-                q.RiserShuttering += width * rise * (nw - 1);
-                q.TreadFinish += width * gw * nw;
-                q.RiserFinish += width * rise * (nw - 1);
+                var wl = WinderLayout.Build(s.Width, s.WellWidth, s.Kind == StairKind.U);
+                const double m2 = 1e-6;
+                double zone = wl.ZoneArea * m2;
+                double run = nw * c.WinderGoing * mm, height = (nw - 1) * rise;
+                double pitchFactor = Math.Sqrt(run * run + height * height) / run;     // slope length per unit of plan run along the walkline
+                double stepVolume = 0;
+                for (int k = 1; k < nw; k++) stepVolume += 0.5 * rise * wl.TreadAreas[k] * m2;
+                double risers = wl.RiserLengths.Sum() * mm;
+                double slope = Math.Sqrt(run * run + height * height);
+                q.WaistConcrete += zone * waist * pitchFactor;
+                q.StepsConcrete += stepVolume;
+                q.Soffit += zone * pitchFactor;
+                q.FlightSides += 2.0 * (waist * slope + 0.5 * c.WinderGoing * mm * rise * (nw - 1));
+                q.RiserShuttering += risers * rise;
+                q.TreadFinish += zone;
+                q.RiserFinish += risers * rise;
             }
             else if (s.TwoFlights)
             {

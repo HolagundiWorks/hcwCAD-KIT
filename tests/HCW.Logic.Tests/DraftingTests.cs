@@ -2069,7 +2069,8 @@ namespace HCW.Logic.Tests
             var flat = StairQuantities.Compute(L(false), StairCalc.Calculate(L(false)));
             Assert.True(flat.LandingConcrete > 0);
             double gw = c.WinderGoing / 1000;
-            double zoneSlope = Math.Sqrt(9 * gw * gw + 4 * 0.15 * 0.15);
+            // the zone is the true 1.2 m x 1.2 m square, laid out at the slope of the walkline
+            double zoneSlope = Math.Sqrt(9 * gw * gw + 4 * 0.15 * 0.15) / (3 * gw) * 1.2;
             double flights = 0;
             for (int i = 0; i < 2; i++)
             {
@@ -2077,6 +2078,7 @@ namespace HCW.Logic.Tests
                 flights += 1.2 * 0.15 * Math.Sqrt(run * run + h * h);
             }
             Assert.Equal(flights + 1.2 * 0.15 * zoneSlope, q.WaistConcrete, 9);
+            Assert.Equal(1.2 * 0.25 * (c.FlightTreads[0] + c.FlightTreads[1]) + 1.44, q.TreadFinish, 9);          // the winder treads add the whole square
             var bars = StairRebar.Compute(s, c, new RebarOptions());
             Assert.Contains(bars, b => b.Mark == "MW");
             Assert.Contains(bars, b => b.Mark == "DW");
@@ -3075,7 +3077,7 @@ namespace HCW.Logic.Tests
             var q = StairQuantities.Compute(s, c);
             Assert.Equal(0, q.LandingConcrete);
             double finish = q.TreadFinish;
-            double expectedTreads = 1.2 * 0.25 * (c.FlightTreads[0] + c.FlightTreads[1]) + 1.2 * (c.WinderGoing / 1000) * 6;
+            double expectedTreads = 1.2 * 0.25 * (c.FlightTreads[0] + c.FlightTreads[1]) + 1.2 * (2 * 1.2 + 0.3);
             Assert.Equal(expectedTreads, finish, 6);
             var rows = StairRebar.Compute(s, c, new RebarOptions());
             Assert.Contains(rows, r => r.Mark == "MW");
@@ -3196,6 +3198,36 @@ namespace HCW.Logic.Tests
             Assert.Equal("4200", RoomTable.ToRows(rows, true)[0][2]);
             Assert.Equal(8, RoomTable.Headers("m").Length);
             Assert.Equal(RoomTable.Headers("m").Length, m[0].Length);
+        }
+    }
+
+    public class WinderLayoutTests
+    {
+        [Fact]
+        public void AnLsThreeTreadsAreTheKiteAreasAndFillTheSquare()
+        {
+            var l = WinderLayout.Build(1200, 0, false);
+            double w2 = 1200.0 * 1200;
+            Assert.Equal(0.5 * Math.Tan(Math.PI / 6), l.TreadAreas[0] / w2, 9);
+            Assert.Equal(l.TreadAreas[0], l.TreadAreas[2], 6);
+            Assert.True(l.TreadAreas[1] > l.TreadAreas[0]);
+            Assert.Equal(w2, l.TreadAreas.Sum(), 4);
+            Assert.Equal(2, l.Lines.Count);
+            Assert.All(l.RiserLengths, r => Assert.Equal(1200 / Math.Cos(Math.PI / 6), r, 6));
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(150)]
+        [InlineData(900)]
+        public void AUsSixTreadsFillTheZoneAndMirror(double well)
+        {
+            var l = WinderLayout.Build(1200, well, true);
+            Assert.Equal(6, l.TreadAreas.Length);
+            Assert.Equal(1200.0 * (2400 + well), l.TreadAreas.Sum(), 3);
+            for (int k = 0; k < 3; k++) Assert.Equal(l.TreadAreas[k], l.TreadAreas[5 - k], 3);
+            Assert.Equal(5, l.Lines.Count);
+            Assert.Equal((Math.PI * 1200 / 2 + well) / 6, l.WalklineGoing, 9);
         }
     }
 }
