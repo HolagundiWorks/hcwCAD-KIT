@@ -66,4 +66,4 @@ Output: `src\HCW.AutoCAD.Plugin\bin\x64\Release\hcwCAD-KIT.dll`. Close and reope
 2. Run each new command on a real drawing and fix what breaks. Start with `SHEETFIT`, `HCWWALL` (hatch, measurement line), door and window insert (lintel, `W1/3` tags, schedule sync), `HCWAXIS`, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWSECTIONDRAW`, `HCWCOLQTY`, `MQTYSUM`. If the wall hatch or lintels cause trouble, settings `WallHatch`, `LintelAuto`, `WallMeasureLines` and `OpeningAutoSync` can be set to 0 to switch each off.
 3. Build and test the BricsCAD and ZWCAD projects (they need the host API DLLs).
 4. Build the installers with `build\Package-Installers.ps1` (Inno Setup 6 required) and test one install.
-5. Set the bylaw figures listed in the ROADMAP from the real rules.
+5. Bylaw scrutiny is handled by separate software, so there are no bylaw figures to set: the plugin's job is to put items on the building permit layers (`HCWPERMITLAYERS`, `LayerOutput`). Check on a real drawing that each tool's output lands on the right `BP-` layer for that software to read.
