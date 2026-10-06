@@ -101,7 +101,7 @@ namespace HCW.AutoCAD.Plugin
             Entry("WallMeasureLayer", "MEASURE-LINEAR", "HCWWALL: the take-off layer the wall's measurement line goes on (MEASURE-LINEAR, MEASURE-FULLBRICK, MEASURE-HALFBRICK, MEASURE-BEAM or MEASURE-LINTEL)."),
             Entry("OpeningAutoSync", "1", "Doors and windows: 1 updates the opening schedule (the one MSCHED and the take-off use) after HCWDOOR, HCWWINDOW and the opening edit commands; 0 leaves it to HCWOPENSYNC."),
             Entry("RoomMeasureOutlines", "1", "Rooms: 1 also draws each room outline on MEASURE-FLOOR and MEASURE-CEILING, so MFLOOR and MCEIL read the rooms; 0 leaves them out."),
-            Entry("LintelAuto", "1", "Doors and windows: 1 draws a lintel over each opening (a line on MEASURE-LINTEL for MBML and a dashed outline on A-LINTEL); 0 leaves it out."),
+            Entry("LintelAuto", "0", "Doors and windows: 1 also draws a lintel over every new opening without asking (a line on MEASURE-LINTEL for MBML and a dashed outline on A-LINTEL); 0 (the default) draws one only when you run HCWLINTEL."),
             Entry("LintelBearingMm", "230", "Lintels: the bearing on the wall at each end of the opening, in millimetres."),
             Entry("WallHatch", "1", "HCWWALL: 1 hatches the walls (all walls joined, doors and windows cut out) on A-WALL-HATCH and redraws it as walls and openings change; 0 turns it off."),
             Entry("WallHatchPattern", "ANSI31", "Wall hatch: the pattern name (ANSI31, ANSI37, SOLID ...)."),

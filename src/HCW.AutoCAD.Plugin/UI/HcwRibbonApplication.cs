@@ -303,6 +303,7 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWDOOR", "Door", "home", "Cut a door in a wall: pick the position and the side it opens to");
             AddLarge(src, "HCWWINDOW", "Window", "view", "Cut a window in a wall: pick the position");
             AddLarge(src, "HCWOPENMOVE", "Edit\nOpening", "move", "Move, slide, replace, convert or set heights of doors and windows, or sync the opening schedule from the blocks");
+            AddLarge(src, "HCWLINTEL", "Generate\nLintel", "rule", "Draw a lintel through the wall over the doors and windows you select (opening plus bearing at each end, the full wall thickness); or remove it");
             AddLarge(src, "HCWOPENSCHED", "Opening\nSchedule", "table-of-contents", "Bring the door and window schedule up to date from the blocks and draw it as a table; the take-off deducts the same entries");
             return Wrap(src);
         }

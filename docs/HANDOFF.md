@@ -22,7 +22,7 @@ The bylaw tables and limits: `AreaExemptRules`, `AreaPermTable`, `AreaZone`, `Ar
 
 - Levels kept in the drawing with slab thickness (`HCWLEVELS`), `HCWSECTIONDRAW`, `HCWOPENHEIGHT`, `HCWOPENCONVERT`; stairs, lift, doors and windows default their heights from the levels.
 - Opening schedule on the Walls & Openings panel (`HCWOPENSCHED`), updated automatically after the door and window commands (`OpeningAutoSync`).
-- Walls draw a take-off line (`WallMeasureLines`), a wall hatch (`HCWWALLHATCH`, `WallHatch`), and every opening gets a lintel (`LintelAuto`). Windows are tagged `code/number`.
+- Walls draw a take-off line (`WallMeasureLines`), a wall hatch (`HCWWALLHATCH`, `WallHatch`), and a lintel through the wall on request (`HCWLINTEL`; `LintelAuto` = 1 makes one for every opening). Windows are tagged `code/number`.
 - Column table with height and floor, `HCWCOLQTY`; `MQTYSUM` adds stair and column concrete and shuttering; room outlines also go on the floor and ceiling take-off layers (`RoomMeasureOutlines`).
 - `ELSCHEDULE` Room layout; `HCWLEVEL` Levels option; `HCWAREASTMT` takes floors from the levels and can reuse the outlines of the floor before.
 - Auto dimension reads single-line walls at any angle (faces only reach the wall-segment dimensions; chains and gap openings stay horizontal and vertical).
@@ -68,7 +68,7 @@ Output: `src\HCW.AutoCAD.Plugin\bin\x64\Release\hcwCAD-KIT.dll`. Close and reope
 ## What to do next
 
 1. Load the build in AutoCAD; if the ribbon does not appear, read the command line message or run `HCWRIBBON` (above).
-2. Follow [TESTING.md](TESTING.md) (an ordered checklist with what to expect and what to send back) and fix what breaks. Start with `SHEETFIT`, `HCWWALL` (hatch, measurement line), door and window insert (lintel, `W1/3` tags, schedule sync), `HCWAXIS`, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWSECTIONDRAW`, `HCWCOLQTY`, `MQTYSUM`. If the wall hatch or lintels cause trouble, settings `WallHatch`, `LintelAuto`, `WallMeasureLines` and `OpeningAutoSync` can be set to 0 to switch each off.
+2. Follow [TESTING.md](TESTING.md) (an ordered checklist with what to expect and what to send back) and fix what breaks. Start with `SHEETFIT`, `HCWWALL` (hatch, measurement line), door and window insert (lintel, `W1/3` tags, schedule sync), `HCWAXIS`, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWSECTIONDRAW`, `HCWCOLQTY`, `MQTYSUM`. If the wall hatch or lintels cause trouble, settings `WallHatch`, `WallMeasureLines` and `OpeningAutoSync` can be set to 0 to switch each off.
 3. Build and test the BricsCAD and ZWCAD projects (they need the host API DLLs).
 4. Build the installers with `build\Package-Installers.ps1` (Inno Setup 6 required) and test one install.
 5. Bylaw scrutiny is handled by separate software, so there are no bylaw figures to set: the plugin's job is to put items on the building permit layers (`HCWPERMITLAYERS`, `LayerOutput`). Check on a real drawing that each tool's output lands on the right `BP-` layer for that software to read.

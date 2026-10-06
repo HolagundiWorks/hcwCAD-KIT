@@ -203,7 +203,9 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
             tag = tagOverride ?? (door ? NextTag(tr, space, "D") : WindowTag(tr, db, space, widthMm, par.HeightMm, par.SillMm));
             InsertBlock(tr, space, blockName, new Point3d(place.Origin.X, place.Origin.Y, z), place.Angle, place.Sx, place.Sy, door ? LayerDoor : LayerWin, par);
-            AddLintel(tr, db, space, (p1a + p1b + p2a + p2b) * 0.25, plan.Dir, w, plan.Thickness, z);
+            // A lintel is made on request (HCWLINTEL), or automatically when LintelAuto = 1. An opening that had one keeps it when it is moved or re-cut.
+            if (Settings.GetInt("LintelAuto", 0) != 0 || (tagOverride != null && LintelTags.Remove(tag)))
+                AddLintel(tr, db, space, (p1a + p1b + p2a + p2b) * 0.25, plan.Dir, w, plan.Thickness, z);
 
             Util.EnsureHcwLayer(tr, db, LayerTag);
             var text = new DBText
@@ -438,7 +440,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             var c = info.Corners;
             double h = Util.MmToDrawingUnits(TagHeightMm);
 
-            EraseLintel(tr, space, (c.FaceAStart + c.FaceAEnd + c.FaceBStart + c.FaceBEnd) * 0.25, 10 * mm);
+            bool hadLintel = EraseLintel(tr, space, (c.FaceAStart + c.FaceAEnd + c.FaceBStart + c.FaceBEnd) * 0.25, 10 * mm);
 
             string wallLayer = null;
             var pairs = new[] { new[] { c.FaceAStart, c.FaceBStart }, new[] { c.FaceAEnd, c.FaceBEnd } };
@@ -507,6 +509,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             }
 
             string tag = tagText?.TextString;
+            if (hadLintel && tag != null) LintelTags.Add(tag);
             if (tagText != null) { tagText.UpgradeOpen(); tagText.Erase(); }
             if (!info.Id.IsNull)
             {
@@ -543,11 +546,12 @@ namespace HCW.AutoCAD.Plugin.Commands
         private void MoveOpeningCore()
         {
             var ed = Util.Ed;
-            string job = Util.AskMode("Edit openings", "Move", "Slide", "Replace", "Convert", "Heights", "Sync");
+            string job = Util.AskMode("Edit openings", "Move", "Slide", "Replace", "Convert", "Heights", "Lintel", "Sync");
             if (job == null) return;
             if (job == "Slide") { SlideOpening(); return; }
             if (job == "Convert") { ConvertBlocks(); return; }
             if (job == "Heights") { SetHeights(); return; }
+            if (job == "Lintel") { GenerateLintel(); return; }
             if (job == "Replace") { ReplaceOpening(); return; }
             if (job == "Sync") { SyncSchedule(); return; }
             int skipped;
@@ -794,6 +798,48 @@ namespace HCW.AutoCAD.Plugin.Commands
                 tr.Commit();
             }
             ed.WriteMessage("\nHCWOPENCONVERT: " + infos.Count + " block(s) replaced. Run HCWOPENSYNC to fill the door and window schedule.");
+        }
+
+        /// <summary>
+        /// Generate lintel: select doors and windows (made by the tools) and a lintel is drawn through the wall over each: a line on MEASURE-LINTEL
+        /// as long as the opening plus the bearing at each end, and a dashed outline as wide as the whole wall. The wall is not cut or changed.
+        /// Choose Remove to take the lintels off the selected openings. An opening that has one is redrawn, never doubled.
+        /// </summary>
+        [CommandMethod("HCWLINTEL")]
+        public void GenerateLintel()
+        {
+            var ed = Util.Ed;
+            var ko = new PromptKeywordOptions("\nLintel [Generate/Remove] <Generate>: ", "Generate Remove") { AllowNone = true };
+            ko.Keywords.Default = "Generate";
+            var kr = ed.GetKeywords(ko);
+            if (kr.Status != PromptStatus.OK && kr.Status != PromptStatus.None) return;
+            bool remove = kr.Status == PromptStatus.OK && kr.StringResult == "Remove";
+            int skipped;
+            var infos = SelectOpenings(ed, "\nSelect the doors and windows to " + (remove ? "remove the lintel from" : "generate a lintel for") + " (Enter to pick a gap in the wall): ", out skipped);
+            if (infos == null) return;
+            if (infos.Count == 0) { ed.WriteMessage("\nHCWLINTEL: none of that is a door or window made by the tools."); return; }
+            if (skipped > 0) ed.WriteMessage("\n" + skipped + " other object(s) skipped.");
+            double mm = Util.MmToDrawingUnits(1.0);
+            int done = 0;
+            using (Util.Doc.LockDocument())
+            using (var tr = Util.Db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(Util.Db.CurrentSpaceId, OpenMode.ForWrite);
+                foreach (var i in infos)
+                {
+                    var c = i.Corners;
+                    var centre = (c.FaceAStart + c.FaceAEnd + c.FaceBStart + c.FaceBEnd) * 0.25;
+                    EraseLintel(tr, space, centre, 10 * mm);
+                    if (!remove)
+                    {
+                        var dir = c.FaceAEnd - c.FaceAStart;
+                        AddLintel(tr, Util.Db, space, centre, dir, dir.Length, i.ThicknessMm * mm, i.Z);
+                    }
+                    done++;
+                }
+                tr.Commit();
+            }
+            ed.WriteMessage("\nHCWLINTEL: lintel " + (remove ? "removed from " : "generated for ") + done + " opening(s)" + (remove ? "." : ", through the full wall thickness with " + Settings.GetDouble("LintelBearingMm", 230) + " mm bearing each end."));
         }
 
         /// <summary>
@@ -1114,7 +1160,6 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// </summary>
         private static void AddLintel(Transaction tr, Database db, BlockTableRecord space, P2 centre, P2 dir, double openingLen, double thickness, double z)
         {
-            if (Settings.GetInt("LintelAuto", 1) == 0) return;
             double bearing = Util.MmToDrawingUnits(Settings.GetDouble("LintelBearingMm", 230));
             var box = LintelGeometry.Outline(centre, dir, openingLen, thickness, bearing);
 
@@ -1146,8 +1191,9 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         /// <summary>Erases the lintel made with an opening (the entities tagged with its centre).</summary>
-        private static void EraseLintel(Transaction tr, BlockTableRecord space, P2 centre, double reach)
+        private static bool EraseLintel(Transaction tr, BlockTableRecord space, P2 centre, double reach)
         {
+            bool erased = false;
             foreach (ObjectId id in space)
             {
                 if (id.ObjectClass.DxfName != "LINE" && id.ObjectClass.DxfName != "LWPOLYLINE") continue;
@@ -1159,8 +1205,13 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (v.Count < 2 || new P2(v[0], v[1]).DistanceTo(centre) > reach) continue;
                 ent.UpgradeOpen();
                 ent.Erase();
+                erased = true;
             }
+            return erased;
         }
+
+        /// <summary>Tags of openings whose lintel was taken off by Heal, so the same tag gets its lintel back when the opening is placed again.</summary>
+        private static readonly HashSet<string> LintelTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// A window's tag is its window code from the schedule and its number among the windows of that code, "W1/3" (setting WindowTagFormat,
