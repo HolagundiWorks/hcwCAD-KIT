@@ -163,3 +163,32 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class QuantitySummaryTests
+    {
+        [Fact]
+        public void StairsAndColumnsAreAddedIntoOneTotal()
+        {
+            var stair = new HCW.AutoCAD.Plugin.Logic.SavedTakeoff { Name = "Stair ST-01" };
+            stair.Rows.Add(new[] { "Concrete - waist slab", "1.000", "m3", "" });
+            stair.Rows.Add(new[] { "CONCRETE TOTAL", "2.500", "m3", "" });
+            stair.Rows.Add(new[] { "SHUTTERING TOTAL", "12.00", "m2", "" });
+            var bars = new HCW.AutoCAD.Plugin.Logic.SavedTakeoff { Name = "Stair ST-01 bars" };
+            bars.Rows.Add(new[] { "CONCRETE TOTAL", "99", "m3", "" });
+            var cols = new HCW.AutoCAD.Plugin.Logic.SavedTakeoff { Name = "Columns", Headers = HCW.AutoCAD.Plugin.Logic.ColumnQuantity.Headers };
+            cols.Rows.Add(new[] { "C1", "230 x 450", "3000", "", "4", "1.242", "8.16" });
+            cols.Rows.Add(new[] { "TOTAL", "", "", "", "4", "1.242", "8.16" });
+            var rows = HCW.AutoCAD.Plugin.Logic.QuantitySummary.Build(new[] { stair, bars, cols });
+            Assert.Equal(3, rows.Count);
+            Assert.Equal("3.742", rows[2][2]); Assert.Equal("20.16", rows[2][3]);
+        }
+
+        [Fact]
+        public void NothingSavedGivesNoRows()
+        {
+            Assert.Empty(HCW.AutoCAD.Plugin.Logic.QuantitySummary.Build(new HCW.AutoCAD.Plugin.Logic.SavedTakeoff[0]));
+        }
+    }
+}

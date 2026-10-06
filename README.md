@@ -767,3 +767,7 @@ The ribbon icons are IBM Carbon Design System artwork, included under the Apache
 ### Area statement floors from the levels
 
 `HCWAREASTMT` offers **Floors from Levels**: when floors are defined on the Floors tab of `MSCHED`, their names (upper case) and number are used instead of typing them, up to twelve. For each floor after the first you can answer **Yes** to "same outlines as the floor before", which reuses its built-up and deduction sources (a repeated floor) instead of picking them again. The floors still name the title block rows and the area table; the saved statement keeps them and refreshes as before.
+
+### Structure summary (`MQTYSUM`)
+
+Adds the concrete and shuttering of every saved stair take-off (`AECSTAIR`, `AECSTAIR` quantities) and the column take-off (`HCWCOLQTY`) into one table (Stairs, Columns, TOTAL), saved as the take-off "Structure summary" for `MEXPORT`. Run the element commands first; stair bar estimates are not included.

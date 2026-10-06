@@ -219,6 +219,7 @@ namespace HCW.AutoCAD.Plugin.UI
                 ("MAREA", "Area", "area", "Closed-shape area and perimeter"),
                 ("MSLAB", "Slab", "floorplan", "Slab area with opening deductions"),
                 ("MSHOW", "Restore Layers", "view", "Turn back on only the layers a take-off command hid"),
+                ("MQTYSUM", "Structure Summary", "report--data", "Add the stair and column concrete and shuttering into one table"),
                 ("MEXPORT", "Export", "document--export", "Save the last take-off as CSV, or every take-off as one Excel workbook"),
                 ("MCLEAR", "Clear Labels", "clean", "Erase take-off label and table objects"));
             return Wrap(src);

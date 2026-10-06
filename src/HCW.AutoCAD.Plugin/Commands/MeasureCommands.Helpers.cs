@@ -436,6 +436,32 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         /// <summary>Saves take-offs: the latest as CSV, or every saved take-off as one Excel workbook.</summary>
+        /// <summary>
+        /// One table of concrete and shuttering for the structural elements already worked out: every stair take-off and the column take-off
+        /// (HCWCOLQTY) added together. Saved as the take-off "Structure summary", so MEXPORT writes it with the others.
+        /// </summary>
+        [CommandMethod("MQTYSUM")]
+        public void QuantitySummaryCommand()
+        {
+            var ed = Util.Ed; var db = Util.Db;
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var saved = MeasureBook.LoadAllTakeoffs(tr, db).Select(t => new HCW.AutoCAD.Plugin.Logic.SavedTakeoff { Name = t.Name, Headers = t.Headers, Rows = t.Rows }).ToList();
+                var rows = HCW.AutoCAD.Plugin.Logic.QuantitySummary.Build(saved);
+                if (rows.Count == 0)
+                {
+                    ed.WriteMessage("\nMQTYSUM: no stair or column quantities saved yet. Run AECSTAIR or AECSTAIRQTY, and HCWCOLQTY, first.");
+                    return;
+                }
+                MeasureBook.SaveTakeoff(tr, db, "Structure summary", HCW.AutoCAD.Plugin.Logic.QuantitySummary.Headers, rows);
+                ed.WriteMessage("\n\nSTRUCTURE SUMMARY");
+                foreach (var r in rows) ed.WriteMessage("\n  " + Util.Pad(r[0], 10) + Util.Pad(r[1], 4) + r[2] + " m3  " + r[3] + " m2");
+                ed.WriteMessage("\n  Saved as the take-off \"Structure summary\"; MEXPORT writes it with the others.");
+                tr.Commit();
+            }
+        }
+
         [CommandMethod("MEXPORT")]
         public void Export()
         {
