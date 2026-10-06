@@ -211,7 +211,7 @@ namespace HCW.AutoCAD.Plugin
         private IEnumerable<string> Serialize()
         {
             foreach (var f in Floors)
-                yield return "F|" + Esc(f.Name) + "|" + Num(f.Height) + "|" + Num(f.FflHeight) + "|" + Num(f.LintelBottom);
+                yield return "F|" + Esc(f.Name) + "|" + Num(f.Height) + "|" + Num(f.FflHeight) + "|" + Num(f.LintelBottom) + "|" + Num(f.Slab);
             foreach (var o in Openings)
                 yield return "O|" + Esc(o.Mark) + "|" + Esc(o.Kind) + "|" + Num(o.Width) + "|" + Num(o.Height) + "|" + Esc(o.Type) + "|" + o.Count.ToString(CultureInfo.InvariantCulture) + "|" + Num(o.LintelBottom) + "|" + Num(o.Sill) + "|" + Esc(o.BlockName) + "|" + Esc(o.Floor);
             foreach (var c in Columns)
@@ -228,7 +228,7 @@ namespace HCW.AutoCAD.Plugin
             var p = Split(line);
             if (p.Length < 2) return;
             if (p[0] == "F" && p.Length >= 3)
-                book.Floors.Add(new FloorSpec { Name = p[1], Height = D(p[2]), FflHeight = p.Length > 3 ? D(p[3]) : 0, LintelBottom = p.Length > 4 ? D(p[4]) : 0 });
+                book.Floors.Add(new FloorSpec { Name = p[1], Height = D(p[2]), FflHeight = p.Length > 3 ? D(p[3]) : 0, LintelBottom = p.Length > 4 ? D(p[4]) : 0, Slab = p.Length > 5 ? D(p[5]) : Settings.GetDouble("DefaultSlabThickness", 0.15) });
             else if (p[0] == "O" && p.Length >= 7)
                 book.Openings.Add(new OpeningSpec { Mark = p[1], Kind = p[2], Width = D(p[3]), Height = D(p[4]), Type = p[5], Count = I(p[6]), LintelBottom = p.Length > 7 ? D(p[7]) : 0, Sill = p.Length > 8 ? D(p[8]) : 0, BlockName = p.Length > 9 ? p[9] : "", Floor = p.Length > 10 ? p[10] : "" });
             else if (p[0] == "C" && p.Length >= 6)
@@ -263,6 +263,8 @@ namespace HCW.AutoCAD.Plugin
             public double FflHeight = Settings.GetDouble("DefaultFflHeight", 3.15);
             /// <summary>Height of the underside of the lintel above the FFL.</summary>
             public double LintelBottom = Settings.GetDouble("DefaultLintelBottom", 2.1);
+            /// <summary>Thickness of the slab under this floor (the roof slab reuses the top floor's).</summary>
+            public double Slab = Settings.GetDouble("DefaultSlabThickness", 0.15);
         }
 
         /// <summary>Choices offered in the schedule for each kind of opening.</summary>

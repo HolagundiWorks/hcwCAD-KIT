@@ -48,9 +48,24 @@ namespace HCW.AutoCAD.Plugin.Commands
         [CommandMethod("HCWWINDOW")]
         public void Window() => Run(false);
 
+        private static string _seededFor;
+
+        /// <summary>The first time in a drawing: door and window heights default to the lintel bottom of the first floor (the levels in the drawing).</summary>
+        private static void SeedFromLevels()
+        {
+            string doc = Util.Doc.Name;
+            if (_seededFor == doc) return;
+            _seededFor = doc;
+            var lv = LevelStore.First();
+            if (lv == null || lv.LintelMm <= 0) return;
+            _doorHeightMm = Math.Round(lv.LintelMm);
+            _windowHeightMm = Math.Max(300, Math.Round(lv.LintelMm - _windowSillMm));
+        }
+
         private static void Run(bool door)
         {
             var ed = Util.Ed;
+            SeedFromLevels();
             string what = door ? "door" : "window";
             double current = door ? _doorMm : _windowMm;
             var wr = ed.GetDouble(new PromptDoubleOptions("\nWidth of the " + what + " in mm <" + current + ">: ")
@@ -523,10 +538,11 @@ namespace HCW.AutoCAD.Plugin.Commands
         public void MoveOpening()
         {
             var ed = Util.Ed;
-            string job = Util.AskMode("Edit openings", "Move", "Slide", "Replace", "Convert", "Sync");
+            string job = Util.AskMode("Edit openings", "Move", "Slide", "Replace", "Convert", "Heights", "Sync");
             if (job == null) return;
             if (job == "Slide") { SlideOpening(); return; }
             if (job == "Convert") { ConvertBlocks(); return; }
+            if (job == "Heights") { SetHeights(); return; }
             if (job == "Replace") { ReplaceOpening(); return; }
             if (job == "Sync") { SyncSchedule(); return; }
             int skipped;
@@ -765,6 +781,86 @@ namespace HCW.AutoCAD.Plugin.Commands
                 tr.Commit();
             }
             ed.WriteMessage("\nHCWOPENCONVERT: " + infos.Count + " block(s) replaced. Run HCWOPENSYNC to fill the door and window schedule.");
+        }
+
+        /// <summary>
+        /// Sets the height, sill and lintel of doors and windows already in the drawing. Choose the levels of the first floor (door to the lintel
+        /// bottom, window sill kept, head at the lintel bottom) or type the figures. The invisible SILL, HEIGHT and LINTEL attributes are rewritten,
+        /// so HCWOPENSYNC, the take-off and HCWSECTIONDRAW follow.
+        /// </summary>
+        [CommandMethod("HCWOPENHEIGHT")]
+        public void SetHeights()
+        {
+            var ed = Util.Ed;
+            int skipped;
+            var infos = SelectOpenings(ed, "
+Select the doors and windows to set heights on (Enter to pick a gap in the wall): ", out skipped);
+            if (infos == null) return;
+            var mine = infos.Where(i => !i.Foreign).ToList();
+            if (mine.Count == 0)
+            {
+                ed.WriteMessage("
+HCWOPENHEIGHT: none of that is a door or window made by the tools. Use Convert on HCWOPENMOVE first to swap other blocks for them.");
+                return;
+            }
+            if (infos.Count > mine.Count || skipped > 0) ed.WriteMessage("
+" + (infos.Count - mine.Count + skipped) + " other object(s) skipped.");
+
+            var lv = LevelStore.First();
+            bool fromLevels = false;
+            if (lv != null && lv.LintelMm > 0)
+            {
+                var ko = new PromptKeywordOptions("
+Heights from [Levels/Typed] <Levels>: ", "Levels Typed") { AllowNone = true };
+                ko.Keywords.Default = "Levels";
+                var kr = ed.GetKeywords(ko);
+                if (kr.Status != PromptStatus.OK && kr.Status != PromptStatus.None) return;
+                fromLevels = kr.Status == PromptStatus.None || kr.StringResult == "Levels";
+            }
+            double doorH = _doorHeightMm, winH = _windowHeightMm, sill = _windowSillMm;
+            if (fromLevels) { doorH = Math.Round(lv.LintelMm); }
+            else
+            {
+                if (mine.Any(i => i.Door))
+                {
+                    var r = ed.GetDouble(new PromptDoubleOptions("
+Door height in mm <" + doorH + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = doorH, UseDefaultValue = true });
+                    if (r.Status != PromptStatus.OK) return; doorH = r.Value;
+                }
+                if (mine.Any(i => !i.Door))
+                {
+                    var r = ed.GetDouble(new PromptDoubleOptions("
+Window sill height in mm <" + sill + ">: ") { AllowNegative = false, AllowZero = true, DefaultValue = sill, UseDefaultValue = true });
+                    if (r.Status != PromptStatus.OK) return; sill = r.Value;
+                    var h = ed.GetDouble(new PromptDoubleOptions("
+Window height in mm <" + winH + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = winH, UseDefaultValue = true });
+                    if (h.Status != PromptStatus.OK) return; winH = h.Value;
+                }
+            }
+
+            int changed = 0;
+            using (Util.Doc.LockDocument())
+            using (var tr = Util.Db.TransactionManager.StartTransaction())
+            {
+                foreach (var i in mine)
+                {
+                    var br = (BlockReference)tr.GetObject(i.Id, OpenMode.ForRead);
+                    double s = i.Door ? 0 : (fromLevels ? i.SillMm : sill);
+                    double h = i.Door ? doorH : (fromLevels ? Math.Max(300, Math.Round(lv.LintelMm - s)) : winH);
+                    foreach (ObjectId aid in br.AttributeCollection)
+                    {
+                        var att = (AttributeReference)tr.GetObject(aid, OpenMode.ForWrite);
+                        string tag = (att.Tag ?? "").ToUpperInvariant();
+                        if (tag == "SILL") att.TextString = Math.Round(s).ToString();
+                        else if (tag == "HEIGHT") att.TextString = Math.Round(h).ToString();
+                        else if (tag == "LINTEL") att.TextString = Math.Round(s + h).ToString();
+                    }
+                    changed++;
+                }
+                tr.Commit();
+            }
+            ed.WriteMessage("
+HCWOPENHEIGHT: " + changed + " opening(s) updated. Run HCWOPENSYNC to refresh the schedule.");
         }
 
         /// <summary>A point on the side the old door swung to, beyond the thickest wall, for use at a new position.</summary>

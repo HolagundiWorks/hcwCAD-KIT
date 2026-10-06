@@ -44,6 +44,7 @@ namespace HCW.AutoCAD.Plugin
             Entry("DefaultWindowHeight", "1.2", "Height given to a window row made by Add from blocks."),
             Entry("DefaultFflHeight", "3.15", "New floor: FFL to FFL height."),
             Entry("DefaultCeilingHeight", "3.0", "New floor: ceiling height."),
+            Entry("DefaultSlabThickness", "0.15", "New floor: slab thickness."),
             Entry("DefaultLintelBottom", "2.1", "New floor: lintel bottom height."),
             Entry("AutoDimStepMm", "10", "AUTODIM: plotted distance between dimension chains, in millimetres."),
             Entry("AutoDimGapMm", "12", "AUTODIM: plotted distance from the plan to the first chain, in millimetres."),

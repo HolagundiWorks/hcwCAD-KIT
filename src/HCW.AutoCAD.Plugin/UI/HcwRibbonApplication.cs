@@ -237,6 +237,7 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWELEV", "Elevation\nMarker", "tag", "Place an elevation marker: elevation number over sheet number, pointing the way you look");
             AddLarge(src, "HCWLEVELSCHED", "Level\nSchedule", "table-of-contents", "Draw a schedule of the levels marked with HCWLEVEL");
             AddLarge(src, "HCWSECTION", "Section\nMarker", "rule", "Draw a section line with a lettered head at each end, looking to the side you pick");
+            AddLarge(src, "HCWSECTIONDRAW", "Draw\nSection", "layers", "Draw a building section from the plan with the floor, slab and lintel heights kept in the drawing");
             AddLarge(src, "HCWSLOPE", "Slope\nArrow", "text--vertical-alignment", "Draw a slope arrow with its text, such as 1:100 or 2%");
             return Wrap(src);
         }

@@ -26,6 +26,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         private const string StoreDictionary = "HCW_STAIR";
 
         private static StairSpec _last = new StairSpec();
+        private static string _levelsFor;
 
         // ------------------------------------------------------------------ units
 
@@ -62,6 +63,12 @@ namespace HCW.AutoCAD.Plugin.Commands
             var units = GetUnits();
 
             var spec = Copy(_last);
+            if (_levelsFor != Util.Doc.Name)
+            {
+                _levelsFor = Util.Doc.Name;
+                var lv = LevelStore.First();
+                if (lv != null) { spec.FloorHeight = Math.Round(lv.FflMm); ed.WriteMessage("\nFFL to FFL height " + spec.FloorHeight + " mm taken from the levels in the drawing."); }
+            }
             if (!AskAndCheck(ed, spec, units, false)) return;
 
             // where to draw them

@@ -40,7 +40,7 @@ namespace HCW.AutoCAD.Plugin.UI
 
             _blocks = blocks ?? new List<BlockFound>();
             var tabs = new TabControl { Dock = DockStyle.Fill };
-            _floors = Grid("Floor", "FFL to FFL height (" + heightUnit + ")", "Ceiling height (" + heightUnit + ")", "Lintel bottom height (" + heightUnit + ")");
+            _floors = Grid("Floor", "FFL to FFL height (" + heightUnit + ")", "Ceiling height (" + heightUnit + ")", "Lintel bottom height (" + heightUnit + ")", "Slab thickness (" + heightUnit + ")");
             _openings = Grid("Name", "Door or window", "Type", "Length (" + heightUnit + ")", "Height (" + heightUnit + ")", "Sill (" + heightUnit + ")", "Lintel bottom (" + heightUnit + ")", "Block name", "Count", "Floor (blank = all)");
             SetupOpeningGrid();
             _columns = Grid("Mark", "Width (" + heightUnit + ")", "Depth (" + heightUnit + ")", "Name", "Count");
@@ -55,7 +55,7 @@ namespace HCW.AutoCAD.Plugin.UI
             foreach (var r in book.Rates)
                 _rates.Rows.Add(r.Takeoff, r.Unit, r.Rate > 0 ? r.Rate.ToString("0.##") : "");
 
-            tabs.TabPages.Add(Page("Floors", _floors, "Each row is one floor. FFL to FFL is finished floor level to the next; lintel bottom is measured up from the FFL. Wall paint uses the ceiling height."));
+            tabs.TabPages.Add(Page("Floors", _floors, "Each row is one floor. FFL to FFL is finished floor level to the next; lintel bottom is measured up from the FFL; the slab is the one under the floor. Sections, stairs, doors and windows take their heights from here. Wall paint uses the ceiling height."));
             tabs.TabPages.Add(Page("Doors and windows", _openings, "Name (W1), door or window, type (pick from the list), length and height. Length is the size along the wall that is deducted. Sill and lintel bottom are optional: a blank lintel bottom uses the floor's value. Block name links door and window blocks (with a line on MEASURE-DEDUCT) to this entry; separate several names with ;. " + BlockHint()));
             tabs.TabPages.Add(Page("Columns", _columns, "Concrete columns of the same size share one mark."));
             tabs.TabPages.Add(Page("Deduction map", _maps, "Each measured deduction (FB01-D1) maps to one schedule name (W1). The closest schedule length within 50 mm (2 in) is pre-filled."));
@@ -106,7 +106,7 @@ namespace HCW.AutoCAD.Plugin.UI
                 if (row.IsNewRow) continue;
                 string name = Cell(row, 0);
                 if (name.Length == 0) continue;
-                book.Floors.Add(new MeasureBook.FloorSpec { Name = name, FflHeight = Num(row, 1), Height = Num(row, 2), LintelBottom = Num(row, 3) });
+                book.Floors.Add(new MeasureBook.FloorSpec { Name = name, FflHeight = Num(row, 1), Height = Num(row, 2), LintelBottom = Num(row, 3), Slab = Num(row, 4) });
             }
             foreach (DataGridViewRow row in _openings.Rows)
             {
@@ -280,9 +280,10 @@ namespace HCW.AutoCAD.Plugin.UI
                 _floors.Rows.Add("Ground",
                     Settings.GetDouble("DefaultFflHeight", 3.15).ToString("0.###"),
                     Settings.GetDouble("DefaultCeilingHeight", 3.0).ToString("0.###"),
-                    Settings.GetDouble("DefaultLintelBottom", 2.1).ToString("0.###"));
+                    Settings.GetDouble("DefaultLintelBottom", 2.1).ToString("0.###"),
+                    Settings.GetDouble("DefaultSlabThickness", 0.15).ToString("0.###"));
             foreach (var f in book.Floors)
-                _floors.Rows.Add(f.Name, f.FflHeight.ToString("0.###"), f.Height.ToString("0.###"), f.LintelBottom.ToString("0.###"));
+                _floors.Rows.Add(f.Name, f.FflHeight.ToString("0.###"), f.Height.ToString("0.###"), f.LintelBottom.ToString("0.###"), f.Slab.ToString("0.###"));
         }
 
         private void FillOpenings(MeasureBook book)
