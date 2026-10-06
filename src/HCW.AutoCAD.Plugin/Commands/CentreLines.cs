@@ -20,15 +20,17 @@ namespace HCW.AutoCAD.Plugin.Commands
             public double Z;
         }
 
+        /// <summary>Curved centre lines are cut into straight pieces no further than this from the true curve.</summary>
+        private static double Sagitta => Util.MmToDrawingUnits(2);
+
         internal static void Run(Editor ed, string selectPrompt, string startPrompt, Action<List<Chain>> create)
         {
             var psr = ed.GetSelection(
                 new PromptSelectionOptions { MessageForAdding = selectPrompt },
-                new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "LINE,LWPOLYLINE") }));
+                new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "LINE,ARC,LWPOLYLINE") }));
             if (psr.Status == PromptStatus.OK)
             {
                 var chains = new List<Chain>();
-                int bulges = 0;
                 using (var tr = Util.Db.TransactionManager.StartTransaction())
                 {
                     foreach (var id in psr.Value.GetObjectIds())
@@ -36,6 +38,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                         var ent = tr.GetObject(id, OpenMode.ForRead);
                         var line = ent as Line;
                         var pl = ent as Polyline;
+                        var arc = ent as Arc;
                         var c = new Chain();
                         if (line != null)
                         {
@@ -43,14 +46,26 @@ namespace HCW.AutoCAD.Plugin.Commands
                             c.Points.Add(new P2(line.EndPoint.X, line.EndPoint.Y));
                             c.Z = line.StartPoint.Z;
                         }
+                        else if (arc != null)
+                        {
+                            double sweep = arc.EndAngle - arc.StartAngle;
+                            if (sweep <= 0) sweep += 2 * Math.PI;
+                            c.Points = CurveSampler.ArcPoints(new P2(arc.Center.X, arc.Center.Y), arc.Radius, arc.StartAngle, sweep, Sagitta);
+                            c.Z = arc.Center.Z;
+                        }
                         else if (pl != null)
                         {
-                            for (int i = 0; i < pl.NumberOfVertices; i++)
+                            int n = pl.NumberOfVertices, last = pl.Closed ? n : n - 1;
+                            for (int i = 0; i < last; i++)
                             {
-                                var p = pl.GetPoint2dAt(i);
-                                c.Points.Add(new P2(p.X, p.Y));
-                                if (Math.Abs(pl.GetBulgeAt(i)) > 1e-9) bulges++;
+                                var a = pl.GetPoint2dAt(i);
+                                var b = pl.GetPoint2dAt((i + 1) % n);
+                                var seg = CurveSampler.BulgePoints(new P2(a.X, a.Y), new P2(b.X, b.Y), pl.GetBulgeAt(i), Sagitta);
+                                // Each piece starts where the last ended, so drop the repeated point.
+                                for (int k = 0; k < seg.Count - 1; k++) c.Points.Add(seg[k]);
+                                if (!pl.Closed && i == last - 1) c.Points.Add(seg[seg.Count - 1]);
                             }
+                            if (n == 1) { var p = pl.GetPoint2dAt(0); c.Points.Add(new P2(p.X, p.Y)); }
                             c.Closed = pl.Closed;
                             c.Z = pl.Elevation;
                         }
@@ -59,7 +74,6 @@ namespace HCW.AutoCAD.Plugin.Commands
                     }
                     tr.Commit();
                 }
-                if (bulges > 0) ed.WriteMessage("\n" + bulges + " curved segment(s) in the centre lines were drawn straight.");
                 create(chains);
                 return;
             }

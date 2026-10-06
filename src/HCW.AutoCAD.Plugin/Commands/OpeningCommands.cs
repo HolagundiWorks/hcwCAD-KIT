@@ -608,7 +608,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         /// <summary>A point on the side the old door swung to, beyond the thickest wall, for use at a new position.</summary>
-        private static Point3d PreviousSide(OpeningInfo info, Point3d at)
+        internal static Point3d PreviousSide(OpeningInfo info, Point3d at)
         {
             double far = 2 * Util.MmToDrawingUnits(MaxThickMm);
             var s = info.Corners.Swing;
@@ -669,6 +669,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                 {
                     var piece = (Entity)o;
                     piece.SetPropertiesFrom(pl);
+                    var xd = pl.XData;
+                    if (xd != null) piece.XData = xd;      // pieces stay part of the same wall object
                     space.AppendEntity(piece);
                     tr.AddNewlyCreatedDBObject(piece, true);
                     if (piece is Line l) pieces.Add(l);

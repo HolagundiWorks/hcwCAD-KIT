@@ -45,32 +45,148 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var db = Util.Db;
             double thick = Util.MmToDrawingUnits(_thicknessMm);
-            int made = 0, skipped = 0;
+            int made = 0, skipped = 0, merged = 0;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 Util.EnsureHcwLayer(tr, db, WallLayer);
                 var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                var fresh = new List<Polyline>();
                 foreach (var c in chains)
                 {
                     var loops = WallGeometry.Outline(c.Points, c.Closed, thick, _justify);
                     if (loops.Count == 0) { skipped++; continue; }
+                    var rec = new WallRecord { Id = WallStore.NextId(tr, db), ThicknessMm = _thicknessMm, Justify = _justify, Closed = c.Closed, Z = c.Z, Points = c.Points };
+                    WallStore.Save(tr, db, rec);
                     foreach (var loop in loops)
                     {
-                        var pl = new Polyline();
-                        for (int i = 0; i < loop.Count; i++) pl.AddVertexAt(i, new Point2d(loop[i].X, loop[i].Y), 0, 0, 0);
-                        pl.Closed = true;
-                        pl.Elevation = c.Z;
-                        pl.Layer = WallLayer;
-                        space.AppendEntity(pl);
-                        tr.AddNewlyCreatedDBObject(pl, true);
+                        fresh.Add(Outline(tr, db, space, loop, c.Z, new[] { rec.Id }));
                         made++;
                     }
+                }
+                if (fresh.Count > 0 && Settings.GetInt("WallJoinOnDraw", 1) != 0)
+                {
+                    // Walls drawn against existing wall outlines are merged with them so junctions come out clean.
+                    var group = new List<Polyline>(fresh);
+                    var boxes = fresh.Select(p => p.GeometricExtents).ToList();
+                    double reach = Util.MmToDrawingUnits(1);
+                    foreach (ObjectId id in space)
+                    {
+                        if (id.ObjectClass.DxfName != "LWPOLYLINE") continue;
+                        var pl = tr.GetObject(id, OpenMode.ForRead) as Polyline;
+                        if (pl == null || pl.IsErased || !pl.Closed || !string.Equals(pl.Layer, WallLayer, StringComparison.OrdinalIgnoreCase)) continue;
+                        if (fresh.Any(f => f.ObjectId == id)) continue;
+                        var e = pl.GeometricExtents;
+                        if (boxes.Any(b => e.MinPoint.X <= b.MaxPoint.X + reach && e.MaxPoint.X >= b.MinPoint.X - reach
+                                        && e.MinPoint.Y <= b.MaxPoint.Y + reach && e.MaxPoint.Y >= b.MinPoint.Y - reach)) group.Add(pl);
+                    }
+                    int m, k, bad;
+                    if (group.Count > 1 && JoinOutlines(tr, db, space, group, out m, out k, out bad)) merged = m + k;
                 }
                 tr.Commit();
             }
             ed.WriteMessage("\nHCWWALL: " + made + " wall outline(s) on " + WallLayer + ", " + _thicknessMm + " mm thick."
+                + (merged > 0 ? " Joined into " + merged + " outline(s)." : "")
                 + (skipped > 0 ? " " + skipped + " line(s) too short to make a wall." : ""));
+        }
+
+        private static Polyline Outline(Transaction tr, Database db, BlockTableRecord space, IList<P2> loop, double z, IEnumerable<string> ids)
+        {
+            var pl = new Polyline();
+            for (int i = 0; i < loop.Count; i++) pl.AddVertexAt(i, new Point2d(loop[i].X, loop[i].Y), 0, 0, 0);
+            pl.Closed = true;
+            pl.Elevation = z;
+            pl.Layer = WallLayer;
+            WallStore.Tag(tr, db, pl, ids);
+            space.AppendEntity(pl);
+            tr.AddNewlyCreatedDBObject(pl, true);
+            return pl;
+        }
+
+        /// <summary>
+        /// Merges closed outlines into their union. The new outlines carry the wall IDs of every source; the sources are erased.
+        /// Returns false (and leaves everything as it was) when there is nothing to merge.
+        /// </summary>
+        internal static bool JoinOutlines(Transaction tr, Database db, BlockTableRecord space, List<Polyline> sources, out int made, out int kept, out int bad)
+        {
+            made = kept = bad = 0;
+            double tol = Util.MmToDrawingUnits(0.05);
+            var regions = new List<Region>();
+            var used = new List<Polyline>();
+            foreach (var pl in sources)
+            {
+                if (!pl.Closed) { bad++; continue; }
+                try
+                {
+                    var coll = new DBObjectCollection();
+                    coll.Add(pl);
+                    var made1 = Region.CreateFromCurves(coll);
+                    if (made1.Count == 0) { bad++; continue; }
+                    foreach (DBObject o in made1) regions.Add((Region)o);
+                    used.Add(pl);
+                }
+                catch (System.Exception) { bad++; }
+            }
+            if (regions.Count < 2)
+            {
+                foreach (var r in regions) r.Dispose();
+                return false;
+            }
+
+            var acc = regions[0];
+            for (int i = 1; i < regions.Count; i++)
+            {
+                try { acc.BooleanOperation(BooleanOperationType.BoolUnite, regions[i]); }
+                catch (System.Exception) { bad++; }
+                regions[i].Dispose();
+            }
+            var parts = new DBObjectCollection();
+            acc.Explode(parts);
+            acc.Dispose();
+
+            var ids = new List<string>();
+            foreach (var pl in used) ids.AddRange(WallStore.IdsOf(pl));
+            var layer = used[0].Layer;
+            double z = used[0].Elevation;
+            var segs = new List<Seg>();
+            foreach (DBObject o in parts)
+            {
+                var ln = o as Line;
+                if (ln != null) { segs.Add(new Seg(new P2(ln.StartPoint.X, ln.StartPoint.Y), new P2(ln.EndPoint.X, ln.EndPoint.Y))); ln.Dispose(); continue; }
+                // Anything curved stays as it came out of the merge.
+                var ent = o as Entity;
+                if (ent != null)
+                {
+                    ent.Layer = layer;
+                    if (ids.Count > 0) WallStore.Tag(tr, db, ent, ids);
+                    space.AppendEntity(ent);
+                    tr.AddNewlyCreatedDBObject(ent, true);
+                    kept++;
+                }
+                else o.Dispose();
+            }
+            foreach (var run in SegmentChain.Join(segs, tol))
+            {
+                var pts = WallGeometry.Simplify(run.Points, run.Closed, tol);
+                if (pts.Count < 2) continue;
+                var pl = new Polyline();
+                for (int i = 0; i < pts.Count; i++) pl.AddVertexAt(i, new Point2d(pts[i].X, pts[i].Y), 0, 0, 0);
+                pl.Closed = run.Closed;
+                pl.Elevation = z;
+                pl.Layer = layer;
+                if (ids.Count > 0) WallStore.Tag(tr, db, pl, ids);
+                space.AppendEntity(pl);
+                tr.AddNewlyCreatedDBObject(pl, true);
+                made++;
+            }
+            if (made + kept == 0) return false;
+            foreach (var pl in used)
+            {
+                if (pl.IsErased) continue;
+                if (!pl.IsWriteEnabled) pl.UpgradeOpen();
+                pl.Erase();
+            }
+            return true;
         }
 
         [CommandMethod("HCWWALLJOIN")]
@@ -83,93 +199,128 @@ namespace HCW.AutoCAD.Plugin.Commands
                 new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "LWPOLYLINE") }));
             if (psr.Status != PromptStatus.OK) return;
 
-            double tol = Util.MmToDrawingUnits(0.05);
-            int notClosed = 0, bad = 0, made = 0, kept = 0;
+            int made, kept, bad;
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                var sources = new List<Polyline>();
-                var regions = new List<Region>();
-                foreach (var id in psr.Value.GetObjectIds())
-                {
-                    var pl = (Polyline)tr.GetObject(id, OpenMode.ForRead);
-                    if (!pl.Closed) { notClosed++; continue; }
-                    try
-                    {
-                        var coll = new DBObjectCollection();
-                        coll.Add(pl);
-                        var made1 = Region.CreateFromCurves(coll);
-                        if (made1.Count == 0) { bad++; continue; }
-                        foreach (DBObject o in made1) regions.Add((Region)o);
-                        sources.Add(pl);
-                    }
-                    catch (System.Exception) { bad++; }
-                }
-                if (regions.Count < 2)
-                {
-                    foreach (var r in regions) r.Dispose();
-                    ed.WriteMessage("\nHCWWALLJOIN: select at least two closed outlines" + (notClosed + bad > 0 ? " (" + (notClosed + bad) + " could not be used)." : "."));
-                    return;
-                }
-
-                var acc = regions[0];
-                for (int i = 1; i < regions.Count; i++)
-                {
-                    try { acc.BooleanOperation(BooleanOperationType.BoolUnite, regions[i]); }
-                    catch (System.Exception) { bad++; }
-                    regions[i].Dispose();
-                }
-
-                var parts = new DBObjectCollection();
-                acc.Explode(parts);
-                acc.Dispose();
-
                 var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
-                var layer = sources[0].Layer;
-                double z = sources[0].Elevation;
-                var segs = new List<Seg>();
-                foreach (DBObject o in parts)
+                var sources = psr.Value.GetObjectIds().Select(id => (Polyline)tr.GetObject(id, OpenMode.ForRead)).ToList();
+                if (!JoinOutlines(tr, db, space, sources, out made, out kept, out bad))
                 {
-                    var ln = o as Line;
-                    if (ln != null) { segs.Add(new Seg(new P2(ln.StartPoint.X, ln.StartPoint.Y), new P2(ln.EndPoint.X, ln.EndPoint.Y))); ln.Dispose(); continue; }
-                    // Anything curved stays as it came out of the merge.
-                    var ent = o as Entity;
-                    if (ent != null)
-                    {
-                        ent.Layer = layer;
-                        space.AppendEntity(ent);
-                        tr.AddNewlyCreatedDBObject(ent, true);
-                        kept++;
-                    }
-                    else o.Dispose();
-                }
-                foreach (var run in SegmentChain.Join(segs, tol))
-                {
-                    var pts = WallGeometry.Simplify(run.Points, run.Closed, tol);
-                    if (pts.Count < 2) continue;
-                    var pl = new Polyline();
-                    for (int i = 0; i < pts.Count; i++) pl.AddVertexAt(i, new Point2d(pts[i].X, pts[i].Y), 0, 0, 0);
-                    pl.Closed = run.Closed;
-                    pl.Elevation = z;
-                    pl.Layer = layer;
-                    space.AppendEntity(pl);
-                    tr.AddNewlyCreatedDBObject(pl, true);
-                    made++;
-                }
-                if (made + kept == 0)
-                {
-                    ed.WriteMessage("\nHCWWALLJOIN: the merge gave nothing; the outlines were left as they are.");
+                    ed.WriteMessage("\nHCWWALLJOIN: select at least two closed outlines that merge" + (bad > 0 ? " (" + bad + " could not be used)." : "."));
                     return;
-                }
-                foreach (var pl in sources)
-                {
-                    pl.UpgradeOpen();
-                    pl.Erase();
                 }
                 tr.Commit();
             }
-            ed.WriteMessage("\nHCWWALLJOIN: merged into " + (made + kept) + " outline(s)."
-                + (notClosed + bad > 0 ? " " + (notClosed + bad) + " could not be used (open or not a plane shape)." : ""));
+            ed.WriteMessage("\nHCWWALLJOIN: merged into " + (made + kept) + " outline(s)." + (bad > 0 ? " " + bad + " could not be used (open or not a plane shape)." : ""));
+        }
+
+        /// <summary>
+        /// HCWWALLEDIT changes the thickness or line position of one wall drawn by HCWWALL. The walls it is joined to are rebuilt with it,
+        /// and the doors and windows in them are cut again so they follow.
+        /// </summary>
+        [CommandMethod("HCWWALLEDIT")]
+        public void EditWall()
+        {
+            var ed = Util.Ed;
+            var db = Util.Db;
+            var per = new PromptEntityOptions("\nPick the wall to edit (a wall outline): ");
+            per.SetRejectMessage("\nPick a wall outline.");
+            per.AddAllowedClass(typeof(Polyline), true);
+            per.AddAllowedClass(typeof(Line), true);
+            var pr = ed.GetEntity(per);
+            if (pr.Status != PromptStatus.OK) return;
+            var pick = pr.PickedPoint;
+
+            double mm = Util.MmToDrawingUnits(1.0);
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                var picked = tr.GetObject(pr.ObjectId, OpenMode.ForRead) as Entity;
+                var start = picked == null ? new List<string>() : WallStore.IdsOf(picked);
+                if (start.Count == 0) { ed.WriteMessage("\nHCWWALLEDIT: that outline is not tied to a wall object (it was not drawn by HCWWALL)."); return; }
+
+                var tagged = new List<Entity>();
+                var tagIds = new List<IList<string>>();
+                foreach (ObjectId id in space)
+                {
+                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                    if (ent == null || ent.IsErased) continue;
+                    var ids = WallStore.IdsOf(ent);
+                    if (ids.Count == 0) continue;
+                    tagged.Add(ent); tagIds.Add(ids);
+                }
+                HashSet<string> group; List<int> members;
+                WallIds.Group(tagIds, start, out group, out members);
+
+                var records = new List<WallRecord>();
+                foreach (var id in group.OrderBy(i => i))
+                {
+                    var r = WallStore.Load(tr, db, id);
+                    if (r != null) records.Add(r);
+                }
+                if (records.Count == 0) { ed.WriteMessage("\nHCWWALLEDIT: the wall's record is missing from the drawing."); return; }
+                var here = new P2(pick.X, pick.Y);
+                var target = records.OrderBy(r => r.DistanceTo(here)).First();
+
+                var t = ed.GetDouble(new PromptDoubleOptions("\nThickness of wall " + target.Id + " in mm <" + target.ThicknessMm + ">: ")
+                    { AllowNegative = false, AllowZero = false, DefaultValue = target.ThicknessMm, UseDefaultValue = true });
+                if (t.Status != PromptStatus.OK) return;
+                var jo = new PromptKeywordOptions("\nLine position [Centre/Left/Right] <" + target.Justify + ">: ", "Centre Left Right") { AllowNone = true };
+                jo.Keywords.Default = target.Justify.ToString();
+                var jr = ed.GetKeywords(jo);
+                var justify = target.Justify;
+                if (jr.Status == PromptStatus.OK) Enum.TryParse(jr.StringResult, out justify);
+                else if (jr.Status != PromptStatus.None) return;
+                target.ThicknessMm = t.Value;
+                target.Justify = justify;
+
+                // Doors and windows sitting in any of these walls are lifted out first and cut back in once the walls are redrawn.
+                var inGroup = new List<OpeningCommands.OpeningInfo>();
+                double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+                foreach (var m in members)
+                {
+                    var e = tagged[m].GeometricExtents;
+                    minX = Math.Min(minX, e.MinPoint.X); minY = Math.Min(minY, e.MinPoint.Y);
+                    maxX = Math.Max(maxX, e.MaxPoint.X); maxY = Math.Max(maxY, e.MaxPoint.Y);
+                }
+                foreach (var o in OpeningCommands.CollectInside(tr, space, minX, minY, maxX, maxY))
+                    if (records.Any(r => r.DistanceTo(o.Corners.Centre) <= Math.Max(r.ThicknessMm, o.ThicknessMm) * mm)) inGroup.Add(o);
+                var tags = inGroup.Select(o => OpeningCommands.Heal(tr, space, o, false)).ToList();
+
+                foreach (var m in members)
+                {
+                    var ent = tagged[m];
+                    if (ent.IsErased) continue;
+                    ent.UpgradeOpen();
+                    ent.Erase();
+                }
+
+                WallStore.Save(tr, db, target);
+                var fresh = new List<Polyline>();
+                foreach (var r in records)
+                    foreach (var loop in r.Outlines(mm))
+                        fresh.Add(Outline(tr, db, space, loop, r.Z, new[] { r.Id }));
+                int jm, jk, jb;
+                if (fresh.Count > 1) JoinOutlines(tr, db, space, fresh, out jm, out jk, out jb);
+
+                for (int k = 0; k < inGroup.Count; k++)
+                {
+                    var o = inGroup[k];
+                    var centre = new Point3d(o.Corners.Centre.X, o.Corners.Centre.Y, o.Z);
+                    string message;
+                    if (!OpeningCommands.PlaceIn(tr, o.Door, centre, OpeningCommands.PreviousSide(o, centre), o.Corners.Flipped, o.WidthMm,
+                            OpeningCommands.ParamsOf(o), tags[k], out message))
+                    {
+                        ed.WriteMessage("\nHCWWALLEDIT: " + (tags[k] ?? "an opening") + " does not fit the new wall: " + message + " Nothing was changed.");
+                        return;                                         // uncommitted: the whole edit is rolled back
+                    }
+                }
+                tr.Commit();
+                ed.WriteMessage("\nHCWWALLEDIT: wall " + target.Id + " is now " + target.ThicknessMm + " mm, line on the " + target.Justify.ToString().ToLowerInvariant()
+                    + ". " + records.Count + " joined wall(s) rebuilt" + (inGroup.Count > 0 ? ", " + inGroup.Count + " opening(s) re-cut." : "."));
+            }
         }
     }
 }

@@ -102,6 +102,7 @@ namespace HCW.AutoCAD.Plugin
             Entry("Stair2RGMaxMm", "700", "AECSTAIR check: largest value of 2 x rise + going, in millimetres."),
             Entry("StairHeadroomLine", "1", "AECSTAIR section: 1 draws a headroom line over each flight, 0 leaves it out."),
             Entry("StairHeadroomMm", "2000", "AECSTAIR section: the headroom, measured vertically above the line through the nosings, in millimetres. Set it from your own code."),
+            Entry("WallJoinOnDraw", "1", "HCWWALL: 1 merges a new wall with the wall outlines it touches, 0 leaves each wall as its own outline."),
             Entry("StairRailing", "1", "AECSTAIR section: 1 draws the handrail, its end posts and balusters, 0 leaves them out."),
             Entry("StairHandrailMm", "900", "AECSTAIR section: handrail height above the nosing line, in millimetres."),
             Entry("StairPostMm", "50", "AECSTAIR section: size of the handrail posts, in millimetres."),

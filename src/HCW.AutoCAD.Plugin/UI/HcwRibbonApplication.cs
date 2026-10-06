@@ -218,6 +218,7 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWROOMWALLS", "Rooms from\nWalls", "area", "Pick a point inside a room and get its clear outline from the wall faces, with an optional name and area label");
             AddLarge(src, "HCWCORNER", "Trim/Extend\nCorner", "add--alt", "Trim or extend two lines to meet at their corner, keeping the parts you click");
             AddLarge(src, "HCWWALLJOIN", "Join\nWalls", "copy--file", "Merge overlapping wall outlines so T and L junctions are clean");
+            AddLarge(src, "HCWWALLEDIT", "Edit\nWall", "tag--edit", "Change the thickness or line position of a wall; joined walls are rebuilt and openings re-cut");
             AddLarge(src, "HCWDOOR", "Door", "home", "Cut a door in a wall: pick the position and the side it opens to");
             AddLarge(src, "HCWWINDOW", "Window", "view", "Cut a window in a wall: pick the position");
             AddLarge(src, "HCWOPENMOVE", "Move\nOpening", "move", "Move a door or window to another place on the wall; the wall is closed where it was and cut where it goes");
