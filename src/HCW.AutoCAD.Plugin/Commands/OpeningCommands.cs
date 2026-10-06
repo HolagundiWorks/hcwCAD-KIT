@@ -793,25 +793,21 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed;
             int skipped;
-            var infos = SelectOpenings(ed, "
-Select the doors and windows to set heights on (Enter to pick a gap in the wall): ", out skipped);
+            var infos = SelectOpenings(ed, "\nSelect the doors and windows to set heights on (Enter to pick a gap in the wall): ", out skipped);
             if (infos == null) return;
             var mine = infos.Where(i => !i.Foreign).ToList();
             if (mine.Count == 0)
             {
-                ed.WriteMessage("
-HCWOPENHEIGHT: none of that is a door or window made by the tools. Use Convert on HCWOPENMOVE first to swap other blocks for them.");
+                ed.WriteMessage("\nHCWOPENHEIGHT: none of that is a door or window made by the tools. Use Convert on HCWOPENMOVE first to swap other blocks for them.");
                 return;
             }
-            if (infos.Count > mine.Count || skipped > 0) ed.WriteMessage("
-" + (infos.Count - mine.Count + skipped) + " other object(s) skipped.");
+            if (infos.Count > mine.Count || skipped > 0) ed.WriteMessage("\n" + (infos.Count - mine.Count + skipped) + " other object(s) skipped.");
 
             var lv = LevelStore.First();
             bool fromLevels = false;
             if (lv != null && lv.LintelMm > 0)
             {
-                var ko = new PromptKeywordOptions("
-Heights from [Levels/Typed] <Levels>: ", "Levels Typed") { AllowNone = true };
+                var ko = new PromptKeywordOptions("\nHeights from [Levels/Typed] <Levels>: ", "Levels Typed") { AllowNone = true };
                 ko.Keywords.Default = "Levels";
                 var kr = ed.GetKeywords(ko);
                 if (kr.Status != PromptStatus.OK && kr.Status != PromptStatus.None) return;
@@ -823,17 +819,14 @@ Heights from [Levels/Typed] <Levels>: ", "Levels Typed") { AllowNone = true };
             {
                 if (mine.Any(i => i.Door))
                 {
-                    var r = ed.GetDouble(new PromptDoubleOptions("
-Door height in mm <" + doorH + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = doorH, UseDefaultValue = true });
+                    var r = ed.GetDouble(new PromptDoubleOptions("\nDoor height in mm <" + doorH + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = doorH, UseDefaultValue = true });
                     if (r.Status != PromptStatus.OK) return; doorH = r.Value;
                 }
                 if (mine.Any(i => !i.Door))
                 {
-                    var r = ed.GetDouble(new PromptDoubleOptions("
-Window sill height in mm <" + sill + ">: ") { AllowNegative = false, AllowZero = true, DefaultValue = sill, UseDefaultValue = true });
+                    var r = ed.GetDouble(new PromptDoubleOptions("\nWindow sill height in mm <" + sill + ">: ") { AllowNegative = false, AllowZero = true, DefaultValue = sill, UseDefaultValue = true });
                     if (r.Status != PromptStatus.OK) return; sill = r.Value;
-                    var h = ed.GetDouble(new PromptDoubleOptions("
-Window height in mm <" + winH + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = winH, UseDefaultValue = true });
+                    var h = ed.GetDouble(new PromptDoubleOptions("\nWindow height in mm <" + winH + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = winH, UseDefaultValue = true });
                     if (h.Status != PromptStatus.OK) return; winH = h.Value;
                 }
             }
@@ -859,8 +852,7 @@ Window height in mm <" + winH + ">: ") { AllowNegative = false, AllowZero = fals
                 }
                 tr.Commit();
             }
-            ed.WriteMessage("
-HCWOPENHEIGHT: " + changed + " opening(s) updated. Run HCWOPENSYNC to refresh the schedule.");
+            ed.WriteMessage("\nHCWOPENHEIGHT: " + changed + " opening(s) updated. Run HCWOPENSYNC to refresh the schedule.");
         }
 
         /// <summary>A point on the side the old door swung to, beyond the thickest wall, for use at a new position.</summary>
