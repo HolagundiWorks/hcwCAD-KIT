@@ -13,11 +13,19 @@ namespace HCW.AutoCAD.Plugin.Logic
         public double Cover = 25;
         /// <summary>Length each main bar runs into its support, as a multiple of its diameter, at each end.</summary>
         public double AnchorageDiameters = 40;
+        /// <summary>Hook at each end of a main bar, as a multiple of its diameter. 0 gives straight ends.</summary>
+        public double HookDiameters = 0;
+        /// <summary>Crank every second main bar of a flight up at each support (a 45 degree crank over the slab thickness less cover), the rest stay straight.</summary>
+        public bool CrankAlternate;
+        /// <summary>Top steel at both ends of each flight, over the supports: diameter (0 for none), spacing, and how far it reaches along the flight as a share of its slope length.</summary>
+        public double TopDia = 0, TopSpacing = 200, TopSpanShare = 0.3;
     }
 
     public class BarRow
     {
         public string Mark = "", Description = "";
+        /// <summary>The bar's shape for the bending schedule: Straight, Straight with hooks, Cranked, or L bar.</summary>
+        public string Shape = "Straight";
         public double Dia;
         public int Nos;
         /// <summary>Length of one bar, metres.</summary>
@@ -47,16 +55,36 @@ namespace HCW.AutoCAD.Plugin.Logic
                 double run = treads * s.Going, height = risers * c.Rise;
                 double slope = Math.Sqrt(run * run + height * height);
                 string n = (i + 1).ToString(CultureInfo.InvariantCulture);
+                int mains = Count(width - 2 * cover, o.MainSpacing);
+                double hooks = 2 * o.HookDiameters * o.MainDia;
+                double straight = (slope + 2 * o.AnchorageDiameters * o.MainDia + hooks) * mm;
+                string shape = o.HookDiameters > 0 ? "Straight with hooks" : "Straight";
+                // A 45 degree crank lifts the bar by D = waist less cover top and bottom and the bar itself; each crank is 0.42 D longer than the straight bar.
+                double crankD = s.WaistThickness - 2 * cover - o.MainDia;
+                int cranked = o.CrankAlternate && crankD > 0 ? mains / 2 : 0;
                 rows.Add(new BarRow
                 {
-                    Mark = "M" + n, Description = "Flight " + n + " main", Dia = o.MainDia,
-                    Nos = Count(width - 2 * cover, o.MainSpacing), Length = (slope + 2 * o.AnchorageDiameters * o.MainDia) * mm,
+                    Mark = "M" + n, Description = "Flight " + n + " main", Dia = o.MainDia, Shape = shape,
+                    Nos = mains - cranked, Length = straight,
                 });
+                if (cranked > 0)
+                    rows.Add(new BarRow
+                    {
+                        Mark = "M" + n + "C", Description = "Flight " + n + " main, cranked at both supports", Dia = o.MainDia, Shape = "Cranked",
+                        Nos = cranked, Length = straight + 2 * 0.42 * crankD * mm,
+                    });
                 rows.Add(new BarRow
                 {
                     Mark = "D" + n, Description = "Flight " + n + " distribution", Dia = o.DistDia,
                     Nos = Count(slope - 2 * cover, o.DistSpacing), Length = Math.Max(0, width - 2 * cover) * mm,
                 });
+                if (o.TopDia > 0 && o.TopSpacing > 0)
+                    rows.Add(new BarRow
+                    {
+                        Mark = "T" + n, Description = "Flight " + n + " top steel, both ends", Dia = o.TopDia, Shape = "L bar",
+                        Nos = 2 * Count(width - 2 * cover, o.TopSpacing),
+                        Length = (o.TopSpanShare * slope + Math.Max(0, s.WaistThickness - 2 * cover)) * mm,
+                    });
             }
             if (s.HasWinders)
             {
@@ -100,7 +128,7 @@ namespace HCW.AutoCAD.Plugin.Logic
 
         public static double TotalWeight(IEnumerable<BarRow> rows) => rows.Sum(r => r.Weight);
 
-        public static string[] Headers => new[] { "Mark", "Description", "Dia (mm)", "Nos", "Length each (m)", "Total length (m)", "Weight (kg)" };
+        public static string[] Headers => new[] { "Mark", "Description", "Shape", "Dia (mm)", "Nos", "Length each (m)", "Total length (m)", "Weight (kg)" };
 
         /// <summary>The bar schedule with a total weight row.</summary>
         public static List<string[]> Rows(IList<BarRow> bars, double concreteM3)
@@ -108,12 +136,12 @@ namespace HCW.AutoCAD.Plugin.Logic
             Func<double, string> f = v => v.ToString("0.00", CultureInfo.InvariantCulture);
             var rows = bars.Select(b => new[]
             {
-                b.Mark, b.Description, b.Dia.ToString("0.#", CultureInfo.InvariantCulture), b.Nos.ToString(CultureInfo.InvariantCulture),
+                b.Mark, b.Description, b.Shape, b.Dia.ToString("0.#", CultureInfo.InvariantCulture), b.Nos.ToString(CultureInfo.InvariantCulture),
                 f(b.Length), f(b.TotalLength), f(b.Weight),
             }).ToList();
             double kg = TotalWeight(bars);
-            rows.Add(new[] { "TOTAL", "", "", bars.Sum(b => b.Nos).ToString(CultureInfo.InvariantCulture), "", f(bars.Sum(b => b.TotalLength)), f(kg) });
-            if (concreteM3 > 0) rows.Add(new[] { "STEEL PER M3", "", "", "", "", "", f(kg / concreteM3) + " kg/m3" });
+            rows.Add(new[] { "TOTAL", "", "", "", bars.Sum(b => b.Nos).ToString(CultureInfo.InvariantCulture), "", f(bars.Sum(b => b.TotalLength)), f(kg) });
+            if (concreteM3 > 0) rows.Add(new[] { "STEEL PER M3", "", "", "", "", "", "", f(kg / concreteM3) + " kg/m3" });
             return rows;
         }
     }

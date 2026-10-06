@@ -1395,7 +1395,7 @@ namespace HCW.Logic.Tests
             var rows = StairRebar.Rows(bars, 0.7);
             Assert.All(rows, r => Assert.Equal(StairRebar.Headers.Length, r.Length));
             Assert.Equal("TOTAL", rows[rows.Count - 2][0]);
-            Assert.EndsWith("kg/m3", rows.Last()[6]);
+            Assert.EndsWith("kg/m3", rows.Last()[7]);
             Assert.Equal(bars.Count + 2, rows.Count);
             Assert.Equal(bars.Count + 1, StairRebar.Rows(bars, 0).Count);               // no per-m3 row without concrete
         }
@@ -3302,6 +3302,53 @@ namespace HCW.Logic.Tests
             Assert.Empty(WallInference.Infer(Poly(0, 0, 4000, 0, 4000, 1500, 0, 1500), 60, 600, 1));      // 1500 apart: a room, not a wall
             Assert.Empty(WallInference.Infer(Poly(0, 0, 300, 0, 300, 300, 0, 300), 60, 600, 1));          // a square: a column, not a wall
             Assert.Empty(WallInference.Infer(Poly(0, 0, 4000, 0, 4000, 30, 0, 30), 60, 600, 1));          // thinner than a wall
+        }
+    }
+
+    public class BarShapeTests
+    {
+        private static StairSpec Single() => new StairSpec { Kind = StairKind.Single, Width = 1200, FloorHeight = 1500, TotalRisers = 10, Going = 250, WaistThickness = 150 };
+        private static double Slope => Math.Sqrt(2250.0 * 2250 + 1500.0 * 1500);
+
+        [Fact]
+        public void HooksAddTwoHookLengthsToEachMainBar()
+        {
+            var o = new RebarOptions { HookDiameters = 9 };
+            var m = StairRebar.Compute(Single(), StairCalc.Calculate(Single()), o).First(b => b.Mark == "M1");
+            Assert.Equal((Slope + 2 * 40 * 12 + 2 * 9 * 12) / 1000, m.Length, 9);
+            Assert.Equal("Straight with hooks", m.Shape);
+        }
+
+        [Fact]
+        public void CrankingTakesEverySecondBarAndLengthensItByTwoCranks()
+        {
+            var o = new RebarOptions { CrankAlternate = true };
+            var bars = StairRebar.Compute(Single(), StairCalc.Calculate(Single()), o);
+            var straight = bars.First(b => b.Mark == "M1"); var cranked = bars.First(b => b.Mark == "M1C");
+            Assert.Equal(8, straight.Nos + cranked.Nos);
+            Assert.Equal(4, cranked.Nos);
+            double lift = 150 - 2 * 25 - 12;
+            Assert.Equal(straight.Length + 2 * 0.42 * lift / 1000, cranked.Length, 9);
+            Assert.Equal("Cranked", cranked.Shape);
+        }
+
+        [Fact]
+        public void TopSteelIsAnLBarAtBothEndsOfEachFlight()
+        {
+            var o = new RebarOptions { TopDia = 8, TopSpacing = 200, TopSpanShare = 0.3 };
+            var t = StairRebar.Compute(Single(), StairCalc.Calculate(Single()), o).First(b => b.Mark == "T1");
+            Assert.Equal(2 * StairRebar.Count(1150, 200), t.Nos);
+            Assert.Equal((0.3 * Slope + 100) / 1000, t.Length, 9);
+            Assert.Equal("L bar", t.Shape);
+        }
+
+        [Fact]
+        public void NothingChangesWhenTheOptionsAreOff()
+        {
+            var bars = StairRebar.Compute(Single(), StairCalc.Calculate(Single()), new RebarOptions());
+            Assert.Equal(new[] { "M1", "D1" }, bars.Select(b => b.Mark).ToArray());
+            Assert.All(bars, b => Assert.Equal("Straight", b.Shape));
+            Assert.Equal(StairRebar.Headers.Length, StairRebar.Rows(bars, 1)[0].Length);
         }
     }
 }

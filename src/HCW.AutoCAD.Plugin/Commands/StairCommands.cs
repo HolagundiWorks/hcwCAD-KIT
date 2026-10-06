@@ -415,6 +415,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             MainDia = Settings.GetDouble("StairMainBarDia", 12), MainSpacing = Settings.GetDouble("StairMainBarSpacing", 150),
             DistDia = Settings.GetDouble("StairDistBarDia", 8), DistSpacing = Settings.GetDouble("StairDistBarSpacing", 200),
             Cover = Settings.GetDouble("StairCover", 25), AnchorageDiameters = Settings.GetDouble("StairAnchorageDia", 40),
+            HookDiameters = Settings.GetDouble("StairHookDia", 0), CrankAlternate = Settings.GetInt("StairCrank", 0) != 0,
+            TopDia = Settings.GetDouble("StairTopBarDia", 0), TopSpacing = Settings.GetDouble("StairTopBarSpacing", 200), TopSpanShare = Settings.GetDouble("StairTopBarSpanPct", 30) / 100.0,
         };
 
         private static readonly string[] Roles = { "PLAN", "TREAD", "NOSING", "ARROW", "WELL", "TEXT", "SECTION", "LEVEL", "HATCH", "HEADROOM", "RAIL", "REBAR", "BEYOND" };

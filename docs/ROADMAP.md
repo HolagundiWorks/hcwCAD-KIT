@@ -19,6 +19,7 @@ These are limits of what was built, or items that need something the plugin cann
 - **Copy/array.** `INCARRAY` and `INCCOPY` deep-clone the selection once per copy. Cloning entities directly would be lighter but can lose block attributes. This is not changed because it has not been measured on a large drawing in a host.
 - **Single-line walls** are handled with `AutoDimCentreLineMm` for horizontal and vertical lines; angled centre lines are skipped.
 - **Lift and escalator** are drawings from sizes, not a design: the lift pit, machine room and overhead, and the escalator limits, are inputs.
+- **Reinforcement** has hooks, alternate cranks and top steel as options (a quantity check, one layer, no design); the drawing shows the main and distribution bars only.
 - **Winders** are for L and U stairs and use their true plan areas; dog-leg stairs keep landings.
 - **Deduction matching** already indexes walls by bounding box (`BoxIndex`), so a very large selection is not compared pair by pair. Nothing further is planned until a real drawing is slow.
 
