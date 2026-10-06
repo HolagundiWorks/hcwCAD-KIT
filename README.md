@@ -139,7 +139,7 @@ The ribbon uses one panel. It does not ask you to pick Metric, Feet, or Inches �
 4. Draw a closed rectangle on the corners you picked (unless rectangle drawing is off) and three centred text lines: room name, width × height, and `Area: …`.
 5. Save the room in the drawing's room log, used by the schedule, table and total commands.
 
-Text height, floor prefix, and the rectangle toggle are on the Rooms & Areas panel. `RAREA` labels the area of a selected polyline at its centre. `RTAG` replaces the text of one existing TEXT object. The new name is upper case, and includes the floor prefix when one is set.
+Text height, floor prefix, and the rectangle toggle are on the Rooms & Areas panel. `RAREA` (also `HCWROOMAREA`) labels the area of a selected polyline at its centre. `RTAG` (also `HCWROOMRELABEL`) replaces the text of one existing TEXT object. The new name is upper case, and includes the floor prefix when one is set.
 
 The old per-unit commands (`MBR`, `FBR`, `IBR`, and the rest) are removed. Use `ROOM`.
 

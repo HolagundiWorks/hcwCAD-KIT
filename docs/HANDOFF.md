@@ -5,7 +5,7 @@ State of the work on 2026-10-06 (updated after the structure summary and angled 
 ## Verified
 
 - `main` builds clean (0 warnings, 0 errors) against an AutoCAD 2022 install.
-- `dotnet test tests/HCW.Logic.Tests`: 507 passed, 0 failed, no analyzer warnings (last run after the bylaw tables and limits were removed; 12 tests for the removed features went with them).
+- `dotnet test tests/HCW.Logic.Tests`: 507 passed, 0 failed, no analyzer warnings; every command is in the README (last run after the bylaw tables and limits were removed; 12 tests for the removed features went with them).
 - The xUnit analyzer fixes (xUnit2012, xUnit2017, xUnit2029, xUnit2031) in `LogicTests.cs` and `DraftingTests.cs` are in this branch.
 
 ## Removed
