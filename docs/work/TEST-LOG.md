@@ -43,3 +43,11 @@ Not run: **L3 interactive** (no command was run in AutoCAD with the owner: D-001
 | L2 | Release x64 build against AutoCAD 2022 | PASS: 0 warnings, 0 errors. DLL `bin\x64\Release\hcwCAD-KIT.dll`, built 2026-10-07 21:24 from the source of `ca3acbd` (the commits after it changed only docs and tests) |
 
 Not run: **L1** (no check of `build/CompileCheck.csproj` on this commit; CI runs it on push), **L3** (no command in a CAD program was run by Agent 1, so none of D-001 to D-004 is verified; the owner loaded earlier builds in AutoCAD and reported the problems now in DEFECTS.md, but no commands or results were recorded), **L4** (no installer built: Inno Setup is not installed; the DLL was loaded with `NETLOAD`, not installed), **L5** (AQC cannot be built here), BricsCAD and ZWCAD.
+
+## 2026-10-07 (late) · merged tree with Agent 2's Q-001 to Q-008 · PARTIAL
+
+L0 643 passed. L1 clean. L2 clean (DLL 924,160 bytes). L3 automatic: tests 01 to 06 pass; test 07 (HCWBRIDGEIMPORT, Q-007) passes: lists the changes, No changes nothing, Yes applies 10 changes, HCWLEVELS shows Ground and First, a second run finds nothing to change.
+
+Open: test 08 (HCWBRIDGE export, Q-003) is unfinished and parked in build/host-tests/wip. HCWDOOR and HCWWINDOW answered "no opposite wall face found" on walls drawn by HCWWALL pick points, so no door or window was drawn and HCWBRIDGE was not reached. Unknown whether the script's pick points are wrong or there is a defect; try the same picks on walls made from selected lines (test 02's input).
+
+Not run: L3 interactive (D-001, D-004, the Project and floors dialogs, the beam depth column, HCWBRIDGE export), L4, L5, BricsCAD, ZWCAD. Q-001, Q-002, Q-003 and Q-006 are verified only to L0 and L1; Q-007 through test 07.
