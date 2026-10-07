@@ -68,10 +68,25 @@ namespace HCW.AutoCAD.Plugin.Commands
             SeedFromLevels();
             string what = door ? "door" : "window";
             double current = door ? _doorMm : _windowMm;
-            var wr = ed.GetDouble(new PromptDoubleOptions("\nWidth of the " + what + " in mm <" + current + ">: ")
-                { AllowNegative = false, AllowZero = false, DefaultValue = current, UseDefaultValue = true });
-            if (wr.Status != PromptStatus.OK) return;
-            if (door) _doorMm = wr.Value; else _windowMm = wr.Value;
+            var std = door ? OpeningStandards.Doors : OpeningStandards.Windows.Concat(new[] { OpeningStandards.Ventilator }).ToList();
+            var wo = new PromptDoubleOptions("\nWidth of the " + what + " in mm, or a standard [" + string.Join("/", std.Select(s => s.Code + " " + s.WidthMm)) + "] <" + current + ">: ")
+                { AllowNegative = false, AllowZero = false, DefaultValue = current, UseDefaultValue = true, AppendKeywordsToMessage = false };
+            foreach (var s in std) wo.Keywords.Add(s.Code);
+            var wr = ed.GetDouble(wo);
+            double width;
+            if (wr.Status == PromptStatus.Keyword)
+            {
+                width = OpeningStandards.WidthOf(wr.StringResult) ?? current;
+                if (!door && string.Equals(wr.StringResult, OpeningStandards.Ventilator.Code, StringComparison.OrdinalIgnoreCase))
+                {
+                    // a ventilator is a small window high in the wall: offer its usual height and sill below
+                    _windowHeightMm = Settings.GetDouble("VentilatorHeightMm", 450);
+                    _windowSillMm = Settings.GetDouble("VentilatorSillMm", 1800);
+                }
+            }
+            else if (wr.Status == PromptStatus.OK) width = wr.Value;
+            else return;
+            if (door) _doorMm = width; else _windowMm = width;
 
             if (door)
             {
@@ -201,7 +216,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 blockName = OpeningFrame.NamePrefix(false, "") + size;
                 EnsureWindowBlock(tr, db, blockName, w, plan.Thickness);
             }
-            tag = tagOverride ?? (door ? NextTag(tr, space, "D") : WindowTag(tr, db, space, widthMm, par.HeightMm, par.SillMm));
+            tag = tagOverride ?? OpeningTag(tr, db, space, door, widthMm, par.HeightMm, door ? 0 : par.SillMm);
             InsertBlock(tr, space, blockName, new Point3d(place.Origin.X, place.Origin.Y, z), place.Angle, place.Sx, place.Sy, door ? LayerDoor : LayerWin, par);
             // A lintel is made on request (HCWLINTEL), or automatically when LintelAuto = 1. An opening that had one keeps it when it is moved or re-cut.
             if (Settings.GetInt("LintelAuto", 0) != 0 || (tagOverride != null && LintelTags.Remove(tag)))
@@ -1234,19 +1249,18 @@ namespace HCW.AutoCAD.Plugin.Commands
         /// {code}/{no} by default). Windows of the same width, height and sill share a code; a size not yet in the schedule gets the next free
         /// code and is added to the schedule at once.
         /// </summary>
-        private static string WindowTag(Transaction tr, Database db, BlockTableRecord space, double widthMm, double heightMm, double sillMm)
+        private static string OpeningTag(Transaction tr, Database db, BlockTableRecord space, bool door, double widthMm, double heightMm, double sillMm)
         {
             bool imperial = MeasureCommands.MeasureState.Units == MeasureCommands.UnitSys.Imperial;
             Func<double, double> toBook = mm => imperial ? mm / 25.4 : mm / 1000.0;
             double w = toBook(widthMm), h = toBook(heightMm), sill = toBook(sillMm);
+            string kind = door ? "Door" : "Window";
             var book = MeasureBook.Load(tr, db);
-            var entry = book.Openings.FirstOrDefault(o => string.Equals(o.Kind, "Window", StringComparison.OrdinalIgnoreCase)
+            var entry = book.Openings.FirstOrDefault(o => string.Equals(o.Kind, kind, StringComparison.OrdinalIgnoreCase)
                 && Math.Abs(o.Width - w) < 1e-3 && Math.Abs(o.Height - h) < 1e-3 && Math.Abs(o.Sill - sill) < 1e-3);
             if (entry == null)
             {
-                int next = book.Openings.Select(o => o.Mark ?? "").Where(m => m.StartsWith("W", StringComparison.OrdinalIgnoreCase))
-                    .Select(m => { int n; return int.TryParse(m.Substring(1), out n) ? n : 0; }).DefaultIfEmpty(0).Max() + 1;
-                entry = new MeasureBook.OpeningSpec { Mark = "W" + next, Kind = "Window", Width = w, Height = h, Sill = sill, LintelBottom = toBook(sillMm + heightMm), Count = 0 };
+                entry = new MeasureBook.OpeningSpec { Mark = NewMark(book, door, widthMm, heightMm), Kind = kind, Width = w, Height = h, Sill = sill, LintelBottom = toBook(sillMm + heightMm), Count = 0 };
                 book.Openings.Add(entry);
                 book.Save(tr, db);
             }
@@ -1261,23 +1275,15 @@ namespace HCW.AutoCAD.Plugin.Commands
                 int n;
                 if (m.Success && int.TryParse(m.Groups[1].Value, out n)) max = Math.Max(max, n);
             }
-            return Settings.Get("WindowTagFormat", "{code}/{no}").Replace("{code}", code).Replace("{no}", (max + 1).ToString());
+            return Settings.Get(door ? "DoorTagFormat" : "WindowTagFormat", "{code}/{no}").Replace("{code}", code).Replace("{no}", (max + 1).ToString());
         }
 
-        /// <summary>The next free tag: one more than the highest D or W number already on the tag layer.</summary>
-        private static string NextTag(Transaction tr, BlockTableRecord space, string prefix)
+        /// <summary>The mark for a new schedule entry: the standard one for its width (D1 800, D2 900, D3 1200, W1 600 ... W5 2000, V1 600), or the next free number after the standard ones.</summary>
+        private static string NewMark(MeasureBook book, bool door, double widthMm, double heightMm)
         {
-            var rx = new Regex("^" + prefix + "(\\d+)$", RegexOptions.IgnoreCase);
-            int max = 0;
-            foreach (ObjectId id in space)
-            {
-                var t = tr.GetObject(id, OpenMode.ForRead) as DBText;
-                if (t == null || !string.Equals(t.Layer, LayerTag, StringComparison.OrdinalIgnoreCase)) continue;
-                var m = rx.Match(t.TextString ?? "");
-                int n;
-                if (m.Success && int.TryParse(m.Groups[1].Value, out n)) max = Math.Max(max, n);
-            }
-            return prefix + (max + 1);
+            string std = door ? OpeningStandards.DoorCode(widthMm) : OpeningStandards.WindowCode(widthMm, heightMm, Settings.GetDouble("VentilatorMaxHeightMm", 600));
+            string prefix = std != null && std.StartsWith("V", StringComparison.OrdinalIgnoreCase) ? "V" : door ? "D" : "W";
+            return OpeningStandards.NewMark(std, prefix, book.Openings.Select(o => o.Mark));
         }
 
         // ---- schedule ----
@@ -1378,12 +1384,9 @@ namespace HCW.AutoCAD.Plugin.Commands
                         ?? book.Openings.FirstOrDefault(o => o.Kind == kind && Math.Abs(o.Width - width) < 1e-3 && Math.Abs(o.Height - height) < 1e-3 && Math.Abs(o.Sill - sill) < 1e-3);
                     if (entry == null)
                     {
-                        string prefix = first.Door ? "D" : "W";
-                        int next = book.Openings.Select(o => o.Mark ?? "").Where(m => m.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                            .Select(m => { int n; return int.TryParse(m.Substring(1), out n) ? n : 0; }).DefaultIfEmpty(0).Max() + 1;
                         entry = new MeasureBook.OpeningSpec
                         {
-                            Mark = prefix + next, Kind = kind, Width = width, Height = height, Sill = sill,
+                            Mark = NewMark(book, first.Door, first.WidthMm, first.HeightMm), Kind = kind, Width = width, Height = height, Sill = sill,
                             Type = first.Type == "double" ? "Double leaf" : first.Type == "sliding" ? "Sliding" : "",
                         };
                         book.Openings.Add(entry);
