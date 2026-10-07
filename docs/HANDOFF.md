@@ -1,5 +1,7 @@
 # Handoff
 
+> **Two agents work on this repo. Read [AGENTS.md](AGENTS.md) first** (who does what, and the rules), then [work/QUEUE.md](work/QUEUE.md), [work/DEFECTS.md](work/DEFECTS.md) and [work/TEST-LOG.md](work/TEST-LOG.md).
+
 State of the work on 2026-10-06 (updated after the structure summary and angled centre-line walls), for whoever picks it up next. Read [ROADMAP.md](ROADMAP.md) for the list of known limits; this file covers what was verified, what was not, and what to do first.
 
 ## Verified
