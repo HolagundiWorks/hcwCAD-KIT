@@ -1,6 +1,6 @@
 # Plan: bridge hcwCAD-KIT with AQC
 
-Written 2026-10-07. Status: **plan only, nothing built**. It is based on reading the public AQC repo (HolagundiWorks/AQC) and this repo. Things I read are marked *verified*; things I am guessing or have not read are marked *to check* and collected in Phase 0.
+Written 2026-10-07. **Status: Phase 0 (verify) and Phase 1 (contract) are done; nothing else is built.** The answers to the *to check* items are in [AQC-FINDINGS.md](AQC-FINDINGS.md) (from reading AQC's code; AQC itself was not built or run here), and the contract is in [bridge/](bridge/README.md). Where this plan and the findings differ, the findings are right: units are millimetres, a level's `height_mm` is slab-top to slab-top, beam depth per floor is required (it sets column heights), `Lvl0` is AQC's plinth, and partial project files load. Next is Phase 2, once the questions in section 8 are answered.
 
 ## 1. What each side is
 
@@ -89,11 +89,13 @@ Reverse direction, AQC to plugin (Phase 4): `levels`, `project`, and AQC beam de
 
 ## 6. Phases
 
-### Phase 0: verify (1 to 2 days)
+### Phase 0: verify (done 2026-10-07, by reading the code; AQC not built here)
 Clone AQC, build and run it, open a sample `.bbsproj`. Answer every *to check* above and record the answers in `docs/AQC-FINDINGS.md`. Decide where in AQC an importer plugs in (candidates: `TakeoffPage`, `ProjectStore`, `OpeningScheduleLinker`, the AI assistant's command bus). Confirm whether AQC can load a file the plugin writes directly, as a fallback.
 Done when: units, level meaning, wall build, partial-load behaviour and the import hook are written down.
 
-### Phase 1: contract (1 to 2 days)
+### Phase 1: contract (done 2026-10-07)
+Delivered: `docs/bridge/hcw-aqc-bridge.schema.json`, two sample files, `docs/bridge/README.md`, and `BridgeContractTests` (the samples have the right format, millimetres, levels, unique refs, openings that point at walls, and standard marks that match their widths). The contract text in section 4 below is the first draft; the schema file is the current one (levels carry `height_mm`, not `floor_to_floor_mm`; `site_area_m2`; columns have no height because AQC computes it).
+Original goal:
 Write the JSON Schema, the three fixtures and a short spec in `docs/bridge/`. Freeze v1.
 Done when: the fixtures validate against the schema, and the AQC side agrees the field names.
 
