@@ -20,6 +20,9 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         internal static ProjectData Load(Transaction tr, Database db) => ProjectData.FromLines(DrawingStore.Read(tr, db, Dictionary, Record));
 
+        /// <summary>Saves the project data in the drawing (used by the bridge import as well as the Project dialog).</summary>
+        internal static void Save(Transaction tr, Database db, ProjectData data) => DrawingStore.Write(tr, db, Dictionary, Record, data.ToLines());
+
         [CommandMethod("HCWPROJECT")]
         public void ProjectDetails() { Edit(UI.ProjectForm.PageDetails); }
 

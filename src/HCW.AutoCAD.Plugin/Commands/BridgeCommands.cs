@@ -199,6 +199,75 @@ namespace HCW.AutoCAD.Plugin.Commands
             ed.WriteMessage("\n  Not sent: slabs (the plugin does not draw them yet), plaster, paint, skirting, shuttering and rebar (AQC works these out).");
         }
 
+        /// <summary>
+        /// HCWBRIDGEIMPORT reads a bridge file back (the levels, project details and beam depths AQC holds), lists what would change in this drawing, and
+        /// applies it only when you say Yes. The default is No, so nothing changes without an answer. It changes the floors (the levels of the take-off book),
+        /// the project details and the beam depths; it never touches the walls, openings or any drawing geometry.
+        /// </summary>
+        [CommandMethod("HCWBRIDGEIMPORT")]
+        public void Import()
+        {
+            var ed = Util.Ed; var db = Util.Db;
+            if (!MeasureCommands.Prepare()) return;
+            double unitMm = LevelStore.UnitMm;
+
+            string dwg = db.Filename;
+            string def = string.IsNullOrWhiteSpace(dwg) ? "" : Path.Combine(Settings.Get("BridgeFolder", "").Trim().Length > 0 ? Settings.Get("BridgeFolder", "").Trim() : Path.GetDirectoryName(dwg), Path.GetFileNameWithoutExtension(dwg) + ".aqcbridge.json");
+            var so = new PromptStringOptions("\nBridge file to read" + (def.Length > 0 ? " <" + def + ">" : "") + ": ") { AllowSpaces = true, DefaultValue = def, UseDefaultValue = def.Length > 0 };
+            var sr = ed.GetString(so);
+            if (sr.Status != PromptStatus.OK) return;
+            string path = sr.StringResult.Trim().Trim('"');
+            if (!File.Exists(path)) { ed.WriteMessage("\nHCWBRIDGEIMPORT: there is no file " + path + "."); return; }
+
+            BridgeInput file;
+            try { file = BridgeImport.Read(File.ReadAllText(path, Encoding.UTF8)); }
+            catch (FormatException ex) { ed.WriteMessage("\nHCWBRIDGEIMPORT: the file is not valid JSON. " + ex.Message); return; }
+            catch (ArgumentException ex) { ed.WriteMessage("\nHCWBRIDGEIMPORT: " + ex.Message); return; }
+
+            List<LevelRow> floors; ProjectData data;
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                floors = LevelStore.Load(tr, db);
+                data = ProjectCommands.Load(tr, db);
+                var mine = DrawingStore.Read(tr, db, Dictionary, IdRecord).FirstOrDefault(l => !string.IsNullOrWhiteSpace(l) && l != "EMPTY");
+                tr.Commit();
+                if (mine != null && !string.IsNullOrWhiteSpace(file.Source.DrawingId) && !string.Equals(mine.Trim(), file.Source.DrawingId, StringComparison.OrdinalIgnoreCase))
+                    ed.WriteMessage("\nNote: the file's drawing id is not this drawing's. It may come from another drawing.");
+            }
+
+            var plan = BridgeImport.Compare(file, floors, data);
+            ed.WriteMessage("\nBridge file " + Path.GetFileName(path) + " (from " + (file.Source.App ?? "unknown") + (string.IsNullOrWhiteSpace(file.Source.Exported) ? "" : ", " + file.Source.Exported) + ").");
+            foreach (var d in plan.Details) ed.WriteMessage("\n  " + d.Value);
+            foreach (var c in plan.LevelChanges) ed.WriteMessage("\n  " + c);
+            foreach (var a in plan.Added) ed.WriteMessage("\n  New floor " + a);
+            if (plan.BeamDepthsMm != null) ed.WriteMessage("\n  Standard beam depths: " + ProjectData.FormatDepths(data.BeamDepthsMm) + " -> " + ProjectData.FormatDepths(plan.BeamDepthsMm));
+            foreach (var s in plan.Skipped) ed.WriteMessage("\n  Skipped: " + s + ".");
+            ed.WriteMessage("\n  The plinth level (AQC's) is never imported; walls, openings and other drawing geometry are never changed.");
+            if (plan.IsEmpty) { ed.WriteMessage("\nHCWBRIDGEIMPORT: the drawing already has these values. Nothing to change."); return; }
+
+            var ko = new PromptKeywordOptions("\nApply these changes to the drawing [Yes/No] <No>: ", "Yes No") { AllowNone = true };
+            ko.Keywords.Default = "No";
+            var kr = ed.GetKeywords(ko);
+            if (kr.Status != PromptStatus.OK || kr.StringResult != "Yes") { ed.WriteMessage("\nHCWBRIDGEIMPORT: nothing was changed."); return; }
+
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                foreach (var d in plan.Details) data.Set(d.Key, d.Value.To);
+                if (plan.BeamDepthsMm != null) data.BeamDepthsMm = plan.BeamDepthsMm;
+                data.ClearFloorBeams();
+                foreach (var kv in plan.FloorBeams) data.SetFloorBeam(kv.Key, kv.Value);
+                ProjectCommands.Save(tr, db, data);
+                var book = MeasureBook.Load(tr, db);
+                book.Floors.Clear();
+                foreach (var f in plan.Floors)
+                    book.Floors.Add(new MeasureBook.FloorSpec { Name = f.Name, Height = f.CeilingMm / unitMm, FflHeight = f.FflMm / unitMm, LintelBottom = f.LintelMm / unitMm, Slab = f.SlabMm / unitMm });
+                book.Save(tr, db);
+                tr.Commit();
+            }
+            ed.WriteMessage("\nHCWBRIDGEIMPORT: applied " + (plan.Details.Count + plan.LevelChanges.Count + plan.Added.Count + (plan.BeamDepthsMm != null ? 1 : 0)) + " change(s). Undo (U) reverses them. HCWFLOORS and HCWPROJECT show the result.");
+        }
+
         /// <summary>The drawing's id for the bridge file: made on the first export and kept in the drawing, so every export of this drawing carries the same one.</summary>
         private static string DrawingId(Database db)
         {

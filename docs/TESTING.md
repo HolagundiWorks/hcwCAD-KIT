@@ -47,6 +47,10 @@ Run `HCWFLOORS`. The Floors page has a **Beam depth** column in millimetres. Wit
 
 Needs a saved drawing with the small test plan from section 2 (walls, a door, two windows, a lintel), `HCWFLOORS` with two floors, a room (`HCWROOMWALLS`) and a column or two (`HCWCOLUMN`). Run `HCWBRIDGE`, answer 1 for the floor. Expect: a message naming `<drawing>.aqcbridge.json` next to the drawing with counts per section; open the file in a text editor: `"units": "mm"`, a `source.drawing_id` GUID, `levels` with `beam_depth_mm` (the value from `HCWFLOORS`), `walls` with the wall ids as `ref`, `openings` with marks `D2/D3/W3`, `wall_ref` set, an `opening_schedule`, `lintels`, `rooms` (each room once). Run it again: same `drawing_id` and the same refs. Answer 0 for the floor: rows repeated with `@Ground` / `@First` on the refs. In an inch or foot drawing the lengths are still millimetres (a 9 in wall shows 228.6). An unsaved drawing gets "save the drawing first".
 
+### AQC bridge import (`HCWBRIDGEIMPORT`)
+
+Use the file `HCWBRIDGE` just wrote, or a copy edited in a text editor (change `slab_thickness_mm` of the first level to 120, the `name` of the project, and add a new level `"Second"` with `height_mm` 3000). Run `HCWBRIDGEIMPORT`, press Enter for the default path. Expect: a list of changes with old and new values (slab 150 -> 120, the project title, `New floor Second: ...`), then "Apply these changes [Yes/No] <No>". Press Enter: "nothing was changed" (check `HCWFLOORS`: unchanged). Run again and answer Yes: `HCWFLOORS` shows the new slab and a Second floor; `HCWPROJECT` shows the new title; walls, doors and everything drawn are untouched; `U` undoes the change. Run it a third time: "the drawing already has these values". Give it a text file that is not JSON, and a file with `"version": 2`: each is refused with a message and nothing changes.
+
 ## 3. Levels, sections, columns, stairs
 
 1. `MSCHED`, Floors tab: add Ground (3.15 / 3.0 / 2.1 / 0.15) and First. `HCWLEVELS` lists them.

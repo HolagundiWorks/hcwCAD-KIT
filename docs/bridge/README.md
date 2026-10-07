@@ -24,4 +24,8 @@ The file hcwCAD-KIT writes for AQC (and reads back, in the other direction). One
 | `columns`, `lintels`, `rooms` | closed rectangles and column blocks on the column layers; the lintel lines `HCWLINTEL` makes; closed outlines on the room layers (each outline once) |
 | `slabs` | not sent yet |
 
+## Reading a file back (`HCWBRIDGEIMPORT`)
+
+The plugin reads the same format in the other direction. From a file written by AQC it takes only the `project` details, the `levels` (above the plinth; AQC's `Lvl0` is never imported) and `beam_depths_mm`; it matches floors by name, then by position, shows what would change (old and new) and applies it only when the owner says Yes. It never changes walls, openings or other drawing geometry. Values absent from the file leave the drawing's values alone. The importer on the AQC side is specified in [AQC-IMPORTER-SPEC.md](AQC-IMPORTER-SPEC.md).
+
 Status: draft, written before AQC has an importer. See [../AQC-BRIDGE-PLAN.md](../AQC-BRIDGE-PLAN.md) and [../AQC-FINDINGS.md](../AQC-FINDINGS.md).

@@ -203,6 +203,7 @@ namespace HCW.AutoCAD.Plugin.UI
         {
             var src = NewSource("AQC Bridge");
             AddLarge(src, "HCWBRIDGE", "Export for\nAQC", "document--export", "Write the project, floors, walls, openings, columns, lintels and rooms of this drawing as an AQC bridge file next to the drawing");
+            AddLarge(src, "HCWBRIDGEIMPORT", "Import from\nAQC", "document--view", "Read the floors, project details and beam depths from an AQC bridge file, show what would change, and apply it only when you say Yes");
             return Wrap(src);
         }
 

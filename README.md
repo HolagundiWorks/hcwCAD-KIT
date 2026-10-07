@@ -258,6 +258,8 @@ The **Door & Window Schedules** panel has `HCWOPENSTD`, which puts the standard 
 * **Not sent:** slabs (the plugin does not draw them), and anything derived: plaster, paint, skirting, shuttering, rebar.
 * A drawing id (a GUID) is made on the first export and kept in the drawing, so exporting again gives AQC the same id and the same refs (wall ids, block handles). It reports the counts for each section and what it left out, and names any floor whose height less slab less beam depth leaves no clear height.
 
+`HCWBRIDGEIMPORT` (Import from AQC) reads a bridge file back: the project details, the floors above the plinth and the beam depths that AQC holds. It asks for the file (the default is `<drawing>.aqcbridge.json` next to the drawing), refuses a file that is not an hcw-aqc-bridge v1 file in millimetres (with the reason), lists every change with its old and new value (floors are matched by name, then by position; floors only in the file are added; AQC's plinth is never imported), and applies them only when you answer Yes (the default is No). One Undo reverses it. It changes the floors, the project details and the beam depths only, never the drawing's geometry.
+
 ### Layers for permit scrutiny
 
 By default the tools draw on the HCW layers the layer set creates (`A-WALL`, `A-DOOR` ...; setting `LayerOutput` = `HCW`). When a drawing goes to a separate scrutiny program, set `LayerOutput` = `BP` so the items the tools draw are on the building permit layers and that program can pick them up by layer, or run `HCWPERMITLAYERS` on a finished drawing. What goes where, from the `BpLayerMap` setting (change an entry to send an item to another layer):
