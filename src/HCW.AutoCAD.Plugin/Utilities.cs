@@ -90,11 +90,11 @@ namespace HCW.AutoCAD.Plugin
         }
 
         /// <summary>
-        /// The layer name an item is drawn on. With the setting LayerOutput at BP (the default) items that have a building permit layer go on it, as the map
-        /// BpLayerMap says; with HCW they keep the HCW name. <paramref name="permitName"/> is the permit layer for an item the map does not list.
+        /// The layer name an item is drawn on. With the setting LayerOutput at HCW (the default) items keep the HCW name (A-WALL ...); with BP items that have a
+        /// building permit layer go on it, as the map BpLayerMap says. <paramref name="permitName"/> is the permit layer for an item the map does not list.
         /// </summary>
         public static string Out(string hcwName, string permitName = null) =>
-            Logic.LayerRoles.Resolve(hcwName, string.Equals(Settings.Get("LayerOutput", "BP"), "BP", StringComparison.OrdinalIgnoreCase),
+            Logic.LayerRoles.Resolve(hcwName, string.Equals(Settings.Get("LayerOutput", "HCW"), "BP", StringComparison.OrdinalIgnoreCase),
                 Logic.LayerRoles.Parse(Settings.Get("BpLayerMap", Logic.LayerRoles.DefaultMap)), permitName);
 
         /// <summary>Creates a layer from the HCW Layer Standard or the building permit table (colour, linetype, lineweight), or colour 7 when the name is in neither.</summary>

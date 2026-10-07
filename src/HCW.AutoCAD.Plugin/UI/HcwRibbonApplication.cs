@@ -101,7 +101,7 @@ namespace HCW.AutoCAD.Plugin.UI
             try
             {
                 var db = AcAp.DocumentManager.MdiActiveDocument.Database;
-                lines.Add("drawing units (INSUNITS): " + db.Insunits + ", LayerOutput: " + Settings.Get("LayerOutput", "BP") + ", live updates: " + (Settings.GetInt("LiveUpdate", 1) != 0 ? "on" : "off"));
+                lines.Add("drawing units (INSUNITS): " + db.Insunits + ", LayerOutput: " + Settings.Get("LayerOutput", "HCW") + ", live updates: " + (Settings.GetInt("LiveUpdate", 1) != 0 ? "on" : "off"));
             }
             catch (System.Exception) { }
             foreach (var l in lines) Say(l);

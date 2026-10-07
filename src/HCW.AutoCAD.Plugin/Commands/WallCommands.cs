@@ -68,7 +68,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                         made++;
                     }
                 }
-                if (fresh.Count > 0 && Settings.GetInt("WallJoinOnDraw", 1) != 0)
+                if (fresh.Count > 0 && Settings.GetInt("WallJoinOnDraw", 0) != 0)
                 {
                     // Walls drawn against existing wall outlines are merged with them so junctions come out clean.
                     var group = new List<Polyline>(fresh);
