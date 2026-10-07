@@ -55,6 +55,90 @@ namespace HCW.AutoCAD.Plugin.Logic
             return res;
         }
 
+        /// <summary>
+        /// Reads lines that are the two faces of each wall and returns the centre line of every wall found. Two parallel lines that face each other
+        /// between <paramref name="minGap"/> and <paramref name="maxGap"/> apart, over a length of at least that gap, are one wall: its centre line runs
+        /// midway between them over the length they share, and its thickness is the gap (in mm, using <paramref name="unitsPerMm"/>). The nearest
+        /// pair claims a stretch of a line first, so a stretch of face belongs to one wall. <paramref name="unpaired"/> counts the lines with no partner.
+        /// </summary>
+        public static List<RegenSeg> CentreLines(IList<Seg> faces, double minGap, double maxGap, double unitsPerMm, out int unpaired)
+        {
+            int n = faces.Count;
+            var u = new P2[n]; var len = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                var d = faces[i].B - faces[i].A; len[i] = d.Length;
+                u[i] = len[i] < 1e-12 ? new P2(1, 0) : d * (1.0 / len[i]);
+            }
+
+            var cands = new List<double[]>();                 // i, j, gap, t0, t1 (the shared stretch along line i)
+            for (int i = 0; i < n; i++)
+                for (int j = i + 1; j < n; j++)
+                {
+                    if (len[i] < 1e-9 || len[j] < 1e-9) continue;
+                    if (Math.Abs(u[i].X * u[j].Y - u[i].Y * u[j].X) > 1e-3) continue;           // not parallel
+                    var nrm = new P2(-u[i].Y, u[i].X);
+                    var w = faces[j].A - faces[i].A;
+                    double gap = Math.Abs(w.X * nrm.X + w.Y * nrm.Y);
+                    if (gap < minGap || gap > maxGap) continue;
+                    double ta = (faces[j].A - faces[i].A).X * u[i].X + (faces[j].A - faces[i].A).Y * u[i].Y;
+                    double tb = (faces[j].B - faces[i].A).X * u[i].X + (faces[j].B - faces[i].A).Y * u[i].Y;
+                    double t0 = Math.Max(0, Math.Min(ta, tb)), t1 = Math.Min(len[i], Math.Max(ta, tb));
+                    if (t1 - t0 < gap) continue;                                                // shorter than the wall is thick: not a wall
+                    cands.Add(new[] { i, j, gap, t0, t1 });
+                }
+            cands.Sort((a, b) => a[2].CompareTo(b[2]));
+
+            var used = new List<double[]>[n];
+            for (int i = 0; i < n; i++) used[i] = new List<double[]>();
+            var paired = new bool[n];
+            var result = new List<RegenSeg>();
+            foreach (var c in cands)
+            {
+                int i = (int)c[0], j = (int)c[1]; double gap = c[2];
+                double dot = u[i].X * u[j].X + u[i].Y * u[j].Y;
+                double off = (faces[j].A - faces[i].A).X * u[i].X + (faces[j].A - faces[i].A).Y * u[i].Y;   // line j's own axis, in line i's coordinates: off + s * dot
+                var taken = new List<double[]>(used[i]);
+                foreach (var r in used[j])
+                {
+                    double a = off + r[0] * dot, b = off + r[1] * dot;
+                    taken.Add(new[] { Math.Min(a, b), Math.Max(a, b) });
+                }
+                foreach (var piece in Subtract(c[3], c[4], taken))
+                {
+                    if (piece[1] - piece[0] < gap) continue;
+                    used[i].Add(new[] { piece[0], piece[1] });
+                    double s0 = (piece[0] - off) / dot, s1 = (piece[1] - off) / dot;
+                    used[j].Add(new[] { Math.Min(s0, s1), Math.Max(s0, s1) });
+                    paired[i] = paired[j] = true;
+                    var nrm = new P2(-u[i].Y, u[i].X);
+                    double sgn = Math.Sign((faces[j].A - faces[i].A).X * nrm.X + (faces[j].A - faces[i].A).Y * nrm.Y);
+                    var shift = nrm * (sgn * gap / 2.0);
+                    result.Add(new RegenSeg { A = faces[i].A + u[i] * piece[0] + shift, B = faces[i].A + u[i] * piece[1] + shift, ThicknessMm = gap / unitsPerMm });
+                }
+            }
+            unpaired = paired.Count(p => !p);
+            return result;
+        }
+
+        /// <summary>The parts of [a, b] not covered by any of the taken intervals.</summary>
+        private static List<double[]> Subtract(double a, double b, List<double[]> taken)
+        {
+            var parts = new List<double[]> { new[] { a, b } };
+            foreach (var t in taken)
+            {
+                var next = new List<double[]>();
+                foreach (var p in parts)
+                {
+                    if (t[1] <= p[0] || t[0] >= p[1]) { next.Add(p); continue; }
+                    if (t[0] > p[0]) next.Add(new[] { p[0], t[0] });
+                    if (t[1] < p[1]) next.Add(new[] { t[1], p[1] });
+                }
+                parts = next;
+            }
+            return parts;
+        }
+
         /// <summary>Where a ray from p along dir meets a segment: t along the ray, v along the segment (0..length). False when parallel or missed.</summary>
         private static bool RayHits(P2 p, P2 dir, Seg s, out double t, out double v)
         {

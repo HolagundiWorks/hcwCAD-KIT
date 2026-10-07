@@ -335,6 +335,66 @@ namespace HCW.Logic.Tests
         }
 
         [Fact]
+        public void TwoFacesMakeOneCentreLineMidwayWithTheGapAsThickness()
+        {
+            int unpaired;
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.CentreLines(new[] { S(0, 0, 4000, 0), S(0, 230, 4000, 230) }, 60, 600, 1, out unpaired);
+            var w = Assert.Single(res);
+            Assert.Equal(230, w.ThicknessMm, 6);
+            Assert.Equal(115, w.A.Y, 6); Assert.Equal(115, w.B.Y, 6);
+            Assert.Equal(0, System.Math.Min(w.A.X, w.B.X), 6); Assert.Equal(4000, System.Math.Max(w.A.X, w.B.X), 6);
+            Assert.Equal(0, unpaired);
+        }
+
+        [Fact]
+        public void FacesOfARoomRingGiveFourCentreLinesAndNoneAcrossTheRoom()
+        {
+            // outer face 4000 x 3000, inner face 230 in from it: the room (3540 wide) is wider than the wall limit, so only the four walls pair up
+            var faces = new[]
+            {
+                S(0, 0, 4000, 0), S(4000, 0, 4000, 3000), S(4000, 3000, 0, 3000), S(0, 3000, 0, 0),
+                S(230, 230, 3770, 230), S(3770, 230, 3770, 2770), S(3770, 2770, 230, 2770), S(230, 2770, 230, 230)
+            };
+            int unpaired;
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.CentreLines(faces, 60, 600, 1, out unpaired);
+            Assert.Equal(4, res.Count);
+            Assert.All(res, r => Assert.Equal(230, r.ThicknessMm, 6));
+            Assert.Equal(0, unpaired);
+            // the centre lines stop short of the corner by half a wall; the corner logic then meets them where the two centre lines cross
+            var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
+            var walls = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(res, 300, 1, 0.5, rep);
+            Assert.Equal(4, rep.LCorners);
+            var chains = HCW.AutoCAD.Plugin.Logic.WallRegen.Chains(walls, 0.5);
+            var ring = Assert.Single(chains);
+            Assert.True(ring.Value.Closed);
+            Assert.Contains(ring.Value.Points, p => System.Math.Abs(p.X - 115) < 1e-6 && System.Math.Abs(p.Y - 115) < 1e-6);
+            Assert.Contains(ring.Value.Points, p => System.Math.Abs(p.X - 3885) < 1e-6 && System.Math.Abs(p.Y - 2885) < 1e-6);
+        }
+
+        [Fact]
+        public void ThinPartitionBesideAThickWallPairsWithItsOwnFaceNotTheWall()
+        {
+            // a 112 partition's two faces, and the 230 wall's inner face 770 away: only the partition pairs
+            var faces = new[] { S(230, 1000, 3770, 1000), S(230, 1112, 3770, 1112), S(230, 230, 3770, 230) };
+            int unpaired;
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.CentreLines(faces, 60, 600, 1, out unpaired);
+            var w = Assert.Single(res);
+            Assert.Equal(112, w.ThicknessMm, 6);
+            Assert.Equal(1056, w.A.Y, 6);
+            Assert.Equal(1, unpaired);
+        }
+
+        [Fact]
+        public void FacesInAnInchDrawingGiveTheThicknessInMillimetres()
+        {
+            double mm = 1 / 25.4; int unpaired;
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.CentreLines(new[] { S(0, 0, 100, 0), S(0, 9, 100, 9) }, 60 * mm, 600 * mm, mm, out unpaired);
+            var w = Assert.Single(res);
+            Assert.Equal(228.6, w.ThicknessMm, 6);
+            Assert.Equal(4.5, w.A.Y, 6);
+        }
+
+        [Fact]
         public void SquaredCornerInAnInchDrawingRunsHalfTheWallInInches()
         {
             // the command passes units per mm (1/25.4 for inches); the corner must run 4.5 in / 2 = 2.25 in past the point, not thousands of inches

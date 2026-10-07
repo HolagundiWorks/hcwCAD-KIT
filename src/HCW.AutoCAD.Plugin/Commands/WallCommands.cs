@@ -240,6 +240,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         // ---- regenerate walls from the single lines already in the drawing ----
 
         private const string CentreLineLayer = "A-WALL-CL";
+        private const string FaceLayer = "A-WALL-FACE";
 
         /// <summary>
         /// HCWWALLREGEN reads the lines on a walls layer (pick the layer first) as wall centre lines and draws them again as walls of two
@@ -304,18 +305,47 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (segs.Count == 0) { ed.WriteMessage("\nHCWWALLREGEN: no straight lines on " + layer + "."); return; }
             ed.WriteMessage("\nHCWWALLREGEN: " + segs.Count + " line(s) on " + layer + (curved > 0 ? ", " + curved + " curved or closed-outline piece(s) skipped" : "") + ".");
 
-            // 3. thickness: outer walls and inner walls
             double outerMm = Settings.GetDouble("RegenOuterMm", 228.6), innerMm = Settings.GetDouble("RegenInnerMm", 114.3);
-            var to = new PromptKeywordOptions("\nThickness [Auto/Outer/Inner] <Auto> (Auto: outer lines " + Math.Round(outerMm / 25.4, 2) + " in, inner lines " + Math.Round(innerMm / 25.4, 2) + " in; Outer or Inner: every line the same): ", "Auto Outer Inner") { AllowNone = true };
-            to.Keywords.Default = "Auto";
-            var tr0 = ed.GetKeywords(to);
-            string rule = tr0.Status == PromptStatus.OK ? tr0.StringResult : "Auto";
-            if (tr0.Status != PromptStatus.OK && tr0.Status != PromptStatus.None) return;
-            var outer = rule == "Auto" ? WallRegen.Outer(segs) : segs.Select(s => rule == "Outer").ToArray();
-            ed.WriteMessage("\n  " + outer.Count(b => b) + " line(s) at " + Math.Round(outerMm / 25.4, 2) + " in, " + outer.Count(b => !b) + " at " + Math.Round(innerMm / 25.4, 2) + " in.");
 
-            // 4. flip the lines the rule got wrong
-            if (rule == "Auto")
+            // 3. what the lines are: the two faces of each wall (a centre line is worked out between each pair), or one centre line per wall
+            var ko = new PromptKeywordOptions("\nThe lines are [Faces/Centres] <Faces> (Faces: the two sides of each wall, as drawn; their centre lines are made first. Centres: one line per wall): ", "Faces Centres") { AllowNone = true };
+            ko.Keywords.Default = "Faces";
+            var kr = ed.GetKeywords(ko);
+            if (kr.Status != PromptStatus.OK && kr.Status != PromptStatus.None) return;
+            bool faces = kr.Status == PromptStatus.None || kr.StringResult == "Faces";
+            List<RegenSeg> faceWalls = null;
+            if (faces)
+            {
+                int unpaired;
+                faceWalls = WallRegen.CentreLines(segs, Settings.GetDouble("WallMinMm", 60) * mm, Settings.GetDouble("WallMaxMm", 600) * mm, mm, out unpaired);
+                if (faceWalls.Count == 0) { ed.WriteMessage("\nHCWWALLREGEN: no two lines face each other between " + Settings.GetDouble("WallMinMm", 60) + " and " + Settings.GetDouble("WallMaxMm", 600) + " mm apart. Nothing was changed."); return; }
+                foreach (var w in faceWalls)                     // a drawn 230 or 112 is the 9 in or 4.5 in wall: use the standard figure when it is within 10%
+                {
+                    if (Math.Abs(w.ThicknessMm - outerMm) <= outerMm * 0.1) w.ThicknessMm = outerMm;
+                    else if (Math.Abs(w.ThicknessMm - innerMm) <= innerMm * 0.1) w.ThicknessMm = innerMm;
+                    else w.ThicknessMm = Math.Round(w.ThicknessMm, 1);
+                }
+                ed.WriteMessage("\n  " + faceWalls.Count + " centre line(s) found between the faces: "
+                    + string.Join(", ", faceWalls.GroupBy(w => w.ThicknessMm).OrderByDescending(g => g.Key).Select(g => g.Count() + " at " + g.Key + " mm"))
+                    + (unpaired > 0 ? "; " + unpaired + " line(s) had no line facing them and are left as they are" : "") + ".");
+            }
+
+            // 4. thickness: outer walls and inner walls (for centre lines only; faces give their own thickness)
+            string rule = "Auto";
+            bool[] outer = null;
+            if (!faces)
+            {
+                var to = new PromptKeywordOptions("\nThickness [Auto/Outer/Inner] <Auto> (Auto: outer lines " + Math.Round(outerMm / 25.4, 2) + " in, inner lines " + Math.Round(innerMm / 25.4, 2) + " in; Outer or Inner: every line the same): ", "Auto Outer Inner") { AllowNone = true };
+                to.Keywords.Default = "Auto";
+                var tr0 = ed.GetKeywords(to);
+                rule = tr0.Status == PromptStatus.OK ? tr0.StringResult : "Auto";
+                if (tr0.Status != PromptStatus.OK && tr0.Status != PromptStatus.None) return;
+                outer = rule == "Auto" ? WallRegen.Outer(segs) : segs.Select(s => rule == "Outer").ToArray();
+                ed.WriteMessage("\n  " + outer.Count(b => b) + " line(s) at " + Math.Round(outerMm / 25.4, 2) + " in, " + outer.Count(b => !b) + " at " + Math.Round(innerMm / 25.4, 2) + " in.");
+            }
+
+            // 5. flip the lines the rule got wrong
+            if (!faces && rule == "Auto")
             {
                 var fo = new PromptKeywordOptions("\nChange the thickness of some lines [Yes/No] <No>: ", "Yes No") { AllowNone = true };
                 fo.Keywords.Default = "No";
@@ -336,15 +366,17 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
             }
 
-            // 5. what happens to the original lines
-            var oo = new PromptKeywordOptions("\nOriginal lines [Move/Erase] <Move> (Move puts them on " + CentreLineLayer + "): ", "Move Erase") { AllowNone = true };
+            // 6. what happens to the original lines (in Faces mode the centre lines are drawn on A-WALL-CL, so the faces go to their own layer)
+            string originalsLayer = faces ? FaceLayer : CentreLineLayer;
+            var oo = new PromptKeywordOptions("\nOriginal lines [Move/Erase] <Move> (Move puts them on " + originalsLayer + "): ", "Move Erase") { AllowNone = true };
             oo.Keywords.Default = "Move";
             var orr = ed.GetKeywords(oo);
             bool erase = orr.Status == PromptStatus.OK && orr.StringResult == "Erase";
             if (orr.Status != PromptStatus.OK && orr.Status != PromptStatus.None) return;
 
-            // 6. work out the junctions and make the walls
-            var input = segs.Select((s, i) => new RegenSeg { A = s.A, B = s.B, Outer = outer[i], ThicknessMm = outer[i] ? outerMm : innerMm }).ToList();
+            // 7. work out the junctions and make the walls
+            var input = faces ? faceWalls : segs.Select((s, i) => new RegenSeg { A = s.A, B = s.B, Outer = outer[i], ThicknessMm = outer[i] ? outerMm : innerMm }).ToList();
+            if (faces) DrawCentreLines(db, faceWalls);                  // the centre lines come first, then the walls are made from them
             var report = new RegenReport();
             var resolved = WallRegen.Resolve(input, Settings.GetDouble("RegenReachMm", 300) * mm, mm, 0.5 * mm, report);
             var chains = new List<CentreLines.Chain>();
@@ -353,22 +385,41 @@ namespace HCW.AutoCAD.Plugin.Commands
             var oldJust = _justify; _justify = WallJustify.Centre;
             try { Create(ed, chains); } finally { _justify = oldJust; }
 
-            // 7. take the original lines off the walls layer (the new outlines are on it)
+            // 8. take the original lines off the walls layer (the new outlines are on it)
             using (Util.Doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                if (!erase) Util.EnsureLayer(tr, db, CentreLineLayer, 8);
+                if (!erase) Util.EnsureLayer(tr, db, originalsLayer, 8);
                 foreach (var id in segIds.Distinct())
                 {
                     var ent = tr.GetObject(id, OpenMode.ForWrite) as Entity;
                     if (ent == null || ent.IsErased) continue;
-                    if (erase) ent.Erase(); else ent.Layer = CentreLineLayer;
+                    if (erase) ent.Erase(); else ent.Layer = originalsLayer;
                 }
                 tr.Commit();
             }
             ed.WriteMessage("\nHCWWALLREGEN: junctions - " + report.LCorners + " corner(s), " + report.TJunctions + " T junction(s), " + report.Crossings + " crossing(s), "
                 + report.SquaredCorners + " point(s) squared between thicknesses, " + report.Snapped + " end(s) moved onto the wall they meet, " + report.FreeEnds + " free end(s). "
-                + (erase ? "Original lines erased." : "Original lines are on " + CentreLineLayer + ".") + " Edit the walls with HCWWALLEDIT; openings can be cut with HCWDOOR and HCWWINDOW.");
+                + (erase ? "Original lines erased." : "Original lines are on " + originalsLayer + ".") + (faces ? " The centre lines are on " + CentreLineLayer + "." : "")
+                + " Edit the walls with HCWWALLEDIT; openings can be cut with HCWDOOR and HCWWINDOW.");
+        }
+
+        /// <summary>Draws the centre lines found between the wall faces on A-WALL-CL, so they can be seen and checked before and after the walls are made.</summary>
+        private static void DrawCentreLines(Database db, List<RegenSeg> lines)
+        {
+            using (Util.Doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                Util.EnsureLayer(tr, db, CentreLineLayer, 4);
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                foreach (var w in lines)
+                {
+                    var ln = new Line(new Point3d(w.A.X, w.A.Y, 0), new Point3d(w.B.X, w.B.Y, 0)) { Layer = CentreLineLayer };
+                    space.AppendEntity(ln);
+                    tr.AddNewlyCreatedDBObject(ln, true);
+                }
+                tr.Commit();
+            }
         }
 
         [CommandMethod("HCWWALLJOIN")]
