@@ -2,7 +2,7 @@
 
 Kept by **Agent 2** (development queue and questions for the owner) and **Agent 1** (local queue). Formats and rules: [../AGENTS.md](../AGENTS.md) sections 5 and 6. Status words are exactly: Todo, In progress, Ready for verification @ \<hash\>, Done, Blocked (on what).
 
-Last updated 2026-10-07 by Agent 2 (development section: Q-001, Q-002, Q-005 worked; Local queue untouched).
+Last updated 2026-10-07 by Agent 2 (development section: Q-001, Q-002, Q-003, Q-005 worked; Local queue untouched).
 
 ## Development queue (Agent 2)
 
@@ -21,8 +21,9 @@ Notes: no CAD types in this class.
 Done by Agent 2 on the recommended answers: `Logic/BridgeExport.cs` with plain records; the output equals `small-house.json` and `levels-only.json` byte for byte, and a small house given in mm, cm, m, in or ft gives the same file (11 tests). Nothing to try in a CAD program; Agent 1 only needs L0 on the commit. If the owner answers the questions differently, the field names change with a new `version`.
 
 ### Q-003 · `HCWBRIDGE` command and ribbon panel
-Priority: P2 · Status: Todo (Q-001 and Q-002 are done; next for Agent 2)
+Priority: P2 · Status: Ready for verification @ 0e29e99
 Why: second half of Phase 2.
+Done by Agent 2: `Commands/BridgeCommands.cs`, `Logic/BridgeMap.cs` (7 tests), "AQC Bridge" panel on the Project tab, setting `BridgeFolder`; slabs are not sent (the plugin does not draw them). L0 (621 passed) and L1 clean on `0e29e99`. **To verify in AutoCAD**: the steps in TESTING.md "AQC bridge export" (file written next to the drawing, same drawing id on a second run, `@floor` refs for 0, millimetres in an inch drawing, a clear message for an unsaved drawing).
 Acceptance: `HCWBRIDGE` reads the drawing (floors, wall objects, openings, columns, lintels, rooms, project data), writes `<drawing>.aqcbridge.json` next to the drawing (or into setting `BridgeFolder`), and reports counts per section and what it skipped; a drawing id (GUID) is stored in the drawing on first export; an "AQC Bridge" panel on the Project tab. Added to TESTING.md (rule D6).
 
 ### Q-004 · Door, window and other prompts in the drawing's units

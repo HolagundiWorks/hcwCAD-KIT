@@ -2,12 +2,12 @@
 
 > **Two agents work on this repo. Read [AGENTS.md](AGENTS.md) first** (who does what, and the rules), then [work/QUEUE.md](work/QUEUE.md), [work/DEFECTS.md](work/DEFECTS.md) and [work/TEST-LOG.md](work/TEST-LOG.md).
 
-State of the work on 2026-10-07 at commit `5b4b1c5` (written by Agent 2), for whoever picks it up next. Read [ROADMAP.md](ROADMAP.md) for the list of known limits; this file covers what was verified, what was not, and what to do first.
+State of the work on 2026-10-07 at commit `0e29e99` (written by Agent 2), for whoever picks it up next. Read [ROADMAP.md](ROADMAP.md) for the list of known limits; this file covers what was verified, what was not, and what to do first.
 
 ## Verified (by Agent 2, rule B1: only what was run)
 
-- L0 `dotnet test tests/HCW.Logic.Tests` on `5b4b1c5`: 614 passed, 0 failed, 0 skipped, no analyzer warnings.
-- L1 `dotnet build build/CompileCheck.csproj` on `5b4b1c5`: 0 warnings, 0 errors.
+- L0 `dotnet test tests/HCW.Logic.Tests` on `0e29e99`: 621 passed, 0 failed, 0 skipped, no analyzer warnings.
+- L1 `dotnet build build/CompileCheck.csproj` on `0e29e99`: 0 warnings, 0 errors.
 - Agent 1's own L0 and L2 runs are in [work/TEST-LOG.md](work/TEST-LOG.md) (`c85216f`: 594 passed; Release x64 build against AutoCAD 2022, 0 warnings and 0 errors).
 
 ## Removed
@@ -22,12 +22,13 @@ Nothing that is in the test log. The owner loaded builds in AutoCAD and reported
 
 - Every command, dialog, ribbon button and drawing change in the lists below has been compiled and (where it has pure logic) unit tested only. None has a test-log entry.
 - The BricsCAD and ZWCAD projects were not built. The installers (`build\Package-Installers.ps1`) were not built (Inno Setup is not installed).
-- The AQC bridge: the plan and contract exist (`AQC-BRIDGE-PLAN.md`, `bridge/`), and the exporter logic is built (Q-002); there is no command yet (Q-003), and AQC has no importer.
+- The AQC bridge: the plan and contract exist (`AQC-BRIDGE-PLAN.md`, `bridge/`); the exporter logic (Q-002) and the `HCWBRIDGE` command (Q-003) are built but the command has never run; AQC has no importer yet and has not been run, so nothing has been imported.
 
 ## Built, not yet verified in a host (rule D5)
 
 Newest first. "Logic" means unit tested; the command or dialog part is not.
 
+- **`HCWBRIDGE`** (Q-003, `0e29e99`): reads the drawing into the bridge file next to the drawing. Logic: `BridgeMap` (marks, wall refs, schedule, project and level mapping, room de-duplication). Command: `Commands/BridgeCommands.cs`, Project tab panel "AQC Bridge", setting `BridgeFolder`. Riskiest: it reads every entity in the space, matches openings to walls by distance, and writes a file. Steps in TESTING.md.
 - **Beam depth per floor** (Q-001, `aff3a61`): a Beam depth column on the Floors page of `HCWFLOORS`, kept with the project data by floor name (default: the first depth on the Beams page, else 450). Steps in [TESTING.md](TESTING.md).
 - **Bridge exporter** (Q-002, `5b4b1c5`): `Logic/BridgeExport.cs`, the hcw-aqc-bridge v1 JSON writer. Logic only: no command, no CAD types. Output equals both sample files in `docs/bridge/fixtures` for drawings in mm, cm, m, in and ft.
 - **Project tab** (`389613d`): `HCWPROJECT`, `HCWFLOORS`, `HCWBEAMS`, `HCWPROJECTTITLE`, `HCWOPENSTD`. Logic: `ProjectData`.
