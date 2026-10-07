@@ -1,0 +1,11 @@
+; HCWWALL turns four selected lines into walls: 4 outlines on A-WALL (merge on draw is off), a hatch, and a take-off line on each wall.
+; EXPECT: HCWWALL: 4 wall outline\(s\) on A-WALL, 230 mm thick
+; EXPECT: RESULT A-WALL=4 HATCH=1 MEASURE=4
+(defun cnt (f / s) (if (setq s (ssget "X" f)) (sslength s) 0))
+LINE 0,0 4000,0 4000,3000 0,3000 C
+HCWWALL
+
+
+ALL
+
+(princ (strcat "\nRESULT A-WALL=" (itoa (cnt '((8 . "A-WALL") (0 . "LWPOLYLINE")))) " HATCH=" (itoa (cnt '((0 . "HATCH")))) " MEASURE=" (itoa (cnt '((8 . "MEASURE-LINEAR"))))))

@@ -1,0 +1,6 @@
+; The plugin loads in the core console and HCWDIAG reports it.
+; EXPECT: commands registered in the assembly: \d+
+; EXPECT: drawing units \(INSUNITS\): Millimeters
+; REJECT: Unable to load
+; REJECT: Unknown command "HCWDIAG"
+HCWDIAG

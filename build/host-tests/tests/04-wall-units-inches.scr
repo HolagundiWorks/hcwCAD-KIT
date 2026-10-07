@@ -1,0 +1,14 @@
+; In an inch drawing HCWWALL asks for the thickness in inches (230 mm = 9.0551 in) and the walls come out 9.0551 in thick.
+; TEMPLATE: acad.dwt
+; EXPECT: Wall thickness in in <9\.0551>
+; EXPECT: HCWWALL: 4 wall outline\(s\) on A-WALL, 9\.0551 in thick
+; EXPECT: RESULT-IN A-WALL=4
+; REJECT: in mm
+(defun cnt (f / s) (if (setq s (ssget "X" f)) (sslength s) 0))
+LINE 0,0 120,0 120,96 0,96 C
+HCWWALL
+
+
+ALL
+
+(princ (strcat "\nRESULT-IN A-WALL=" (itoa (cnt '((8 . "A-WALL") (0 . "LWPOLYLINE")))) " INSUNITS=" (itoa (getvar "INSUNITS"))))

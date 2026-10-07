@@ -1,0 +1,16 @@
+; HCWWALLREGEN on two face lines per wall (an outer rectangle and one 230 inside it): Faces mode finds four centre lines of 228.6 mm
+; (230 is within 10% of the 9 in standard), draws them on A-WALL-CL, moves the faces to A-WALL-FACE and builds the walls.
+; EXPECT: 4 centre line\(s\) found between the faces: 4 at 228\.6 mm
+; EXPECT: junctions - 4 corner\(s\)
+; EXPECT: RESULT-REGEN CL=4 FACE=8
+; REJECT: no two lines face each other
+(defun cnt (f / s) (if (setq s (ssget "X" f)) (sslength s) 0))
+-LAYER M A-WALL
+
+LINE 0,0 4000,0 4000,3000 0,3000 C
+LINE 230,230 3770,230 3770,2770 230,2770 C
+HCWWALLREGEN
+
+
+
+(princ (strcat "\nRESULT-REGEN CL=" (itoa (cnt '((8 . "A-WALL-CL")))) " FACE=" (itoa (cnt '((8 . "A-WALL-FACE")))) " WALL=" (itoa (cnt '((8 . "A-WALL") (0 . "LWPOLYLINE"))))))

@@ -1,0 +1,18 @@
+; HCWWALL with Enter at the selection prompt picks points: a closed run of four points makes an outer and an inner outline.
+; Found by this harness on 2026-10-07: GetSelection returns Error (not None) for Enter, so this path used to end at once. Fixed in CentreLines.cs.
+; EXPECT: Start of wall \(Enter to finish\)
+; EXPECT: HCWWALL: 2 wall outline\(s\) on A-WALL, 230 mm thick
+; EXPECT: RESULT A-WALL=2 HATCH=1 MEASURE=1
+; REJECT: Unknown command "0,0"
+(defun cnt (f / s) (if (setq s (ssget "X" f)) (sslength s) 0))
+HCWWALL
+
+
+
+0,0
+4000,0
+4000,3000
+0,3000
+C
+
+(princ (strcat "\nRESULT A-WALL=" (itoa (cnt '((8 . "A-WALL") (0 . "LWPOLYLINE")))) " HATCH=" (itoa (cnt '((0 . "HATCH")))) " MEASURE=" (itoa (cnt '((8 . "MEASURE-LINEAR"))))))
