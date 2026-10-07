@@ -1,0 +1,50 @@
+; HCWBRIDGE on a small plan: floors come from the bridge fixture (HCWBRIDGEIMPORT), the drawing is saved, four walls, a 900 door (D2) and a 1200 window (W3)
+; are drawn, and the file next to the drawing is checked: millimetres, a drawing id, the floors with their beam depth, the wall id, the openings with standard marks.
+; PREPARE: docs/bridge/fixtures/levels-only.json => levels-only.json
+; EXPECT: HCWDOOR: D2/1 900 mm
+; EXPECT: HCWWINDOW: W3/1 1200 mm
+; EXPECT: HCWBRIDGE: wrote .*export\.aqcbridge\.json
+; REJECT: save the drawing first
+; REJECT: no floors are defined
+; FILE: export.aqcbridge.json => "units":\s*"mm"
+; FILE: export.aqcbridge.json => "format":\s*"hcw-aqc-bridge"
+; FILE: export.aqcbridge.json => "drawing_id":\s*"[0-9a-fA-F-]{36}"
+; FILE: export.aqcbridge.json => "name":\s*"Ground"
+; FILE: export.aqcbridge.json => "beam_depth_mm":\s*450
+; FILE: export.aqcbridge.json => "ref":\s*"W0001"
+; FILE: export.aqcbridge.json => "thickness_mm":\s*230
+; FILE: export.aqcbridge.json => "mark":\s*"D2"
+; FILE: export.aqcbridge.json => "mark":\s*"W3"
+; FILE: export.aqcbridge.json => "kind":\s*"Door"
+; FILE: export.aqcbridge.json => "width_mm":\s*900
+HCWBRIDGEIMPORT
+{WORK}\levels-only.json
+Y
+_.SAVEAS
+2018
+{WORK}\export.dwg
+HCWWALL
+
+
+
+0,0
+4000,0
+4000,3000
+0,3000
+C
+
+HCWDOOR
+D2
+
+
+2000,0
+2000,500
+
+HCWWINDOW
+W3
+
+
+4000,1500
+
+HCWBRIDGE
+

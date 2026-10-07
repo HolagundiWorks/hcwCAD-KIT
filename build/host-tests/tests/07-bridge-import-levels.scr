@@ -1,0 +1,21 @@
+; HCWBRIDGEIMPORT reads docs/bridge/fixtures/levels-only.json: it lists the changes, does nothing on No, adds the floors and project details on Yes, and a
+; second run finds nothing to change. HCWLEVELS then lists the two floors with the heights from the file.
+; PREPARE: docs/bridge/fixtures/levels-only.json => levels-only.json
+; EXPECT: Bridge file levels-only\.json
+; EXPECT: New floor Ground
+; EXPECT: New floor First
+; EXPECT: HCWBRIDGEIMPORT: nothing was changed
+; EXPECT: HCWBRIDGEIMPORT: applied \d+ change\(s\)
+; EXPECT: Ground: FFL \+0\.000, floor to floor 3150, ceiling 3000, lintel bottom 2100, slab 150 mm
+; EXPECT: First: FFL \+3\.150, floor to floor 3150
+; EXPECT: the drawing already has these values
+; REJECT: refused|not valid JSON
+HCWBRIDGEIMPORT
+{WORK}\levels-only.json
+N
+HCWBRIDGEIMPORT
+{WORK}\levels-only.json
+Y
+HCWLEVELS
+HCWBRIDGEIMPORT
+{WORK}\levels-only.json
