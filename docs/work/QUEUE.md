@@ -73,15 +73,18 @@ Agent 2 has carried on with the recommended answers to questions 1, 2, 4, 5 and 
 Priority: P1 · Status: In progress
 Every RC Agent 2 names: pull, build that hash, L0, L2, install, host checklist with the owner; write the TEST-LOG entry; open or close defects.
 
-### T-002 · Walk TESTING.md sections 1 to 5 in AutoCAD with the owner
+### T-002 · Walk TESTING.md in AutoCAD with the owner
 Priority: P1 · Status: Todo (needs the owner present)
-Why: nothing in the command layer has a TEST-LOG entry yet; "tested in AutoCAD" in `HANDOFF.md` has no list of commands. First verify the four defects in [DEFECTS.md](DEFECTS.md).
+Why: the headless tests cover loading, walls and `HCWWALLREGEN` only. Still needing the interactive run: the ribbon and `HCWDIAG` with a ribbon (D-001), the Project dialog and room picker, junction geometry (D-004), and everything else in TESTING.md. D-002 and D-003 are verified headless; the owner's own drawing is still worth a look.
 
 ### T-003 · Feasibility: automated command tests with `accoreconsole.exe`
+Priority: P2 · Status: Done (2026-10-07: **yes**)
+Result: the DLL loads in `accoreconsole.exe` (163 commands registered) and commands run from scripts on a blank drawing. Harness: `build/host-tests/Run-HostTests.ps1` with six tests (see TEST-LOG). Limits: no ribbon and no dialogs in the core console, so D-001 and the WinForms dialogs still need the interactive run. It already found D-005 (six commands ignore Enter at a selection prompt).
+Notes: scripts are in `build/host-tests/tests/*.scr` (not `tests/host/`, so they stay in Agent 1's folder); each test lists its checks as `; EXPECT:` and `; REJECT:` lines.
+
+### T-007 · Grow the headless tests
 Priority: P2 · Status: Todo
-Why: `accoreconsole.exe` is installed. If it can `NETLOAD` the plugin and run commands from a script on a throwaway drawing, L3 can be partly automatic.
-Acceptance: a written yes or no with evidence (what loaded, what failed). If yes: a script and a test drawing under `tests/host/`, and the steps in TEST-LOG.
-Notes: the plugin references the UI assemblies (`AcMgd`, `AdWindows`); the core console may refuse to load them. Unknown until tried.
+Next: a geometry check that a partition outline stops at the wall face (D-004); doors and windows (tags `D2/1`, `W3/1`, `V1/1`, `HCWOPENSTD`, `HCWOPENSCHED`); `HCWLINTEL`; `HCWFLOORS` data through `HCWLEVELS`; a test per Enter-at-selection command once D-005 is fixed; `ROOMTEXTFIT` on a throwaway drawing.
 
 ### T-004 · Installers
 Priority: P2 · Status: Blocked (Inno Setup 6 is not installed; needs the owner's yes, rule L5)

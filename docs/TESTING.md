@@ -2,10 +2,14 @@
 
 Nothing in the command layer has been run in a CAD program. This is the order to try things in, what to expect, and what to send back. Report each result as: command, what you did, what happened, and the text on the command line. `%APPDATA%\hcwCAD-KIT\diag.log` holds what the ribbon loader and `HCWDIAG` printed.
 
+## 0. Automatic checks first (no person needed)
+
+`powershell -File build\host-tests\Run-HostTests.ps1` runs the command layer in AutoCAD's core console and prints PASS or FAIL for each test (loading, `HCWWALL`, `HCWWALLREGEN`; more are added over time). It needs AutoCAD 2022 installed and a built DLL. It cannot test the ribbon or dialogs, so sections 1 onward are still done by hand. Agent 1 runs it on every release candidate and logs the result in `docs/work/TEST-LOG.md`.
+
 ## 1. Load and ribbon
 
 1. Build (see [HANDOFF.md](HANDOFF.md)), close AutoCAD, open it, `NETLOAD` the DLL (or install the bundle).
-2. Run `HCWDIAG`. Expect: plugin path, CAD version, `ribbon: ... ours: hcwCAD-KIT (9 panels), hcwCAD-KIT Settings (5 panels)`, a command count above 250.
+2. Run `HCWDIAG`. Expect: plugin path, CAD version, `ribbon: ... ours: hcwCAD-KIT (9 panels), hcwCAD-KIT Project (3 panels), hcwCAD-KIT Settings (5 panels)`, and `commands registered in the assembly: 163` (the number grows as commands are added; it was 163 on 2026-10-07, not "above 250" as this file used to say).
 3. No tabs? Run `HCWRIBBON` and send the line it prints.
 
 ## 2. Walls and openings (one new drawing, millimetres)
@@ -13,8 +17,9 @@ Nothing in the command layer has been run in a CAD program. This is the order to
 | Step | Expect |
 |---|---|
 | `HCWWALL`, 230, draw a closed room of four walls | Outlines on `A-WALL`, a hatch on `A-WALL-HATCH`, a line on `MEASURE-LINEAR` along each wall |
-| `HCWDOOR` 900 on one wall | Gap cut, door block, tag `D2/1` (a 900 door is the standard mark D2; the tag is code/number); no lintel yet (they are made on request); the hatch is cut at the door |
-| `HCWWINDOW` 1200 on another wall, then a second window of the same size | Tags `W3/1`, `W3/2` (1200 is the standard mark W3); same code for the same size |
+
+| `HCWDOOR` 900 on one wall (or type the standard `D2`) | Gap cut, door block, tag `D2/1` (the standard marks are D1 800, D2 900, D3 1200); no lintel yet (they are made on request); the hatch is cut at the door |
+| `HCWWINDOW` 1200 on another wall (or `W3`), then a second window of the same size | Tags `W3/1`, `W3/2` (W1 600, W2 900, W3 1200, W4 1500, W5 2000); same code for the same size. `V1` gives a 600 ventilator, tag `V1/1` |
 | `HCWLINTEL` > Generate, select the door and a window | A dashed outline through the full wall thickness on `A-LINTEL` and a line on `MEASURE-LINTEL`; the wall is not cut; running it again does not double them |
 | `MLINTEL` after the lintels | Marks LT1.. with opening, length, wall, depth (900 mm opening: 152.4; 1500: 228.6; 2400: 304.8), concrete and shuttering; take-off "Lintels" saved |
 | `HCWOPENSCHED` | Schedule updated, table drawn where you pick |

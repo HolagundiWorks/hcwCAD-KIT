@@ -9,6 +9,32 @@ Written by **Agent 1** only. One entry per tested build, newest first. Rules: [.
 - Windows 11; .NET SDK 8.0.425 (per-user); AutoCAD 2022; `accoreconsole.exe` present.
 - Not installed: Inno Setup 6, BricsCAD, ZWCAD, CMake, MSVC, WinUI workload.
 
+## 2026-10-07 · `888d27c` · PARTIAL (first automatic host run)
+
+Source under test: `abedb4e` plus the hotfix `67b9bd8`; `888d27c` adds only the test harness. All levels run on the clean tree of `888d27c`.
+
+| Level | Check | Result |
+|---|---|---|
+| L0 | `dotnet test tests/HCW.Logic.Tests` | PASS: 594 passed, 0 failed |
+| L1 | `dotnet build build/CompileCheck.csproj` | PASS: 0 warnings, 0 errors |
+| L2 | Release x64 build against AutoCAD 2022 (`--no-incremental`) | PASS: 0 warnings, 0 errors; DLL 864,256 bytes, built 22:05:19 |
+| L3 automatic | `build\host-tests\Run-HostTests.ps1` in `accoreconsole.exe` | PASS: 6 of 6 |
+
+The six automatic host tests (on blank drawings made from the AutoCAD templates, not the owner's drawings):
+
+| Test | What it shows |
+|---|---|
+| 01-load | the DLL loads in the core console; `HCWDIAG` runs (163 commands registered; millimetre drawing) |
+| 02-wall-from-lines | `HCWWALL` on four selected lines: 4 outlines on `A-WALL`, 1 hatch, 4 take-off lines |
+| 03-wall-pick-points | `HCWWALL` with Enter to pick points: closed run gives 2 outlines, 1 hatch, 1 take-off line (**failed before hotfix `67b9bd8`**, D-005) |
+| 04-wall-units-inches | in an inch drawing the prompt reads "Wall thickness in in <9.0551>" and the walls are 9.0551 in thick |
+| 05-wallregen-faces | `HCWWALLREGEN` Faces: 4 centre lines at 228.6 mm, 4 corners, centre lines on `A-WALL-CL`, faces on `A-WALL-FACE` (D-003) |
+| 06-wallregen-inches-no-runaway | the same in an inch drawing; the drawing extents stay inside the plan (D-002) |
+
+Findings: **D-005** (Enter at a selection prompt is ignored in six commands; one fixed by hotfix, five open for Agent 2). Feasibility of T-003: **yes**, with limits: the console has no ribbon or dialogs, so the ribbon (D-001) and the WinForms dialogs (Project data, room picker) still need the interactive run; `NETLOAD` needs an unquoted path and `SECURELOAD` 0; a script must not end with a blank line (Enter repeats the last command). TESTING.md was out of date and is corrected in the same push (command count 163, not "above 250"; door and window tags follow the standard marks).
+
+Not run: **L3 interactive** (no command was run in AutoCAD with the owner: D-001 ribbon, D-004 junction geometry, every command not in the six tests), **L4** (no installer; Inno Setup not installed), **L5**, BricsCAD, ZWCAD. The harness has no negative control beyond test 03 (which failed before the fix, in a manual run of the same input).
+
 ## 2026-10-07 · `c85216f` · PARTIAL
 
 | Level | Check | Result |
