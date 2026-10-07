@@ -2,24 +2,26 @@
 
 Kept by **Agent 2** (development queue and questions for the owner) and **Agent 1** (local queue). Formats and rules: [../AGENTS.md](../AGENTS.md) sections 5 and 6. Status words are exactly: Todo, In progress, Ready for verification @ \<hash\>, Done, Blocked (on what).
 
-Last updated 2026-10-07 by Agent 1 (initial queue; Agent 2 owns the development section from here).
+Last updated 2026-10-07 by Agent 2 (development section: Q-001, Q-002, Q-005 worked; Local queue untouched).
 
 ## Development queue (Agent 2)
 
 ### Q-001 · Beam depth per floor on the Floors page
-Priority: P1 · Status: Todo
+Priority: P1 · Status: Ready for verification @ aff3a61
 Why: AQC computes a column's clear height as `height - slab - beam depth`, so the bridge needs a beam depth for every floor (see [../AQC-FINDINGS.md](../AQC-FINDINGS.md)).
 Acceptance: the Floors page of `HCWFLOORS` has a "Beam depth" column (mm); it is saved with the project data in the drawing; `ProjectData` has the per-floor depth with tests; the default is the first standard depth in the Beams page, else 450. README updated.
 Notes: floors live in the take-off book (`MeasureBook.FloorSpec`, which has no beam field), so keep the depths in the project data, keyed by floor name.
+Done by Agent 2: the Floors page has a Beam depth column; `ProjectData.FloorBeamMm` / `SetFloorBeam`, saved as `BEAMFLOOR|name|depth` lines; four tests. L0 (614 passed) and L1 clean on `5b4b1c5`. **To verify in AutoCAD** (steps in TESTING.md, "Beam depth per floor"): the column is there, shows 450 or the first Beams depth for a new floor, keeps a typed value after OK and reopen, and drops the depth of a removed floor.
 
 ### Q-002 · Bridge exporter logic (CAD-free)
-Priority: P1 · Status: Todo (start on the recommended answers in the questions below; revisit if the owner decides otherwise)
+Priority: P1 · Status: Ready for verification @ 5b4b1c5
 Why: first half of the AQC bridge ([../AQC-BRIDGE-PLAN.md](../AQC-BRIDGE-PLAN.md), Phase 2).
 Acceptance: `Logic/BridgeExport.cs` turns plain records (levels, walls, openings, schedule, columns, lintels, rooms, project) into the `hcw-aqc-bridge` v1 JSON with a hand-written JSON writer (no new dependency, rule D3); output for the sample inputs equals `docs/bridge/fixtures/small-house.json`; tests cover millimetre conversion from inches, feet, centimetres and metres.
 Notes: no CAD types in this class.
+Done by Agent 2 on the recommended answers: `Logic/BridgeExport.cs` with plain records; the output equals `small-house.json` and `levels-only.json` byte for byte, and a small house given in mm, cm, m, in or ft gives the same file (11 tests). Nothing to try in a CAD program; Agent 1 only needs L0 on the commit. If the owner answers the questions differently, the field names change with a new `version`.
 
 ### Q-003 · `HCWBRIDGE` command and ribbon panel
-Priority: P2 · Status: Todo (after Q-001 and Q-002)
+Priority: P2 · Status: Todo (Q-001 and Q-002 are done; next for Agent 2)
 Why: second half of Phase 2.
 Acceptance: `HCWBRIDGE` reads the drawing (floors, wall objects, openings, columns, lintels, rooms, project data), writes `<drawing>.aqcbridge.json` next to the drawing (or into setting `BridgeFolder`), and reports counts per section and what it skipped; a drawing id (GUID) is stored in the drawing on first export; an "AQC Bridge" panel on the Project tab. Added to TESTING.md (rule D6).
 
@@ -28,7 +30,7 @@ Priority: P3 · Status: Todo (needs the owner's yes: see the questions)
 Why: walls now ask in the drawing's units (`Util.DrawingUnitName`, `Util.UnitsToMm`); doors, windows, columns and the rest still ask in mm.
 
 ### Q-005 · README and HANDOFF catch-up
-Priority: P2 · Status: Todo
+Priority: P2 · Status: Done (documentation only, `efda0bd`)
 Why: the Project tab, `ROOMTEXTFIT`, the standard opening marks, wall junctions without overlap and `HCWWALLREGEN` Faces mode were documented in the README by the local agent; `HANDOFF.md` does not list them under "built, not yet verified in a host".
 Acceptance: `HANDOFF.md` lists each; `docs/TESTING.md` has steps for each (rule D6).
 
