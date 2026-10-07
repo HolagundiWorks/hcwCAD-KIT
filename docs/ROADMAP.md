@@ -1,6 +1,6 @@
 # Roadmap
 
-What is not built yet. Everything else is described in the [README](../README.md). The build has been loaded and tested in AutoCAD with no errors reported, but not every command has been confirmed, and nothing has been run in BricsCAD or ZWCAD: the commands compile against the AutoCAD .NET reference package and the CAD-free logic has unit tests, but each host needs its own testing before release.
+What is not built yet. Everything else is described in the [README](../README.md). No command has a [test-log](work/TEST-LOG.md) entry yet, so none counts as tested in a CAD program (the owner has loaded builds in AutoCAD 2022 and reported the problems in [work/DEFECTS.md](work/DEFECTS.md)), and nothing has been run in BricsCAD or ZWCAD: the commands compile against the AutoCAD .NET reference package and the CAD-free logic has unit tests, but each host needs its own testing before release.
 
 ## What was built from the old list
 
@@ -10,7 +10,7 @@ Every item that was on this roadmap has been built, in the form the README descr
 
 These are limits of what was built, or items that need something the plugin cannot supply:
 
-- **Hosts.** AutoCAD: loaded and tested with no errors reported (which commands is not recorded). BricsCAD and ZWCAD: not run. The pure logic (geometry, tables, schedules) has unit tests; the command layer (prompts, entity creation, the live update events, jigs) is checked only by compiling against the AutoCAD .NET 24.3 package. Expect fixes once it meets a real drawing.
+- **Hosts.** AutoCAD 2022: the owner has loaded builds and reported defects D-001 to D-004 (fixed, awaiting verification); there is no test-log entry for any command yet. BricsCAD and ZWCAD: not run. The pure logic (geometry, tables, schedules) has unit tests; the command layer (prompts, entity creation, the live update events, jigs) is checked only by compiling against the AutoCAD .NET 24.3 package. Expect fixes once it meets a real drawing.
 - **BricsCAD and ZWCAD** pick up the same source but are not built here (they need the host API DLLs, which are not on public runners). The live service, the slide jig and viewport layer freezing in particular may behave differently there.
 - **Bylaws are out of scope.** Bylaw scrutiny is done by separate software; this plugin only puts the drawing on the building permit layers (`LayerOutput`, `BpLayerMap`, `HCWPERMITLAYERS`). The area exemption rules, the permissible FAR and ground cover table, the lift size table and the stair rise, going and 2R + G limits were removed; the electrical breaker and cable tables remain because the circuit sizing uses them.
 - **Not planned: host-native associative dimensions.** Associative dimensions are the plugin's own tracking (wall, column and grid vertices, door and window points), not the host's dimension associativity. They re-tie to a vertex within `AutoDimReanchorMm` when a wall is redrawn, but not to a door or window block that is deleted and inserted again.
