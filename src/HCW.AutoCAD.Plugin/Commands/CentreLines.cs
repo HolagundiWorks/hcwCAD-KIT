@@ -83,7 +83,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                 create(chains);
                 return;
             }
-            if (psr.Status != PromptStatus.None) return;
+            // Enter with nothing selected comes back as Error (GetPoint returns None for Enter, GetSelection does not), so both mean "pick points".
+            if (psr.Status != PromptStatus.None && psr.Status != PromptStatus.Error) return;
 
             // Pick points: one run after another until Enter on the start prompt.
             var ucs = ed.CurrentUserCoordinateSystem;
