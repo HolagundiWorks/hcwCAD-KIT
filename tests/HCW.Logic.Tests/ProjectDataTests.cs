@@ -78,3 +78,48 @@ namespace HCW.Logic.Tests
         }
     }
 }
+
+namespace HCW.Logic.Tests
+{
+    public class FloorBeamTests
+    {
+        [Fact]
+        public void FloorWithNoDepthGetsTheFirstStandardDepthElse450()
+        {
+            var p = new ProjectData();
+            Assert.Equal(450, p.FloorBeamMm("Ground"));
+            p.BeamDepthsMm = new System.Collections.Generic.List<double> { 300, 450, 600 };
+            Assert.Equal(300, p.FloorBeamMm("Ground"));
+        }
+
+        [Fact]
+        public void EnteredDepthWinsAndSurvivesTheSavedLines()
+        {
+            var p = new ProjectData();
+            p.SetFloorBeam("Ground", 375);
+            p.SetFloorBeam("First", 450.5);
+            var back = ProjectData.FromLines(p.ToLines());
+            Assert.Equal(375, back.FloorBeamMm("ground"));          // names are not case sensitive
+            Assert.Equal(450.5, back.FloorBeamMm("First"), 6);
+        }
+
+        [Fact]
+        public void ZeroRemovesTheDepthAndAFloorNameWithABarIsKept()
+        {
+            var p = new ProjectData();
+            p.SetFloorBeam("Mezz|A", 300);
+            var back = ProjectData.FromLines(p.ToLines());
+            Assert.Equal(300, back.FloorBeamMm("Mezz|A"));          // the bar becomes a slash on both sides
+            back.SetFloorBeam("Mezz|A", 0);
+            Assert.DoesNotContain(back.ToLines(), l => l.StartsWith("BEAMFLOOR"));
+        }
+
+        [Fact]
+        public void OldDataWithNoFloorDepthsStillLoads()
+        {
+            var back = ProjectData.FromLines(new[] { "OWNER|S. Rao", "BEAMS|300, 450" });
+            Assert.Equal(300, back.FloorBeamMm("Ground"));
+            Assert.Equal("S. Rao", back.Get("OWNER"));
+        }
+    }
+}

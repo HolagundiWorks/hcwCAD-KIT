@@ -37,6 +37,32 @@ namespace HCW.AutoCAD.Plugin.Logic
         /// <summary>Standard beam depths in millimetres, smallest first, without repeats.</summary>
         public List<double> BeamDepthsMm = new List<double>();
 
+        /// <summary>Beam depth in millimetres for each floor, keyed by floor name (the floors themselves are the levels of the take-off book).</summary>
+        private readonly Dictionary<string, double> _floorBeams = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The beam depth a floor gets when none is entered: the first standard depth on the Beams page, else 450 mm.</summary>
+        public const double FallbackBeamMm = 450;
+        public double DefaultBeamMm => BeamDepthsMm.Count > 0 ? BeamDepthsMm[0] : FallbackBeamMm;
+
+        /// <summary>The beam depth of a floor (mm): the one entered for it, otherwise <see cref="DefaultBeamMm"/>.</summary>
+        public double FloorBeamMm(string floorName)
+        {
+            double v;
+            return _floorBeams.TryGetValue(CleanName(floorName), out v) ? v : DefaultBeamMm;
+        }
+
+        /// <summary>Sets a floor's beam depth; a value that is not positive removes it, so the floor falls back to the default.</summary>
+        public void SetFloorBeam(string floorName, double depthMm)
+        {
+            string key = CleanName(floorName);
+            if (depthMm > 0) _floorBeams[key] = depthMm; else _floorBeams.Remove(key);
+        }
+
+        public void ClearFloorBeams() { _floorBeams.Clear(); }
+
+        /// <summary>A floor name as it is kept: trimmed, with the bar that separates the saved fields turned into a slash.</summary>
+        private static string CleanName(string name) => (name ?? "").Replace('|', '/').Trim();
+
         public string Get(string key) { string v; return _values.TryGetValue(key, out v) ? v : ""; }
 
         public void Set(string key, string value)
@@ -50,6 +76,8 @@ namespace HCW.AutoCAD.Plugin.Logic
             foreach (var f in Fields)
                 if (_values.ContainsKey(f.Key)) yield return f.Key + "|" + _values[f.Key];
             if (BeamDepthsMm.Count > 0) yield return "BEAMS|" + FormatDepths(BeamDepthsMm);
+            foreach (var kv in _floorBeams.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                yield return "BEAMFLOOR|" + kv.Key + "|" + kv.Value.ToString("0.###", CultureInfo.InvariantCulture);
         }
 
         public static ProjectData FromLines(IEnumerable<string> lines)
@@ -61,6 +89,13 @@ namespace HCW.AutoCAD.Plugin.Logic
                 if (bar <= 0) continue;
                 string key = line.Substring(0, bar), value = line.Substring(bar + 1);
                 if (string.Equals(key, "BEAMS", StringComparison.OrdinalIgnoreCase)) p.BeamDepthsMm = ParseDepths(value);
+                else if (string.Equals(key, "BEAMFLOOR", StringComparison.OrdinalIgnoreCase))
+                {
+                    int last = value.LastIndexOf('|');
+                    double depth;
+                    if (last > 0 && double.TryParse(value.Substring(last + 1), NumberStyles.Float, CultureInfo.InvariantCulture, out depth))
+                        p.SetFloorBeam(value.Substring(0, last), depth);
+                }
                 else p.Set(key, value);
             }
             return p;

@@ -43,7 +43,7 @@ namespace HCW.AutoCAD.Plugin.UI
 
             var tabs = new TabControl { Dock = DockStyle.Fill };
             tabs.TabPages.Add(DetailsPage(data));
-            tabs.TabPages.Add(FloorsPage(floors));
+            tabs.TabPages.Add(FloorsPage(floors, data));
             tabs.TabPages.Add(BeamsPage(data));
             tabs.SelectedIndex = Math.Max(0, Math.Min(startPage, tabs.TabPages.Count - 1));
             Controls.Add(tabs);
@@ -82,7 +82,7 @@ namespace HCW.AutoCAD.Plugin.UI
             return page;
         }
 
-        private TabPage FloorsPage(IList<LevelRow> floors)
+        private TabPage FloorsPage(IList<LevelRow> floors, ProjectData data)
         {
             var page = new TabPage("Floors") { Padding = new Padding(6) };
             var top = new Panel { Dock = DockStyle.Top, Height = 66 };
@@ -92,7 +92,7 @@ namespace HCW.AutoCAD.Plugin.UI
             top.Controls.Add(new Label
             {
                 Left = 4, Top = 32, Width = 600, Height = 32,
-                Text = "One row per floor, in millimetres. Floor to floor is finished floor level to the next; the lintel bottom is measured up from the floor; the slab is the one under the floor. A floor added copies the last one."
+                Text = "One row per floor, in millimetres. Floor to floor is finished floor level to the next; the lintel bottom is measured up from the floor; the slab is the one under the floor; the beam depth is the deepest beam at the top of the floor (it sets the clear column height). A floor added copies the last one."
             });
             _grid.Dock = DockStyle.Fill;
             _grid.AllowUserToAddRows = false;
@@ -104,10 +104,11 @@ namespace HCW.AutoCAD.Plugin.UI
             _grid.Columns.Add("Ceiling", "Ceiling height");
             _grid.Columns.Add("Lintel", "Lintel bottom");
             _grid.Columns.Add("Slab", "Slab thickness");
+            _grid.Columns.Add("Beam", "Beam depth");
 
             _loading = true;
-            foreach (var f in floors) AddRow(f);
-            if (_grid.Rows.Count == 0) AddRow(new LevelRow { Name = ProjectData.FloorName(0), FflMm = _newFfl, CeilingMm = _newCeiling, LintelMm = _newLintel, SlabMm = _newSlab });
+            foreach (var f in floors) AddRow(f, data.FloorBeamMm(f.Name));
+            if (_grid.Rows.Count == 0) AddRow(new LevelRow { Name = ProjectData.FloorName(0), FflMm = _newFfl, CeilingMm = _newCeiling, LintelMm = _newLintel, SlabMm = _newSlab }, data.DefaultBeamMm);
             _count.Value = _grid.Rows.Count;
             _loading = false;
             _count.ValueChanged += (s, e) => ResizeFloors((int)_count.Value);
@@ -132,9 +133,9 @@ namespace HCW.AutoCAD.Plugin.UI
             return page;
         }
 
-        private void AddRow(LevelRow f)
+        private void AddRow(LevelRow f, double beamMm)
         {
-            _grid.Rows.Add(f.Name, Num(f.FflMm), Num(f.CeilingMm), Num(f.LintelMm), Num(f.SlabMm));
+            _grid.Rows.Add(f.Name, Num(f.FflMm), Num(f.CeilingMm), Num(f.LintelMm), Num(f.SlabMm), Num(beamMm));
         }
 
         private static string Num(double v) => Math.Round(v, 1).ToString("0.#", CultureInfo.InvariantCulture);
@@ -149,7 +150,8 @@ namespace HCW.AutoCAD.Plugin.UI
                 var last = i > 0 ? _grid.Rows[i - 1] : null;
                 _grid.Rows.Add(ProjectData.FloorName(i),
                     last != null ? last.Cells[1].Value : Num(_newFfl), last != null ? last.Cells[2].Value : Num(_newCeiling),
-                    last != null ? last.Cells[3].Value : Num(_newLintel), last != null ? last.Cells[4].Value : Num(_newSlab));
+                    last != null ? last.Cells[3].Value : Num(_newLintel), last != null ? last.Cells[4].Value : Num(_newSlab),
+                    last != null ? last.Cells[5].Value : Num(Data.DefaultBeamMm));
             }
         }
 
@@ -160,19 +162,24 @@ namespace HCW.AutoCAD.Plugin.UI
         {
             if (DialogResult != DialogResult.OK) return;
             var rows = new List<LevelRow>();
+            var beams = new List<KeyValuePair<string, double>>();
             foreach (DataGridViewRow r in _grid.Rows)
             {
-                double ffl, ceil, lintel, slab;
-                if (!Parse(r.Cells[1].Value, out ffl) || !Parse(r.Cells[2].Value, out ceil) || !Parse(r.Cells[3].Value, out lintel) || !Parse(r.Cells[4].Value, out slab) || ffl <= 0)
+                double ffl, ceil, lintel, slab, beam;
+                if (!Parse(r.Cells[1].Value, out ffl) || !Parse(r.Cells[2].Value, out ceil) || !Parse(r.Cells[3].Value, out lintel) || !Parse(r.Cells[4].Value, out slab) || !Parse(r.Cells[5].Value, out beam) || ffl <= 0)
                 {
-                    MessageBox.Show(this, "Floor " + (r.Index + 1) + ": every height is a number in millimetres, and floor to floor must be more than zero.", "Project data", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(this, "Floor " + (r.Index + 1) + ": every height and the beam depth is a number in millimetres, and floor to floor must be more than zero.", "Project data", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     e.Cancel = true;
                     return;
                 }
                 string name = Convert.ToString(r.Cells[0].Value, CultureInfo.InvariantCulture);
-                rows.Add(new LevelRow { Name = string.IsNullOrWhiteSpace(name) ? ProjectData.FloorName(r.Index) : name.Trim(), FflMm = ffl, CeilingMm = ceil, LintelMm = lintel, SlabMm = slab });
+                string floorName = string.IsNullOrWhiteSpace(name) ? ProjectData.FloorName(r.Index) : name.Trim();
+                rows.Add(new LevelRow { Name = floorName, FflMm = ffl, CeilingMm = ceil, LintelMm = lintel, SlabMm = slab });
+                beams.Add(new KeyValuePair<string, double>(floorName, beam));
             }
             Floors = rows;
+            Data.ClearFloorBeams();                                  // floors that were removed lose their depth
+            foreach (var kv in beams) Data.SetFloorBeam(kv.Key, kv.Value);
             foreach (var kv in _boxes) Data.Set(kv.Key, kv.Value.Text);
             Data.BeamDepthsMm = ProjectData.ParseDepths(_beams.Text);
         }

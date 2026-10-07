@@ -26,6 +26,10 @@ Nothing in the command layer has been run in a CAD program. This is the order to
 
 In a new drawing draw on `A-WALL`, with lines only: a 4000 x 3000 rectangle, one partition across the middle that stops 40 mm short of the top wall, and one corner with a 40 mm gap. Run `HCWWALLREGEN`, pick a line on `A-WALL`, choose Auto. Expect: the four outer lines 9 in (228.6) and the partition 4.5 in (114.3); the partition joined to the top wall and the gap corner closed; mitred corners where thicknesses match; a square outside corner where a 9 in and a 4.5 in wall meet; the hatch; the originals on `A-WALL-CL`; a junction report on the command line. Then try Outer and Inner, and the swap option.
 
+### Beam depth per floor
+
+Run `HCWFLOORS`. The Floors page has a **Beam depth** column in millimetres. With nothing on the Beams page a new floor shows 450; put `300, 450` on the Beams page and add a floor, which should show 300. Type 375 for Ground, press OK, run `HCWFLOORS` again: Ground shows 375. Remove a floor with the count, OK, add it back: it shows the default again (depths of removed floors are dropped).
+
 ## 3. Levels, sections, columns, stairs
 
 1. `MSCHED`, Floors tab: add Ground (3.15 / 3.0 / 2.1 / 0.15) and First. `HCWLEVELS` lists them.
