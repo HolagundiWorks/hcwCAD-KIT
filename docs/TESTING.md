@@ -43,6 +43,10 @@ In a new drawing draw on `A-WALL`, with lines only: a 4000 x 3000 rectangle, one
 
 Run `HCWFLOORS`. The Floors page has a **Beam depth** column in millimetres. With nothing on the Beams page a new floor shows 450; put `300, 450` on the Beams page and add a floor, which should show 300. Type 375 for Ground, press OK, run `HCWFLOORS` again: Ground shows 375. Remove a floor with the count, OK, add it back: it shows the default again (depths of removed floors are dropped).
 
+### AQC bridge export (`HCWBRIDGE`)
+
+Needs a saved drawing with the small test plan from section 2 (walls, a door, two windows, a lintel), `HCWFLOORS` with two floors, a room (`HCWROOMWALLS`) and a column or two (`HCWCOLUMN`). Run `HCWBRIDGE`, answer 1 for the floor. Expect: a message naming `<drawing>.aqcbridge.json` next to the drawing with counts per section; open the file in a text editor: `"units": "mm"`, a `source.drawing_id` GUID, `levels` with `beam_depth_mm` (the value from `HCWFLOORS`), `walls` with the wall ids as `ref`, `openings` with marks `D2/D3/W3`, `wall_ref` set, an `opening_schedule`, `lintels`, `rooms` (each room once). Run it again: same `drawing_id` and the same refs. Answer 0 for the floor: rows repeated with `@Ground` / `@First` on the refs. In an inch or foot drawing the lengths are still millimetres (a 9 in wall shows 228.6). An unsaved drawing gets "save the drawing first".
+
 ## 3. Levels, sections, columns, stairs
 
 1. `MSCHED`, Floors tab: add Ground (3.15 / 3.0 / 2.1 / 0.15) and First. `HCWLEVELS` lists them.

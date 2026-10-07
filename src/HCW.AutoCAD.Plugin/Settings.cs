@@ -111,6 +111,7 @@ namespace HCW.AutoCAD.Plugin
             Entry("RegenOuterMm", "228.6", "HCWWALLREGEN: the thickness of outer walls in millimetres (9 in)."),
             Entry("RegenInnerMm", "114.3", "HCWWALLREGEN: the thickness of inner walls in millimetres (4.5 in)."),
             Entry("RegenReachMm", "300", "HCWWALLREGEN: how far a wall end may be from another wall and still be joined to it, in millimetres."),
+            Entry("BridgeFolder", "", "HCWBRIDGE: the folder the AQC bridge file is written to; empty puts it next to the drawing."),
             Entry("WallJoinOnDraw", "0", "HCWWALL: 0 (the default) leaves each wall as its own outline, so a 112 mm wall drawn against a 230 mm wall stays a separate outline; 1 merges a new wall with the wall outlines it touches (HCWWALLJOIN does the same on request)."),
             Entry("RoomTextMaxMm", "100", "ROOMTEXTFIT: the largest height a room name is fitted to, in millimetres (ROOMTEXTFITSET changes it for the session)."),
             Entry("DoorTagFormat", "{code}/{no}", "HCWDOOR: the plan tag of a door, {code} the standard mark for its width (D1 800, D2 900, D3 1200; a size not in the table gets D4 and up) and {no} its number among the doors of that mark."),

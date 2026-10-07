@@ -248,6 +248,16 @@ The **hcwCAD-KIT Project** tab keeps the data a whole project shares, once, in t
 
 The **Door & Window Schedules** panel has `HCWOPENSTD`, which puts the standard doors, windows and ventilator (D1 800, D2 900, D3 1200; W1 600 to W5 2000; V1 600) in the schedule with default heights taken from the first floor's lintel bottom and the window and ventilator settings, `HCWOPENSCHED` (update from the plan and draw the table), `HCWOPENSYNC` (update only) and `MSCHED` (edit).
 
+### AQC bridge (`HCWBRIDGE`)
+
+`HCWBRIDGE` (Export for AQC, on the **AQC Bridge** panel of the Project tab) writes the drawing as an hcw-aqc-bridge v1 file, `<drawing>.aqcbridge.json`, next to the drawing (or into the folder in setting `BridgeFolder`); the drawing must be saved. The file format is in [docs/bridge](docs/bridge/README.md). It sends measured facts in millimetres (areas in square metres), whatever the drawing's unit:
+
+* **Project and floors:** the project details, and one level for each floor (floor to floor height, slab thickness, **beam depth**, ceiling height, lintel bottom). The beam depth is the one on the Floors page of `HCWFLOORS`.
+* **Which floor the plan shows:** with more than one floor it asks (a number, or 0 for the same plan on every floor, in which case each row is repeated per floor with `@<floor>` added to its ref).
+* **Walls:** one row for each wall object (`HCWWALL`, `HCWWALLADOPT`, `HCWWALLREGEN`): centre line length, the floor's ceiling height as the wall height, thickness. **Openings:** each door and window made by the tools, with its schedule mark (from the schedule, else the standard mark for its width, else `D-1050` style), width, height, sill, door type, and the nearest wall as `wall_ref`; plus the schedule with the number of each. **Columns** (closed rectangles and column blocks on the column layers, marked C1, C2 by size as `HCWCOLSCHED` marks them), **lintels** (made by `HCWLINTEL`) and **rooms** (closed outlines on the room layers, named from the text inside; a room outline copied onto the take-off layers counts once).
+* **Not sent:** slabs (the plugin does not draw them), and anything derived: plaster, paint, skirting, shuttering, rebar.
+* A drawing id (a GUID) is made on the first export and kept in the drawing, so exporting again gives AQC the same id and the same refs (wall ids, block handles). It reports the counts for each section and what it left out, and names any floor whose height less slab less beam depth leaves no clear height.
+
 ### Layers for permit scrutiny
 
 By default the tools draw on the HCW layers the layer set creates (`A-WALL`, `A-DOOR` ...; setting `LayerOutput` = `HCW`). When a drawing goes to a separate scrutiny program, set `LayerOutput` = `BP` so the items the tools draw are on the building permit layers and that program can pick them up by layer, or run `HCWPERMITLAYERS` on a finished drawing. What goes where, from the `BpLayerMap` setting (change an entry to send an item to another layer):

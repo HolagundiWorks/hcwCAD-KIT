@@ -149,6 +149,7 @@ namespace HCW.AutoCAD.Plugin.UI
             projectTab.Panels.Add(BuildProjectDetailsPanel());
             projectTab.Panels.Add(BuildProjectFloorsPanel());
             projectTab.Panels.Add(BuildProjectSchedulesPanel());
+            projectTab.Panels.Add(BuildProjectBridgePanel());
 
             var settingsTab = new RibbonTab { Title = "hcwCAD-KIT Settings", Id = SettingsTabId };
             settingsTab.Panels.Add(BuildLayerPanel());
@@ -195,6 +196,13 @@ namespace HCW.AutoCAD.Plugin.UI
             AddSmallGroup(src,
                 ("HCWOPENSYNC", "Update Schedule", "reset", "Read the doors and windows in the plan into the schedule without drawing the table"),
                 ("MSCHED", "Edit Schedules", "settings", "Edit the floors, doors and windows, columns and rates of the take-off book"));
+            return Wrap(src);
+        }
+
+        private RibbonPanel BuildProjectBridgePanel()
+        {
+            var src = NewSource("AQC Bridge");
+            AddLarge(src, "HCWBRIDGE", "Export for\nAQC", "document--export", "Write the project, floors, walls, openings, columns, lintels and rooms of this drawing as an AQC bridge file next to the drawing");
             return Wrap(src);
         }
 

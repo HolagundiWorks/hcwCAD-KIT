@@ -490,7 +490,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         /// <summary>A column layer: A-COL, or MEASURE-COLUMN where the take-off reads them.</summary>
-        private static bool IsColumnLayer(string layer) =>
+        internal static bool IsColumnLayer(string layer) =>
             string.Equals(layer, LayerColumn, StringComparison.OrdinalIgnoreCase) || string.Equals(layer, "A-COL", StringComparison.OrdinalIgnoreCase) || string.Equals(layer, MeasureCommands.LayCol, StringComparison.OrdinalIgnoreCase);
 
         private static void AddLine(List<Seg> into, Line ln) =>
@@ -518,7 +518,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         }
 
         /// <summary>True for a closed 4-vertex polyline with straight sides and right-angle corners; gives the two side lengths.</summary>
-        private static bool Rectangle(Polyline pl, out double a, out double b)
+        internal static bool Rectangle(Polyline pl, out double a, out double b)
         {
             a = b = 0;
             var v = new P2[4];

@@ -12,4 +12,16 @@ The file hcwCAD-KIT writes for AQC (and reads back, in the other direction). One
 * **Wall thickness:** 230 is a 230 mm brick wall; 114.3 (4.5 in) is read by AQC as its 110 mm wall (anything 120 mm or under).
 * A change to a field name, a required field or a unit is a new `version`.
 
+## How hcwCAD-KIT fills it (`HCWBRIDGE`, written 2026-10-07)
+
+| Section | From |
+|---|---|
+| `source` | the drawing file name, a GUID kept in the drawing, the AutoCAD version, the export time (UTC) |
+| `project` | project details: `name` project title, `client_name` owner, `company_name` consulting architect, `address`, `pid`, `site_area_m2` (the number in the site area text), `plot_use` |
+| `levels`, `beam_depths_mm` | the floors of the project (`HCWFLOORS`): floor to floor, slab, the floor's beam depth, ceiling, lintel bottom; the standard beam depths |
+| `walls` | wall objects: centre line length, ceiling height, thickness, layer; `ref` is the wall id |
+| `openings`, `opening_schedule` | doors and windows made by the tools; `ref` is the block handle, `wall_ref` the nearest wall within 1.5 wall thicknesses |
+| `columns`, `lintels`, `rooms` | closed rectangles and column blocks on the column layers; the lintel lines `HCWLINTEL` makes; closed outlines on the room layers (each outline once) |
+| `slabs` | not sent yet |
+
 Status: draft, written before AQC has an importer. See [../AQC-BRIDGE-PLAN.md](../AQC-BRIDGE-PLAN.md) and [../AQC-FINDINGS.md](../AQC-FINDINGS.md).
