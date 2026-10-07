@@ -319,7 +319,8 @@ namespace HCW.AutoCAD.Plugin.Commands
         // RoomUnitSelector.Current, which reads the drawing's INSUNITS.
         // Typed M-/F-/I- commands stay on their own engines.
 
-        private static readonly string[] RoomTypeNames = LayerData.RoomTypes.Select(r => r.RoomType).ToArray();
+        // Alphabetical, so a name is easy to find in the picker ("Custom..." is added last by the form).
+        private static readonly string[] RoomTypeNames = LayerData.RoomTypes.Select(r => r.RoomType).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToArray();
 
         /// <summary>
         /// Unset INSUNITS used to be treated as metres, so a millimetre plan
