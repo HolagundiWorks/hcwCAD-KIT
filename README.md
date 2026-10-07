@@ -238,6 +238,16 @@ Walls are numbered `FB01`, `FB02` … left to right (then bottom to top) by defa
 
 **Colour-mapped deductions.** A standalone deduction line (not inside a door or window block) that is mapped to a schedule name takes a colour for that name, the same name always the same colour, so you can see on the drawing which openings are which. Lines inside blocks cannot be coloured per insert. `DeductionColours` 0 turns it off.
 
+### Project tab (project data, floors, schedules)
+
+The **hcwCAD-KIT Project** tab keeps the data a whole project shares, once, in the drawing. `HCWPROJECT`, `HCWFLOORS` and `HCWBEAMS` open one dialog on three pages:
+
+* **Project details:** project title, owner, consulting architect, structural or stability engineer, PID, site area, plot use (each of these fills the title block field of the same name), and site address, local authority and date (kept only). With "Fill the title block" ticked, OK fills every title block in the drawing, in model space and on every layout. `HCWPROJECTTITLE` fills them again later from the saved details without the dialog. Empty details leave the title block field as it is.
+* **Floors:** the number of floors, and for each floor its name, floor to floor height, ceiling height, lintel bottom and slab thickness in millimetres. Raising the count adds floors that copy the last one (named Ground, First, Second, Third, Fourth, Floor 6 ...). These are the same levels as the Floors tab of `MSCHED`, so `HCWSECTIONDRAW`, the stairs, doors, windows, `HCWLEVELS` and the area statement all read what is entered here.
+* **Beams:** the standard beam depths in millimetres (for example 230, 300, 375, 450, 600), kept in the drawing for the structural tools.
+
+The **Door & Window Schedules** panel has `HCWOPENSTD`, which puts the standard doors, windows and ventilator (D1 800, D2 900, D3 1200; W1 600 to W5 2000; V1 600) in the schedule with default heights taken from the first floor's lintel bottom and the window and ventilator settings, `HCWOPENSCHED` (update from the plan and draw the table), `HCWOPENSYNC` (update only) and `MSCHED` (edit).
+
 ### Layers for permit scrutiny
 
 By default the tools draw on the HCW layers the layer set creates (`A-WALL`, `A-DOOR` ...; setting `LayerOutput` = `HCW`). When a drawing goes to a separate scrutiny program, set `LayerOutput` = `BP` so the items the tools draw are on the building permit layers and that program can pick them up by layer, or run `HCWPERMITLAYERS` on a finished drawing. What goes where, from the `BpLayerMap` setting (change an entry to send an item to another layer):

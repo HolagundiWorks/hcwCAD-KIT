@@ -17,6 +17,7 @@ namespace HCW.AutoCAD.Plugin.UI
     {
         private const string ToolsTabId = "HCW_TOOLS_TAB";
         private const string SettingsTabId = "HCW_SETTINGS_TAB";
+        private const string ProjectTabId = "HCW_PROJECT_TAB";
 
         public void Initialize()
         {
@@ -89,7 +90,7 @@ namespace HCW.AutoCAD.Plugin.UI
             {
                 var ours = new System.Collections.Generic.List<string>();
                 foreach (RibbonTab t in rc.Tabs)
-                    if (t.Id == ToolsTabId || t.Id == SettingsTabId) ours.Add(t.Title + " (" + t.Panels.Count + " panels)");
+                    if (t.Id == ToolsTabId || t.Id == SettingsTabId || t.Id == ProjectTabId) ours.Add(t.Title + " (" + t.Panels.Count + " panels)");
                 lines.Add("ribbon: " + rc.Tabs.Count + " tabs; ours: " + (ours.Count == 0 ? "none (run HCWRIBBON)" : string.Join(", ", ours)));
             }
             int commands = 0;
@@ -119,7 +120,7 @@ namespace HCW.AutoCAD.Plugin.UI
                 return;
             }
             for (int i = rc.Tabs.Count - 1; i >= 0; i--)
-                if (rc.Tabs[i].Id == ToolsTabId || rc.Tabs[i].Id == SettingsTabId) rc.Tabs.RemoveAt(i);
+                if (rc.Tabs[i].Id == ToolsTabId || rc.Tabs[i].Id == SettingsTabId || rc.Tabs[i].Id == ProjectTabId) rc.Tabs.RemoveAt(i);
             try { BuildRibbon(); Say("ribbon built."); }
             catch (System.Exception ex) { Say("ribbon build error: " + ex.GetType().Name + ": " + ex.Message + (ex.InnerException != null ? " / " + ex.InnerException.Message : "")); }
         }
@@ -144,6 +145,11 @@ namespace HCW.AutoCAD.Plugin.UI
             toolsTab.Panels.Add(BuildAreaTextPanel());
             toolsTab.Panels.Add(BuildNotesPanel());
 
+            var projectTab = new RibbonTab { Title = "hcwCAD-KIT Project", Id = ProjectTabId };
+            projectTab.Panels.Add(BuildProjectDetailsPanel());
+            projectTab.Panels.Add(BuildProjectFloorsPanel());
+            projectTab.Panels.Add(BuildProjectSchedulesPanel());
+
             var settingsTab = new RibbonTab { Title = "hcwCAD-KIT Settings", Id = SettingsTabId };
             settingsTab.Panels.Add(BuildLayerPanel());
             settingsTab.Panels.Add(BuildLayerChecksPanel());
@@ -152,8 +158,44 @@ namespace HCW.AutoCAD.Plugin.UI
             settingsTab.Panels.Add(BuildPluginPanel());
 
             rc.Tabs.Add(toolsTab);
+            rc.Tabs.Add(projectTab);
             rc.Tabs.Add(settingsTab);
             rc.ActiveTab = toolsTab;
+        }
+
+        // ==================== hcwCAD-KIT Project ====================
+
+        private RibbonPanel BuildProjectDetailsPanel()
+        {
+            var src = NewSource("Project");
+            AddLarge(src, "HCWPROJECT", "Project\nDetails", "tag--edit", "Project title, owner, architect, engineer, PID, site area, plot use and address: kept in the drawing and filled into the title block");
+            AddLarge(src, "HCWPROJECTTITLE", "Fill Title\nBlock", "document--view", "Fill every title block in the drawing from the saved project details");
+            AddSmallGroup(src,
+                ("TITLEBLOCK", "Title Block", "document--horizontal", "Place the A3 building-permit title block (name plate)"),
+                ("TITLEFIELDS", "Title Fields", "tag--edit", "Edit every field of a title block by hand"));
+            return Wrap(src);
+        }
+
+        private RibbonPanel BuildProjectFloorsPanel()
+        {
+            var src = NewSource("Floors & Beams");
+            AddLarge(src, "HCWFLOORS", "Floors &\nHeights", "table-of-contents", "Number of floors, floor to floor and ceiling heights, lintel bottom and slab thickness for each floor");
+            AddLarge(src, "HCWBEAMS", "Beam\nDepths", "ruler", "The standard beam depths for this project");
+            AddSmallGroup(src,
+                ("HCWLEVELS", "List Levels", "report", "List the floors, their levels and heights in the drawing"),
+                ("HCWSECTIONDRAW", "Draw Section", "document--view", "Draw a section from the plan using these floor heights"));
+            return Wrap(src);
+        }
+
+        private RibbonPanel BuildProjectSchedulesPanel()
+        {
+            var src = NewSource("Door & Window Schedules");
+            AddLarge(src, "HCWOPENSTD", "Standard\nOpenings", "add--alt", "Put the standard doors D1 800, D2 900, D3 1200, windows W1 600 to W5 2000 and ventilator V1 600 in the schedule");
+            AddLarge(src, "HCWOPENSCHED", "Door & Window\nSchedule", "table-of-contents", "Update the schedule from the doors and windows in the plan and draw it as a table");
+            AddSmallGroup(src,
+                ("HCWOPENSYNC", "Update Schedule", "reset", "Read the doors and windows in the plan into the schedule without drawing the table"),
+                ("MSCHED", "Edit Schedules", "settings", "Edit the floors, doors and windows, columns and rates of the take-off book"));
+            return Wrap(src);
         }
 
         // ==================== hcwCAD-KIT (commands) ====================
