@@ -13,8 +13,8 @@ Nothing in the command layer has been run in a CAD program. This is the order to
 | Step | Expect |
 |---|---|
 | `HCWWALL`, 230, draw a closed room of four walls | Outlines on `A-WALL`, a hatch on `A-WALL-HATCH`, a line on `MEASURE-LINEAR` along each wall |
-| `HCWDOOR` 900 on one wall | Gap cut, door block, tag `D1`; no lintel yet (they are made on request); the hatch is cut at the door |
-| `HCWWINDOW` 1200 on another wall, then a second window of the same size | Tags `W1/1`, `W1/2`; same code for the same size |
+| `HCWDOOR` 900 on one wall | Gap cut, door block, tag `D2/1` (a 900 door is the standard mark D2; the tag is code/number); no lintel yet (they are made on request); the hatch is cut at the door |
+| `HCWWINDOW` 1200 on another wall, then a second window of the same size | Tags `W3/1`, `W3/2` (1200 is the standard mark W3); same code for the same size |
 | `HCWLINTEL` > Generate, select the door and a window | A dashed outline through the full wall thickness on `A-LINTEL` and a line on `MEASURE-LINTEL`; the wall is not cut; running it again does not double them |
 | `MLINTEL` after the lintels | Marks LT1.. with opening, length, wall, depth (900 mm opening: 152.4; 1500: 228.6; 2400: 304.8), concrete and shuttering; take-off "Lintels" saved |
 | `HCWOPENSCHED` | Schedule updated, table drawn where you pick |
@@ -25,6 +25,19 @@ Nothing in the command layer has been run in a CAD program. This is the order to
 ### Regenerate walls from lines
 
 In a new drawing draw on `A-WALL`, with lines only: a 4000 x 3000 rectangle, one partition across the middle that stops 40 mm short of the top wall, and one corner with a 40 mm gap. Run `HCWWALLREGEN`, pick a line on `A-WALL`, choose Auto. Expect: the four outer lines 9 in (228.6) and the partition 4.5 in (114.3); the partition joined to the top wall and the gap corner closed; mitred corners where thicknesses match; a square outside corner where a 9 in and a 4.5 in wall meet; the hatch; the originals on `A-WALL-CL`; a junction report on the command line. Then try Outer and Inner, and the swap option.
+
+### Project tab, standard marks, room text, wall junctions (added by Agent 2, queue item Q-005)
+
+| Step | Expect |
+|---|---|
+| Open the **hcwCAD-KIT Project** tab; `HCWPROJECT`, fill the details, OK with "Fill the title block" ticked | Title block fields filled (project title, owner, architect, engineer, PID, site area, plot use); `HCWPROJECTTITLE` fills them again |
+| `HCWFLOORS`: set 2 floors, heights 3150 / 3000 / 2100 / 150 mm, OK; then `HCWLEVELS` | Two floors listed with the same heights; `MSCHED` Floors tab shows them |
+| `HCWBEAMS`: enter `230, 300, 375, 450, 600`, OK; reopen | The depths are kept, sorted |
+| `HCWOPENSTD` | The schedule holds D1 800, D2 900, D3 1200, W1 600 ... W5 2000, V1 600 (check in `MSCHED`) |
+| `HCWDOOR`, type `D3` at the width prompt | A 1200 door, tagged `D3/1`; a width of 1000 gets a new mark (D4) |
+| `ROOMTEXTFIT`: a room rectangle with MTEXT "LIVING ROOM" inside; pick its two corners | The MTEXT becomes TEXT with the spaces removed, fitted inside the rectangle and centred; `ROOMTEXTFITSET` changes the height cap (mm) |
+| `HCWWALL`, 230, then a 114 wall that meets it in a T | The two outlines touch and do not overlap; `WallJoinOnDraw` is 0 so each wall stays its own outline; `HCWWALLJOIN` merges them on request |
+| `HCWWALLREGEN` on a plan drawn as **face lines** (two lines per wall): choose Faces | One wall per pair of faces, centre lines on `A-WALL-CL`, thickness snapped to 9 in or 4.5 in; the same plan in an inch drawing gives walls the same size (D-002) |
 
 ### Beam depth per floor
 

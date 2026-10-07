@@ -2,29 +2,41 @@
 
 > **Two agents work on this repo. Read [AGENTS.md](AGENTS.md) first** (who does what, and the rules), then [work/QUEUE.md](work/QUEUE.md), [work/DEFECTS.md](work/DEFECTS.md) and [work/TEST-LOG.md](work/TEST-LOG.md).
 
-State of the work on 2026-10-06 (updated after the structure summary and angled centre-line walls), for whoever picks it up next. Read [ROADMAP.md](ROADMAP.md) for the list of known limits; this file covers what was verified, what was not, and what to do first.
+State of the work on 2026-10-07 at commit `5b4b1c5` (written by Agent 2), for whoever picks it up next. Read [ROADMAP.md](ROADMAP.md) for the list of known limits; this file covers what was verified, what was not, and what to do first.
 
-## Verified
+## Verified (by Agent 2, rule B1: only what was run)
 
-- `main` builds clean (0 warnings, 0 errors) against an AutoCAD 2022 install.
-- `dotnet test tests/HCW.Logic.Tests`: 507 passed, 0 failed, no analyzer warnings; every command is in the README (last run after the bylaw tables and limits were removed; 12 tests for the removed features went with them).
-- The xUnit analyzer fixes (xUnit2012, xUnit2017, xUnit2029, xUnit2031) in `LogicTests.cs` and `DraftingTests.cs` are in this branch.
+- L0 `dotnet test tests/HCW.Logic.Tests` on `5b4b1c5`: 614 passed, 0 failed, 0 skipped, no analyzer warnings.
+- L1 `dotnet build build/CompileCheck.csproj` on `5b4b1c5`: 0 warnings, 0 errors.
+- Agent 1's own L0 and L2 runs are in [work/TEST-LOG.md](work/TEST-LOG.md) (`c85216f`: 594 passed; Release x64 build against AutoCAD 2022, 0 warnings and 0 errors).
 
 ## Removed
 
 The bylaw tables and limits: `AreaExemptRules`, `AreaPermTable`, `AreaZone`, `AreaFarPermittedPercent`, `AreaGroundCoverPermittedPercent` (the area statement no longer works out or fills permissible values, and exempt layers count in full), `LiftTable` (lift sizes are always typed), and `StairMaxRiseMm`, `StairMinRiseMm`, `StairMinGoingMm`, `Stair2RGMinMm`, `Stair2RGMaxMm` (the stair reports rise, going and 2R + G with no pass or fail). Old `settings.ini` files that still list them are harmless. The title block still has `FAR_PERM` and `GC_PERM` fields; the plugin leaves them for you to type.
 
-## Tested in AutoCAD
+## What has been run in AutoCAD
 
-The build was loaded and tested in AutoCAD (2022) on the build machine on 2026-10-07 with no errors reported. Which commands were run was not recorded, so treat the commands in [TESTING.md](TESTING.md) as the list to confirm. The unit tests cover the logic library only.
+Nothing that is in the test log. The owner loaded builds in AutoCAD and reported the problems now in [work/DEFECTS.md](work/DEFECTS.md) (D-001 to D-004, all fixed and awaiting verification), and an earlier version of this file said "tested in AutoCAD with no errors" without a list of commands. By rule B2 that is **not tested**: there is no [TEST-LOG.md](work/TEST-LOG.md) entry with commands. Agent 1 verifies the commands below with the owner (queue item T-002).
 
 ## Not verified
 
-- Nothing has been loaded into BricsCAD or ZWCAD, and not every command has been confirmed in AutoCAD. The command layer (prompts, entity creation, live update events, jigs, ribbon) has only been compiled, never run. This includes the newest commands: `SHEETFIT`, the wall, opening and axis grid tools, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWROOMSET`, `HCWWALLHATCH`, lintels, the column schedule, `HCWSECTIONDRAW`, `HCWOPENCONVERT`, `HCWOPENHEIGHT`, `HCWOPENSCHED`, `HCWCOLQTY`, `MQTYSUM`, `MLINTEL`, `HCWWALLREGEN`, the electrical schedule by room, `HCWLEVEL` Levels option, the area statement floors from levels, single-line walls at any angle in the auto dimensions.
-- The BricsCAD and ZWCAD projects were not built.
-- The installers (`build\Package-Installers.ps1`) were not built.
+- Every command, dialog, ribbon button and drawing change in the lists below has been compiled and (where it has pure logic) unit tested only. None has a test-log entry.
+- The BricsCAD and ZWCAD projects were not built. The installers (`build\Package-Installers.ps1`) were not built (Inno Setup is not installed).
+- The AQC bridge: the plan and contract exist (`AQC-BRIDGE-PLAN.md`, `bridge/`), and the exporter logic is built (Q-002); there is no command yet (Q-003), and AQC has no importer.
 
-## Added since the first handoff (all compiled and unit tested only)
+## Built, not yet verified in a host (rule D5)
+
+Newest first. "Logic" means unit tested; the command or dialog part is not.
+
+- **Beam depth per floor** (Q-001, `aff3a61`): a Beam depth column on the Floors page of `HCWFLOORS`, kept with the project data by floor name (default: the first depth on the Beams page, else 450). Steps in [TESTING.md](TESTING.md).
+- **Bridge exporter** (Q-002, `5b4b1c5`): `Logic/BridgeExport.cs`, the hcw-aqc-bridge v1 JSON writer. Logic only: no command, no CAD types. Output equals both sample files in `docs/bridge/fixtures` for drawings in mm, cm, m, in and ft.
+- **Project tab** (`389613d`): `HCWPROJECT`, `HCWFLOORS`, `HCWBEAMS`, `HCWPROJECTTITLE`, `HCWOPENSTD`. Logic: `ProjectData`.
+- **Standard door, window and ventilator marks** (`4a0d34a`): D1 800, D2 900, D3 1200; W1 600 to W5 2000; V1 600, accepted at the width prompt of `HCWDOOR` and `HCWWINDOW`; doors tagged code/number like windows (`DoorTagFormat`). Logic: `OpeningStandards`.
+- **`ROOMTEXTFIT`, `ROOMTEXTFITSET`** (`03e3e1b`): MTEXT in a room to TEXT, stacked and centred, height capped (`RoomTextMaxMm`). Logic: the fit arithmetic.
+- **Walls**: a wall stops at the other wall's face with no overlap at junctions, and wall thickness is asked in the drawing's units (`ca3acbd`); `WallJoinOnDraw` defaults to 0 and `LayerOutput` to `HCW` (`eb2e29b`); `HCWWALLREGEN` has a Faces mode (default) and a Centres mode (`e5ed41c`, `44dc5f6`). These are the fixes for D-002 to D-004.
+- Room picker lists names alphabetically (`1ffa0c0`).
+
+## Added earlier (all compiled and unit tested only)
 
 - Levels kept in the drawing with slab thickness (`HCWLEVELS`), `HCWSECTIONDRAW`, `HCWOPENHEIGHT`, `HCWOPENCONVERT`; stairs, lift, doors and windows default their heights from the levels.
 - Opening schedule on the Walls & Openings panel (`HCWOPENSCHED`), updated automatically after the door and window commands (`OpeningAutoSync`).
@@ -37,7 +49,7 @@ The build was loaded and tested in AutoCAD (2022) on the build machine on 2026-1
 
 Riskiest untested pieces: `HCWWALLREGEN` (the junction logic is unit tested, but the wall creation, join and hatch after it have not run), the wall hatch (region booleans on the joined walls, redrawn after every opening command), the lintel and window-tag changes inside `OpeningCommands.PlaceIn` (the path every door and window takes), and the section tool (crossings of the section line with the wall and column layers).
 
-## Open problem: ribbon not loading
+## Open problem: ribbon not loading (D-001)
 
 The user reported "RIBBON NOT LOADING" after a `NETLOAD` of a build from this repo. It is not confirmed fixed.
 
@@ -72,6 +84,8 @@ Output: `src\HCW.AutoCAD.Plugin\bin\x64\Release\hcwCAD-KIT.dll`. Close and reope
 - Pushing from an agent shell can fail with `could not read Username for 'https://github.com'`: the Git Credential Manager has no saved sign-in there. Push from GitHub Desktop or a terminal that is signed in to GitHub.
 
 ## What to do next
+
+Agent 1 and the owner own the host steps; the development queue is [work/QUEUE.md](work/QUEUE.md).
 
 1. Load the build in AutoCAD; if the ribbon does not appear, read the command line message or run `HCWRIBBON` (above).
 2. Follow [TESTING.md](TESTING.md) (an ordered checklist with what to expect and what to send back) and fix what breaks. Start with `SHEETFIT`, `HCWWALL` (hatch, measurement line), door and window insert (lintel, `W1/3` tags, schedule sync), `HCWAXIS`, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWSECTIONDRAW`, `HCWCOLQTY`, `MQTYSUM`. If the wall hatch or lintels cause trouble, settings `WallHatch`, `WallMeasureLines` and `OpeningAutoSync` can be set to 0 to switch each off.
