@@ -141,6 +141,8 @@ The ribbon uses one panel. It does not ask you to pick Metric, Feet, or Inches â
 
 Text height, floor prefix, and the rectangle toggle are on the Rooms & Areas panel. `RAREA` (also `HCWROOMAREA`) labels the area of a selected polyline at its centre. `RTAG` (also `HCWROOMRELABEL`) replaces the text of one existing TEXT object. The new name is upper case, and includes the floor prefix when one is set.
 
+`ROOMTEXTFIT` (also `HCWROOMTEXTFIT`; ported from the ROOMTXT.lsp routine) tidies the room names already in a plan. Pick the two corners of a room rectangle: any MTEXT inside is exploded into TEXT, spaces and tabs are removed, and the lines are fitted inside 90% of the rectangle, stacked and centred as a group. Horizontal text is stacked top to bottom; vertical text (turned 90 or 270 degrees, read from the first line) is stacked side by side. Each line is as large as fits, up to the largest height set with `ROOMTEXTFITSET` (setting `RoomTextMaxMm`, 100 mm to start with; the LISP asked in drawing units). Text that only touches the rectangle, and does not have its centre inside it, is left alone. The command stops with a message when the UCS is not the World UCS, and Undo reverses a run in one step.
+
 The old per-unit commands (`MBR`, `FBR`, `IBR`, and the rest) are removed. Use `ROOM`.
 
 ### Take-off

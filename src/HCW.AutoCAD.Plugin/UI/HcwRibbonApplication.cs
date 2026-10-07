@@ -244,6 +244,8 @@ namespace HCW.AutoCAD.Plugin.UI
             AddLarge(src, "HCWAREASTMT", "Area\nStatement", "report--data", "Building permit area statement: floor areas, net, FAR and ground cover, filled into the title block");
             AddLarge(src, "HCWROOMREPORT", "Room\nReport", "report--data", "Rooms as a table with names, sizes, dimensions and areas, from outlines or from room labels; saved as a take-off, drawn, exported to CSV or Excel, or totalled");
             AddSmallGroup(src,
+                ("ROOMTEXTFIT", "Fit Room Text", "text--scale", "Pick a room rectangle: MTEXT inside becomes TEXT with the spaces removed, and the lines are fitted, stacked and centred in the room (ROOMTEXTFITSET sets the largest height)"),
+                ("ROOMTEXTFITSET", "Fit Height", "text--scale", "Set the largest text height ROOMTEXTFIT fits to"),
                 ("RAREA", "Area Label", "area", "Add an area label at the centre of a selected polyline"),
                 ("RTAG", "Relabel", "tag--edit", "Change the room type of an existing label"),
                 ("HCWROOMSET", "Label Settings", "settings", "Room label settings: show them, text height, floor prefix, draw or skip the rectangle, hide the rectangles, layer, or reset"),
