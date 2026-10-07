@@ -12,9 +12,13 @@ State of the work on 2026-10-06 (updated after the structure summary and angled 
 
 The bylaw tables and limits: `AreaExemptRules`, `AreaPermTable`, `AreaZone`, `AreaFarPermittedPercent`, `AreaGroundCoverPermittedPercent` (the area statement no longer works out or fills permissible values, and exempt layers count in full), `LiftTable` (lift sizes are always typed), and `StairMaxRiseMm`, `StairMinRiseMm`, `StairMinGoingMm`, `Stair2RGMinMm`, `Stair2RGMaxMm` (the stair reports rise, going and 2R + G with no pass or fail). Old `settings.ini` files that still list them are harmless. The title block still has `FAR_PERM` and `GC_PERM` fields; the plugin leaves them for you to type.
 
+## Tested in AutoCAD
+
+The build was loaded and tested in AutoCAD (2022) on the build machine on 2026-10-07 with no errors reported. Which commands were run was not recorded, so treat the commands in [TESTING.md](TESTING.md) as the list to confirm. The unit tests cover the logic library only.
+
 ## Not verified
 
-- Nothing has been loaded into AutoCAD, BricsCAD or ZWCAD. The command layer (prompts, entity creation, live update events, jigs, ribbon) has only been compiled, never run. This includes the newest commands: `SHEETFIT`, the wall, opening and axis grid tools, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWROOMSET`, `HCWWALLHATCH`, lintels, the column schedule, `HCWSECTIONDRAW`, `HCWOPENCONVERT`, `HCWOPENHEIGHT`, `HCWOPENSCHED`, `HCWCOLQTY`, `MQTYSUM`, `MLINTEL`, `HCWWALLREGEN`, the electrical schedule by room, `HCWLEVEL` Levels option, the area statement floors from levels, single-line walls at any angle in the auto dimensions.
+- Nothing has been loaded into BricsCAD or ZWCAD, and not every command has been confirmed in AutoCAD. The command layer (prompts, entity creation, live update events, jigs, ribbon) has only been compiled, never run. This includes the newest commands: `SHEETFIT`, the wall, opening and axis grid tools, `HCWCLEAN`, `HCWCORNER`, `HCWAUDIT`, `HCWROOMSET`, `HCWWALLHATCH`, lintels, the column schedule, `HCWSECTIONDRAW`, `HCWOPENCONVERT`, `HCWOPENHEIGHT`, `HCWOPENSCHED`, `HCWCOLQTY`, `MQTYSUM`, `MLINTEL`, `HCWWALLREGEN`, the electrical schedule by room, `HCWLEVEL` Levels option, the area statement floors from levels, single-line walls at any angle in the auto dimensions.
 - The BricsCAD and ZWCAD projects were not built.
 - The installers (`build\Package-Installers.ps1`) were not built.
 
