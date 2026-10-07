@@ -335,6 +335,19 @@ namespace HCW.Logic.Tests
         }
 
         [Fact]
+        public void SquaredCornerInAnInchDrawingRunsHalfTheWallInInches()
+        {
+            // the command passes units per mm (1/25.4 for inches); the corner must run 4.5 in / 2 = 2.25 in past the point, not thousands of inches
+            double mm = 1 / 25.4;
+            var input = new[] { R(0, 0, 4000 * mm, 0, 228.6, true), R(4000 * mm, 0, 4000 * mm, 2000 * mm, 114.3) };
+            var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300 * mm, mm, 0.5 * mm, rep);
+            Assert.Equal(4000 * mm + 2.25, res[0].B.X, 6);
+            Assert.Equal(-4.5, res[1].A.Y, 6);
+            Assert.Equal(1, rep.SquaredCorners);
+        }
+
+        [Fact]
         public void SameThicknessCornerIsLeftToTheChainToMitre()
         {
             var input = new[] { R(0, 0, 4000, 0, 228.6), R(4000, 0, 4000, 2000, 228.6) };

@@ -346,7 +346,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             // 6. work out the junctions and make the walls
             var input = segs.Select((s, i) => new RegenSeg { A = s.A, B = s.B, Outer = outer[i], ThicknessMm = outer[i] ? outerMm : innerMm }).ToList();
             var report = new RegenReport();
-            var resolved = WallRegen.Resolve(input, Settings.GetDouble("RegenReachMm", 300) * mm, 1.0 / mm, 0.5 * mm, report);
+            var resolved = WallRegen.Resolve(input, Settings.GetDouble("RegenReachMm", 300) * mm, mm, 0.5 * mm, report);
             var chains = new List<CentreLines.Chain>();
             foreach (var kv in WallRegen.Chains(resolved, 0.5 * mm))
                 chains.Add(new CentreLines.Chain { Points = kv.Value.Points, Closed = kv.Value.Closed, Z = 0, ThicknessMm = kv.Key, Smooth = new List<bool>() });
