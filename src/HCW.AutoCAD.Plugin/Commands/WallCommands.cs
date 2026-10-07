@@ -26,10 +26,12 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var ed = Util.Ed;
 
-            var t = ed.GetDouble(new PromptDoubleOptions("\nWall thickness in mm <" + _thicknessMm + ">: ")
-                { AllowNegative = false, AllowZero = false, DefaultValue = _thicknessMm, UseDefaultValue = true });
+            // typed in the drawing's units (inches in an inch drawing); kept in millimetres inside
+            var t = ed.GetDouble(new PromptDoubleOptions("\nWall thickness in " + Util.DrawingUnitName + " <" + Util.MmToUnitsRounded(_thicknessMm) + ">: ")
+                { AllowNegative = false, AllowZero = false, DefaultValue = Util.MmToUnitsRounded(_thicknessMm), UseDefaultValue = true });
             if (t.Status != PromptStatus.OK) return;
-            _thicknessMm = t.Value;
+            _thicknessMm = Util.UnitsToMm(t.Value);
+            if (_thicknessMm <= 0) { ed.WriteMessage("\nHCWWALL: the thickness is too small to be a wall."); return; }
 
             var jo = new PromptKeywordOptions("\nLine position [Centre/Left/Right] <" + _justify + ">: ", "Centre Left Right") { AllowNone = true };
             jo.Keywords.Default = _justify.ToString();
@@ -102,7 +104,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                             ed.WriteMessage("\nHCWWALL: the new wall touches walls that openings are cut in, and they could not be redrawn (" + err + "). Nothing was drawn.");
                             return;
                         }
-                        if (merged > 0) { WallHatch.Refresh(tr, db, space); tr.Commit(); ed.WriteMessage("\nHCWWALL: " + made + " wall outline(s) on " + WallLayer + ", " + _thicknessMm + " mm thick. Rebuilt with the walls it touches (" + rw + " wall(s), " + ro + " opening(s) re-cut)."); return; }
+                        if (merged > 0) { WallHatch.Refresh(tr, db, space); tr.Commit(); ed.WriteMessage("\nHCWWALL: " + made + " wall outline(s) on " + WallLayer + ", " + Util.Dim(_thicknessMm) + " thick. Rebuilt with the walls it touches (" + rw + " wall(s), " + ro + " opening(s) re-cut)."); return; }
                     }
                     foreach (ObjectId id in space)
                     {
@@ -120,7 +122,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 WallHatch.Refresh(tr, db, space);
                 tr.Commit();
             }
-            ed.WriteMessage("\nHCWWALL: " + made + " wall outline(s) on " + WallLayer + ", " + _thicknessMm + " mm thick."
+            ed.WriteMessage("\nHCWWALL: " + made + " wall outline(s) on " + WallLayer + ", " + Util.Dim(_thicknessMm) + " thick."
                 + (WallStore.MeasureLayer != null ? " Take-off line(s) on " + WallStore.MeasureLayer + "." : "")
                 + (merged > 0 ? " Joined into " + merged + " outline(s)." : "")
                 + (skipped > 0 ? " " + skipped + " line(s) too short to make a wall." : ""));
@@ -318,7 +320,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             {
                 int unpaired;
                 faceWalls = WallRegen.CentreLines(segs, Settings.GetDouble("WallMinMm", 60) * mm, Settings.GetDouble("WallMaxMm", 600) * mm, mm, out unpaired);
-                if (faceWalls.Count == 0) { ed.WriteMessage("\nHCWWALLREGEN: no two lines face each other between " + Settings.GetDouble("WallMinMm", 60) + " and " + Settings.GetDouble("WallMaxMm", 600) + " mm apart. Nothing was changed."); return; }
+                if (faceWalls.Count == 0) { ed.WriteMessage("\nHCWWALLREGEN: no two lines face each other between " + Util.Dim(Settings.GetDouble("WallMinMm", 60)) + " and " + Util.Dim(Settings.GetDouble("WallMaxMm", 600)) + " apart. Nothing was changed."); return; }
                 foreach (var w in faceWalls)                     // a drawn 230 or 112 is the 9 in or 4.5 in wall: use the standard figure when it is within 10%
                 {
                     if (Math.Abs(w.ThicknessMm - outerMm) <= outerMm * 0.1) w.ThicknessMm = outerMm;
@@ -326,7 +328,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     else w.ThicknessMm = Math.Round(w.ThicknessMm, 1);
                 }
                 ed.WriteMessage("\n  " + faceWalls.Count + " centre line(s) found between the faces: "
-                    + string.Join(", ", faceWalls.GroupBy(w => w.ThicknessMm).OrderByDescending(g => g.Key).Select(g => g.Count() + " at " + g.Key + " mm"))
+                    + string.Join(", ", faceWalls.GroupBy(w => w.ThicknessMm).OrderByDescending(g => g.Key).Select(g => g.Count() + " at " + Util.Dim(g.Key)))
                     + (unpaired > 0 ? "; " + unpaired + " line(s) had no line facing them and are left as they are" : "") + ".");
             }
 
@@ -335,13 +337,13 @@ namespace HCW.AutoCAD.Plugin.Commands
             bool[] outer = null;
             if (!faces)
             {
-                var to = new PromptKeywordOptions("\nThickness [Auto/Outer/Inner] <Auto> (Auto: outer lines " + Math.Round(outerMm / 25.4, 2) + " in, inner lines " + Math.Round(innerMm / 25.4, 2) + " in; Outer or Inner: every line the same): ", "Auto Outer Inner") { AllowNone = true };
+                var to = new PromptKeywordOptions("\nThickness [Auto/Outer/Inner] <Auto> (Auto: outer lines " + Util.Dim(outerMm) + ", inner lines " + Util.Dim(innerMm) + "; Outer or Inner: every line the same): ", "Auto Outer Inner") { AllowNone = true };
                 to.Keywords.Default = "Auto";
                 var tr0 = ed.GetKeywords(to);
                 rule = tr0.Status == PromptStatus.OK ? tr0.StringResult : "Auto";
                 if (tr0.Status != PromptStatus.OK && tr0.Status != PromptStatus.None) return;
                 outer = rule == "Auto" ? WallRegen.Outer(segs) : segs.Select(s => rule == "Outer").ToArray();
-                ed.WriteMessage("\n  " + outer.Count(b => b) + " line(s) at " + Math.Round(outerMm / 25.4, 2) + " in, " + outer.Count(b => !b) + " at " + Math.Round(innerMm / 25.4, 2) + " in.");
+                ed.WriteMessage("\n  " + outer.Count(b => b) + " line(s) at " + Util.Dim(outerMm) + ", " + outer.Count(b => !b) + " at " + Util.Dim(innerMm) + ".");
             }
 
             // 5. flip the lines the rule got wrong
@@ -564,8 +566,8 @@ namespace HCW.AutoCAD.Plugin.Commands
                 {
                     var here = new P2(pick.X, pick.Y);
                     target = records.OrderBy(r => r.DistanceTo(here)).First();
-                    var t = ed.GetDouble(new PromptDoubleOptions("\nThickness of wall " + target.Id + " in mm <" + target.ThicknessMm + ">: ")
-                        { AllowNegative = false, AllowZero = false, DefaultValue = target.ThicknessMm, UseDefaultValue = true });
+                    var t = ed.GetDouble(new PromptDoubleOptions("\nThickness of wall " + target.Id + " in " + Util.DrawingUnitName + " <" + Util.MmToUnitsRounded(target.ThicknessMm) + ">: ")
+                        { AllowNegative = false, AllowZero = false, DefaultValue = Util.MmToUnitsRounded(target.ThicknessMm), UseDefaultValue = true });
                     if (t.Status != PromptStatus.OK) return false;
                     var jo = new PromptKeywordOptions("\nLine position [Centre/Left/Right] <" + target.Justify + ">: ", "Centre Left Right") { AllowNone = true };
                     jo.Keywords.Default = target.Justify.ToString();
@@ -573,7 +575,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     var justify = target.Justify;
                     if (jr.Status == PromptStatus.OK) Enum.TryParse(jr.StringResult, out justify);
                     else if (jr.Status != PromptStatus.None) return false;
-                    target.ThicknessMm = t.Value;
+                    target.ThicknessMm = Util.UnitsToMm(t.Value);
                     target.Justify = justify;
                     return true;
                 }, out walls, out openings, out error);
@@ -583,7 +585,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     return;                                         // uncommitted: the whole edit is rolled back
                 }
                 tr.Commit();
-                ed.WriteMessage("\nHCWWALLEDIT: wall " + target.Id + " is now " + target.ThicknessMm + " mm, line on the " + target.Justify.ToString().ToLowerInvariant()
+                ed.WriteMessage("\nHCWWALLEDIT: wall " + target.Id + " is now " + Util.Dim(target.ThicknessMm) + ", line on the " + target.Justify.ToString().ToLowerInvariant()
                     + ". " + walls + " joined wall(s) rebuilt" + (openings > 0 ? ", " + openings + " opening(s) re-cut." : "."));
             }
         }

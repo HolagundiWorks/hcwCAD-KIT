@@ -184,6 +184,7 @@ namespace HCW.AutoCAD.Plugin.Logic
             var ends = new P2[n, 2];
             for (int i = 0; i < n; i++) { ends[i, 0] = segs[i].A; ends[i, 1] = segs[i].B; }
             var snapped = new bool[n, 2];
+            var tAt = new double[n, 2];                // thickness (mm) of the wall a T-junction end was moved onto
 
             for (int i = 0; i < n; i++)
                 for (int e = 0; e < 2; e++)
@@ -218,6 +219,7 @@ namespace HCW.AutoCAD.Plugin.Logic
                     if (bestU > tol) { report.Snapped++; }
                     ends[i, e] = bestX; snapped[i, e] = true;
                     if (bestL) { ends[bestJ, bestEnd] = bestX; snapped[bestJ, bestEnd] = true; }
+                    else tAt[i, e] = input[bestJ].ThicknessMm;
                 }
 
             // Count the ends meeting at each point.
@@ -240,21 +242,53 @@ namespace HCW.AutoCAD.Plugin.Logic
                 bool simple = list.Count == 2 && Math.Abs(input[list[0].Key].ThicknessMm - input[list[1].Key].ThicknessMm) < 1e-6;
                 if (list.Count == 2) report.LCorners++;
                 if (simple) continue;
-                report.SquaredCorners++;
-                foreach (var m in list)
+                // Walls meet without overlapping: the wall that runs through keeps its length (a corner of two thicknesses: the thicker runs out to the
+                // outer face of the thinner), and a wall that meets it stops at its face, half the thickness back from the centre line.
+                var dirs = list.Select(m =>
                 {
-                    double others = list.Where(o => o.Key != m.Key).Max(o => input[o.Key].ThicknessMm);
-                    extra[m.Key, m.Value] = others / 2.0 * mmToUnits;
+                    var d = m.Value == 0 ? ends[m.Key, 1] - ends[m.Key, 0] : ends[m.Key, 0] - ends[m.Key, 1];
+                    double l = d.Length;
+                    return l < 1e-9 ? new P2(0, 0) : d * (1.0 / l);
+                }).ToList();
+                int pa = -1, pb = -1; double runT = 0;
+                for (int a = 0; a < list.Count; a++)
+                    for (int b = a + 1; b < list.Count; b++)
+                    {
+                        if (dirs[a].X * dirs[b].X + dirs[a].Y * dirs[b].Y > -0.999) continue;        // not opposite: not one wall running through
+                        double t = Math.Max(input[list[a].Key].ThicknessMm, input[list[b].Key].ThicknessMm);
+                        if (t > runT) { runT = t; pa = a; pb = b; }
+                    }
+                if (list.Count == 2 && pa >= 0) continue;                                           // one wall continuing with a change of thickness: nothing to fill
+                report.SquaredCorners++;
+                if (list.Count == 2)
+                {
+                    double t0 = input[list[0].Key].ThicknessMm, t1 = input[list[1].Key].ThicknessMm;
+                    for (int a = 0; a < 2; a++)
+                    {
+                        double mine = a == 0 ? t0 : t1, other = a == 0 ? t1 : t0;
+                        extra[list[a].Key, list[a].Value] = (mine > other ? other : -other) / 2.0 * mmToUnits;        // thicker runs out, thinner stops at its face
+                    }
+                    continue;
+                }
+                if (pa < 0) { runT = list.Max(o => input[o.Key].ThicknessMm); }
+                for (int a = 0; a < list.Count; a++)
+                {
+                    if (a == pa || a == pb) continue;
+                    extra[list[a].Key, list[a].Value] = -runT / 2.0 * mmToUnits;
                 }
             }
 
-            // T junctions: an end that ended up on the body of another wall.
+            // T junctions: an end that ended up on the body of another wall stops at that wall's face.
             for (int i = 0; i < n; i++)
                 for (int e = 0; e < 2; e++)
                 {
                     if (!snapped[i, e]) continue;
                     int at = nodes.FindIndex(l => l.Any(m => m.Key == i && m.Value == e));
-                    if (at >= 0 && nodes[at].Count == 1) report.TJunctions++;
+                    if (at >= 0 && nodes[at].Count == 1)
+                    {
+                        report.TJunctions++;
+                        if (tAt[i, e] > 0) extra[i, e] = -tAt[i, e] / 2.0 * mmToUnits;
+                    }
                 }
 
             // Crossings: two walls whose bodies cross away from their ends.
@@ -275,7 +309,9 @@ namespace HCW.AutoCAD.Plugin.Logic
                 var d = b - a; double len = d.Length;
                 if (len < 1e-9) continue;
                 var u = d * (1.0 / len);
-                result.Add(new RegenSeg { A = a - u * extra[i, 0], B = b + u * extra[i, 1], ThicknessMm = input[i].ThicknessMm, Outer = input[i].Outer });
+                double x0 = extra[i, 0], x1 = extra[i, 1];
+                if (len + x0 + x1 <= tol) { x0 = x1 = 0; }                       // a wall too short to be cut back keeps its length
+                result.Add(new RegenSeg { A = a - u * x0, B = b + u * x1, ThicknessMm = input[i].ThicknessMm, Outer = input[i].Outer });
             }
             return result;
         }

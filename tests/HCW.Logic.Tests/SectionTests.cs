@@ -299,7 +299,8 @@ namespace HCW.Logic.Tests
             var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
             var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, rep);
             var part = res.Single(r => r.ThicknessMm == 114.3);
-            Assert.Equal(3000, System.Math.Max(part.A.Y, part.B.Y), 6);
+            // it stops at the face of the 9 in wall (half of 228.6 short of its centre line), not inside it
+            Assert.Equal(3000 - 228.6 / 2, System.Math.Max(part.A.Y, part.B.Y), 6);
             Assert.Equal(1, rep.TJunctions);
         }
 
@@ -309,7 +310,7 @@ namespace HCW.Logic.Tests
             var input = new[] { R(0, 3000, 4000, 3000, 228.6, true), R(2000, 0, 2000, 3080, 114.3) };
             var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, new HCW.AutoCAD.Plugin.Logic.RegenReport());
             var part = res.Single(r => r.ThicknessMm == 114.3);
-            Assert.Equal(3000, System.Math.Max(part.A.Y, part.B.Y), 6);
+            Assert.Equal(3000 - 228.6 / 2, System.Math.Max(part.A.Y, part.B.Y), 6);        // cut back to the wall, then to its face
         }
 
         [Fact]
@@ -324,14 +325,37 @@ namespace HCW.Logic.Tests
         }
 
         [Fact]
-        public void CornerBetweenTwoThicknessesIsSquaredByHalfTheOtherWall()
+        public void CornerBetweenTwoThicknessesHasTheThickWallRunOutAndTheThinOneStopAtItsFace()
         {
             var input = new[] { R(0, 0, 4000, 0, 228.6, true), R(4000, 0, 4000, 2000, 114.3) };
             var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
             var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, rep);
-            Assert.Equal(4000 + 114.3 / 2, res[0].B.X, 6);     // the 9 in wall runs half of 4.5 in further
-            Assert.Equal(-228.6 / 2, res[1].A.Y, 6);           // the 4.5 in wall runs half of 9 in below the corner
+            Assert.Equal(4000 + 114.3 / 2, res[0].B.X, 6);     // the 9 in wall runs half of 4.5 in further, to the outer face of the thin wall
+            Assert.Equal(228.6 / 2, res[1].A.Y, 6);            // the 4.5 in wall starts at the face of the 9 in wall, not inside it
             Assert.Equal(1, rep.SquaredCorners);
+        }
+
+        [Fact]
+        public void BranchOffAThroughWallStopsAtItsFaceWhateverItsThickness()
+        {
+            // a 9 in wall in two pieces meeting at (2000, 0), and a 9 in branch up from the same point: the branch butts the run
+            var input = new[] { R(0, 0, 2000, 0, 228.6, true), R(2000, 0, 4000, 0, 228.6, true), R(2000, 0, 2000, 1500, 228.6, true) };
+            var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, rep);
+            Assert.Equal(2000, res[0].B.X, 6);                 // the run keeps its length
+            Assert.Equal(2000, res[1].A.X, 6);
+            Assert.Equal(228.6 / 2, res[2].A.Y, 6);            // the branch starts at the run's face
+        }
+
+        [Fact]
+        public void WallContinuingWithAChangeOfThicknessIsLeftAlone()
+        {
+            var input = new[] { R(0, 0, 2000, 0, 228.6, true), R(2000, 0, 4000, 0, 114.3) };
+            var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
+            var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, rep);
+            Assert.Equal(2000, res[0].B.X, 6);
+            Assert.Equal(2000, res[1].A.X, 6);
+            Assert.Equal(0, rep.SquaredCorners);
         }
 
         [Fact]
@@ -403,7 +427,7 @@ namespace HCW.Logic.Tests
             var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
             var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300 * mm, mm, 0.5 * mm, rep);
             Assert.Equal(4000 * mm + 2.25, res[0].B.X, 6);
-            Assert.Equal(-4.5, res[1].A.Y, 6);
+            Assert.Equal(4.5, res[1].A.Y, 6);                  // the 4.5 in wall starts 9 in / 2 = 4.5 in from the corner, at the face of the 9 in wall
             Assert.Equal(1, rep.SquaredCorners);
         }
 
@@ -431,13 +455,14 @@ namespace HCW.Logic.Tests
         }
 
         [Fact]
-        public void ThreeEndsAtOnePointAreSquaredByTheThickestOther()
+        public void ThreeEndsAtOnePointLetTheThroughRunKeepItsLengthAndTheBranchStopAtItsThickestFace()
         {
             var input = new[] { R(0, 0, 2000, 0, 228.6), R(2000, 0, 4000, 0, 114.3), R(2000, 0, 2000, 1500, 114.3) };
             var rep = new HCW.AutoCAD.Plugin.Logic.RegenReport();
             var res = HCW.AutoCAD.Plugin.Logic.WallRegen.Resolve(input, 300, 1, 0.5, rep);
             Assert.Equal(1, rep.SquaredCorners);
-            Assert.Equal(2000 + 114.3 / 2, res[0].B.X, 6);      // the thickest of the other two ends is 4.5 in
+            Assert.Equal(2000, res[0].B.X, 6);                 // the two collinear walls are the run; the thicker is 9 in
+            Assert.Equal(228.6 / 2, res[2].A.Y, 6);            // the branch stops at the face of a 9 in run
         }
     }
 }

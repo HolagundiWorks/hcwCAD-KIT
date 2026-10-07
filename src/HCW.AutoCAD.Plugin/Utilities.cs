@@ -191,6 +191,31 @@ namespace HCW.AutoCAD.Plugin
             }
         }
 
+        /// <summary>The name of the drawing's length unit as typed in prompts: mm, cm, ft, in or m (a drawing with no unit set is read as metres).</summary>
+        public static string DrawingUnitName
+        {
+            get
+            {
+                switch (Db.Insunits)
+                {
+                    case UnitsValue.Millimeters: return "mm";
+                    case UnitsValue.Centimeters: return "cm";
+                    case UnitsValue.Feet: return "ft";
+                    case UnitsValue.Inches: return "in";
+                    default: return "m";
+                }
+            }
+        }
+
+        /// <summary>A length in the drawing's units, as a number (millimetres -> inches, feet ...), rounded so it reads cleanly in a prompt.</summary>
+        public static double MmToUnitsRounded(double mm) => Math.Round(MmToDrawingUnits(mm), 4);
+
+        /// <summary>A length typed in the drawing's units -> millimetres, to 0.01 mm.</summary>
+        public static double UnitsToMm(double value) => Math.Round(value / MmToDrawingUnits(1.0), 2);
+
+        /// <summary>A length in millimetres as the drawing's units for a message, such as "9 in" or "230 mm".</summary>
+        public static string Dim(double mm) => MmToUnitsRounded(mm).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) + " " + DrawingUnitName;
+
         /// <summary>Isolate a set of layers (turn everything else off), returning the state to restore.</summary>
         public static LayerIsolation IsolateLayers(Transaction tr, Database db, IEnumerable<string> keep)
         {
