@@ -44,8 +44,9 @@ Why: Phase 3 happens in the AQC repo, which Agent 2 cannot reach and which needs
 Acceptance: `docs/bridge/AQC-IMPORTER-SPEC.md` says, row by row, what each file section becomes in AQC, the idempotence and re-import rules, what is never imported, and the tests the importer library needs. It is built from AQC-FINDINGS.md (read from the code, never run), so *check* items remain.
 
 ### Q-004 · Door, window and other prompts in the drawing's units
-Priority: P3 · Status: Todo (needs the owner's yes: see the questions)
-Why: walls now ask in the drawing's units (`Util.DrawingUnitName`, `Util.UnitsToMm`); doors, windows, columns and the rest still ask in mm.
+Priority: P3 · Status: Ready for verification @ HASH
+Why: walls now ask in the drawing's units (`Util.DrawingUnitName`, `Util.UnitsToMm`); doors, windows and the rest still asked in mm.
+Done by Agent 2 on the owner's yes: the prompts of `HCWDOOR`, `HCWWINDOW`, `HCWOPENREPLACE`, the opening height/sill sync, `HCWESCALATOR` (rise, landing), `HCWAXISADD` (distance), `ROOMTEXTFITSET` and the gap in `HCWROOMWALLS` now ask in the drawing's units. Settings, saved values and block data stay in mm. Not changed on purpose: the column size (`230x450` notation), `HCWAXIS` bay widths, the nominal escalator step width (600/800/1000), lift, stair and rail prompts. `Logic/LengthInput.cs`, 12 tests; L0 (661 passed) and L1 clean. **To verify in AutoCAD**: TESTING.md "Prompts in the drawing's units".
 
 ### Q-005 · README and HANDOFF catch-up
 Priority: P2 · Status: Done (documentation only, `efda0bd`)
@@ -59,7 +60,7 @@ Acceptance: `HANDOFF.md` lists each; `docs/TESTING.md` has steps for each (rule 
 4. **Plinth.** Recommended: plugin floors map to `Lvl1` onward; AQC keeps `Lvl0`.
 5. **Rebar.** Recommended: the plugin never sends bar data; AQC's engine owns it.
 6. **Version 1 scope.** Recommended: levels, project, masonry and openings; columns, lintels and rooms next.
-7. **Q-004:** convert the door, window and other prompts to the drawing's units too? Recommended: yes.
+7. **Q-004:** convert the door, window and other prompts to the drawing's units too? Answered yes by the owner; done (lift, stair, rail, column size and axis bay prompts still ask in mm: say if they should follow).
 
 8. **The file AQC writes for the plugin** (Phase 4): name and who writes it. Recommended: AQC's "Export for CAD" writes `<project>.aqcbridge.json` in the same v1 format (project, levels, beam depths); the plugin's `HCWBRIDGEIMPORT` already reads it.
 9. **Who builds the AQC importer**, and where. The spec is in `docs/bridge/AQC-IMPORTER-SPEC.md`. Agent 2 cannot reach the AQC repo (rule section 3); Agent 1 has a read-only clone. Recommended: a separate session on the AQC repo, with the owner's yes (question 3).

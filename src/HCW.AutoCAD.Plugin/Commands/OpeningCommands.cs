@@ -69,8 +69,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             string what = door ? "door" : "window";
             double current = door ? _doorMm : _windowMm;
             var std = door ? OpeningStandards.Doors : OpeningStandards.Windows.Concat(new[] { OpeningStandards.Ventilator }).ToList();
-            var wo = new PromptDoubleOptions("\nWidth of the " + what + " in mm, or a standard [" + string.Join("/", std.Select(s => s.Code + " " + s.WidthMm)) + "] <" + current + ">: ")
-                { AllowNegative = false, AllowZero = false, DefaultValue = current, UseDefaultValue = true, AppendKeywordsToMessage = false };
+            var wo = new PromptDoubleOptions("\nWidth of the " + what + " in " + Util.DrawingUnitName + ", or a standard [" + string.Join("/", std.Select(s => s.Code + " " + Util.MmToUnitsRounded(s.WidthMm))) + "] <" + Util.MmToUnitsRounded(current) + ">: ")
+                { AllowNegative = false, AllowZero = false, DefaultValue = Util.MmToUnitsRounded(current), UseDefaultValue = true, AppendKeywordsToMessage = false };
             foreach (var s in std) wo.Keywords.Add(s.Code);
             var wr = ed.GetDouble(wo);
             double width;
@@ -84,7 +84,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     _windowSillMm = Settings.GetDouble("VentilatorSillMm", 1800);
                 }
             }
-            else if (wr.Status == PromptStatus.OK) width = wr.Value;
+            else if (wr.Status == PromptStatus.OK) width = Util.TypedToMm(wr.Value, current);
             else return;
             if (door) _doorMm = width; else _windowMm = width;
 
@@ -97,18 +97,19 @@ namespace HCW.AutoCAD.Plugin.Commands
                 else if (tr0.Status != PromptStatus.None) return;
             }
             double height = door ? _doorHeightMm : _windowHeightMm;
-            var hr = ed.GetDouble(new PromptDoubleOptions("\nHeight of the " + what + " in mm <" + height + ">: ")
-                { AllowNegative = false, AllowZero = false, DefaultValue = height, UseDefaultValue = true });
+            var hr = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt("Height of the " + what, height))
+                { AllowNegative = false, AllowZero = false, DefaultValue = Util.MmToUnitsRounded(height), UseDefaultValue = true });
             if (hr.Status != PromptStatus.OK) return;
-            if (door) _doorHeightMm = hr.Value; else _windowHeightMm = hr.Value;
+            double heightMm = Util.TypedToMm(hr.Value, height);
+            if (door) _doorHeightMm = heightMm; else _windowHeightMm = heightMm;
             double sill = 0;
             if (!door)
             {
-                var sr0 = ed.GetDouble(new PromptDoubleOptions("\nSill height above the floor in mm <" + _windowSillMm + ">: ")
-                    { AllowNegative = false, AllowZero = true, DefaultValue = _windowSillMm, UseDefaultValue = true });
+                var sr0 = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt("Sill height above the floor", _windowSillMm))
+                    { AllowNegative = false, AllowZero = true, DefaultValue = Util.MmToUnitsRounded(_windowSillMm), UseDefaultValue = true });
                 if (sr0.Status != PromptStatus.OK) return;
-                _windowSillMm = sr0.Value;
-                sill = sr0.Value;
+                _windowSillMm = Util.TypedToMm(sr0.Value, _windowSillMm);
+                sill = _windowSillMm;
             }
             var par = new OpeningParams { Type = door ? _doorType : "", SillMm = sill, HeightMm = door ? _doorHeightMm : _windowHeightMm };
 
@@ -715,10 +716,10 @@ namespace HCW.AutoCAD.Plugin.Commands
             else if (kr.Status != PromptStatus.None) return;
 
             double defaultMm = door == info.Door ? info.WidthMm : (door ? _doorMm : _windowMm);
-            var wr = ed.GetDouble(new PromptDoubleOptions("\nWidth in mm <" + defaultMm + ">: ")
-                { AllowNegative = false, AllowZero = false, DefaultValue = defaultMm, UseDefaultValue = true });
+            var wr = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt("Width", defaultMm))
+                { AllowNegative = false, AllowZero = false, DefaultValue = Util.MmToUnitsRounded(defaultMm), UseDefaultValue = true });
             if (wr.Status != PromptStatus.OK) return;
-            double widthMm = wr.Value;
+            double widthMm = Util.TypedToMm(wr.Value, defaultMm);
 
             string type = "";
             if (door)
@@ -731,17 +732,18 @@ namespace HCW.AutoCAD.Plugin.Commands
                 if (tr0.Status != PromptStatus.OK && tr0.Status != PromptStatus.None) return;
             }
             double defHeight = door == info.Door ? info.HeightMm : (door ? _doorHeightMm : _windowHeightMm);
-            var hr = ed.GetDouble(new PromptDoubleOptions("\nHeight in mm <" + defHeight + ">: ")
-                { AllowNegative = false, AllowZero = false, DefaultValue = defHeight, UseDefaultValue = true });
+            var hr = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt("Height", defHeight))
+                { AllowNegative = false, AllowZero = false, DefaultValue = Util.MmToUnitsRounded(defHeight), UseDefaultValue = true });
             if (hr.Status != PromptStatus.OK) return;
+            double heightMm = Util.TypedToMm(hr.Value, defHeight);
             double sill = 0;
             if (!door)
             {
                 double defSill = !info.Door ? info.SillMm : _windowSillMm;
-                var sr = ed.GetDouble(new PromptDoubleOptions("\nSill height in mm <" + defSill + ">: ")
-                    { AllowNegative = false, AllowZero = true, DefaultValue = defSill, UseDefaultValue = true });
+                var sr = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt("Sill height", defSill))
+                    { AllowNegative = false, AllowZero = true, DefaultValue = Util.MmToUnitsRounded(defSill), UseDefaultValue = true });
                 if (sr.Status != PromptStatus.OK) return;
-                sill = sr.Value;
+                sill = Util.TypedToMm(sr.Value, defSill);
             }
 
             bool flip = door && info.Door && info.Corners.Flipped;
@@ -757,9 +759,9 @@ namespace HCW.AutoCAD.Plugin.Commands
                 string tag = Heal(tr, space, info);
                 Point3d sideW = side ?? PreviousSide(info, centre);
                 string keep = door == info.Door ? tag : null;           // the same kind keeps its number
-            if (!door && info.Door == door && (Math.Abs(widthMm - info.WidthMm) > 0.5 || Math.Abs(hr.Value - info.HeightMm) > 0.5 || Math.Abs(sill - info.SillMm) > 0.5))
+            if (!door && info.Door == door && (Math.Abs(widthMm - info.WidthMm) > 0.5 || Math.Abs(heightMm - info.HeightMm) > 0.5 || Math.Abs(sill - info.SillMm) > 0.5))
                 keep = null;                                         // a different window size is a different code
-                var par = new OpeningParams { Type = type, SillMm = sill, HeightMm = hr.Value };
+                var par = new OpeningParams { Type = type, SillMm = sill, HeightMm = heightMm };
                 if (!PlaceIn(tr, door, centre, sideW, flip, widthMm, par, keep, out message))
                 {
                     ed.WriteMessage("\nHCWOPENREPLACE: " + message + " The opening was left as it was.");
@@ -767,7 +769,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                 }
                 tr.Commit();
             }
-            if (door) { _doorMm = widthMm; _doorType = type; _doorHeightMm = hr.Value; } else { _windowMm = widthMm; _windowHeightMm = hr.Value; _windowSillMm = sill; }
+            if (door) { _doorMm = widthMm; _doorType = type; _doorHeightMm = heightMm; } else { _windowMm = widthMm; _windowHeightMm = heightMm; _windowSillMm = sill; }
             ed.WriteMessage("\nHCWOPENREPLACE: " + message);
         }
 
@@ -900,15 +902,15 @@ namespace HCW.AutoCAD.Plugin.Commands
             {
                 if (mine.Any(i => i.Door))
                 {
-                    var r = ed.GetDouble(new PromptDoubleOptions("\nDoor height in mm <" + doorH + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = doorH, UseDefaultValue = true });
-                    if (r.Status != PromptStatus.OK) return; doorH = r.Value;
+                    var r = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt("Door height", doorH)) { AllowNegative = false, AllowZero = false, DefaultValue = Util.MmToUnitsRounded(doorH), UseDefaultValue = true });
+                    if (r.Status != PromptStatus.OK) return; doorH = Util.TypedToMm(r.Value, doorH);
                 }
                 if (mine.Any(i => !i.Door))
                 {
-                    var r = ed.GetDouble(new PromptDoubleOptions("\nWindow sill height in mm <" + sill + ">: ") { AllowNegative = false, AllowZero = true, DefaultValue = sill, UseDefaultValue = true });
-                    if (r.Status != PromptStatus.OK) return; sill = r.Value;
-                    var h = ed.GetDouble(new PromptDoubleOptions("\nWindow height in mm <" + winH + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = winH, UseDefaultValue = true });
-                    if (h.Status != PromptStatus.OK) return; winH = h.Value;
+                    var r = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt("Window sill height", sill)) { AllowNegative = false, AllowZero = true, DefaultValue = Util.MmToUnitsRounded(sill), UseDefaultValue = true });
+                    if (r.Status != PromptStatus.OK) return; sill = Util.TypedToMm(r.Value, sill);
+                    var h = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt("Window height", winH)) { AllowNegative = false, AllowZero = false, DefaultValue = Util.MmToUnitsRounded(winH), UseDefaultValue = true });
+                    if (h.Status != PromptStatus.OK) return; winH = Util.TypedToMm(h.Value, winH);
                 }
             }
 

@@ -43,6 +43,10 @@ In a new drawing draw on `A-WALL`, with lines only: a 4000 x 3000 rectangle, one
 
 Run `HCWFLOORS`. The Floors page has a **Beam depth** column in millimetres. With nothing on the Beams page a new floor shows 450; put `300, 450` on the Beams page and add a floor, which should show 300. Type 375 for Ground, press OK, run `HCWFLOORS` again: Ground shows 375. Remove a floor with the count, OK, add it back: it shows the default again (depths of removed floors are dropped).
 
+### Prompts in the drawing's units (Q-004)
+
+In an inch drawing (units set with `UNITS`): run `HCWDOOR`; the prompt says `in`, offers `<41.3386>` and the standards as `D1 31.4961`. Press Enter for the default and place a door: the block should be `HCW_D_900x230`-style in millimetres (the name stays in mm). Type 36 for the width: the opening is 914.4 mm. Do the same for the height and `HCWWINDOW` sill, then `HCWOPENREPLACE`. Repeat once in a foot drawing and once in a millimetre drawing (prompts say `mm`, numbers as before). Also look at `HCWESCALATOR` (rise, landing), `HCWAXISADD` (distance), `ROOMTEXTFITSET` and the gap prompt of `HCWROOMWALLS`.
+
 ### AQC bridge export (`HCWBRIDGE`)
 
 Needs a saved drawing with the small test plan from section 2 (walls, a door, two windows, a lintel), `HCWFLOORS` with two floors, a room (`HCWROOMWALLS`) and a column or two (`HCWCOLUMN`). Run `HCWBRIDGE`, answer 1 for the floor. Expect: a message naming `<drawing>.aqcbridge.json` next to the drawing with counts per section; open the file in a text editor: `"units": "mm"`, a `source.drawing_id` GUID, `levels` with `beam_depth_mm` (the value from `HCWFLOORS`), `walls` with the wall ids as `ref`, `openings` with marks `D2/D3/W3`, `wall_ref` set, an `opening_schedule`, `lintels`, `rooms` (each room once). Run it again: same `drawing_id` and the same refs. Answer 0 for the floor: rows repeated with `@Ground` / `@First` on the refs. In an inch or foot drawing the lengths are still millimetres (a 9 in wall shows 228.6). An unsaved drawing gets "save the drawing first".

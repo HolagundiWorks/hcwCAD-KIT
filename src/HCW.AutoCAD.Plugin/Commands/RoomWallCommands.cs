@@ -82,10 +82,10 @@ namespace HCW.AutoCAD.Plugin.Commands
             else if (psr.Status == PromptStatus.None) layers.Add(WallCommands.WallLayer);
             else return;
 
-            var gap = ed.GetDouble(new PromptDoubleOptions("\nBridge gaps in the walls up to mm, for doors drawn without jambs (0 = none) <" + _gapMm + ">: ")
-                { AllowNegative = false, AllowZero = true, DefaultValue = _gapMm, UseDefaultValue = true });
+            var gap = ed.GetDouble(new PromptDoubleOptions("\nBridge gaps in the walls up to " + Util.DrawingUnitName + ", for doors drawn without jambs (0 = none) <" + Util.MmToUnitsRounded(_gapMm) + ">: ")
+                { AllowNegative = false, AllowZero = true, DefaultValue = Util.MmToUnitsRounded(_gapMm), UseDefaultValue = true });
             if (gap.Status != PromptStatus.OK) return;
-            _gapMm = gap.Value;
+            _gapMm = Util.TypedToMm(gap.Value, _gapMm);
 
             List<Seg> segs;
             using (var tr = db.TransactionManager.StartTransaction())

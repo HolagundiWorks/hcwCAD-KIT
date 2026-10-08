@@ -31,18 +31,18 @@ namespace HCW.AutoCAD.Plugin.Commands
                 TextHeight = 125,
             };
 
-            var r = ed.GetDouble(new PromptDoubleOptions("\nRise (floor to floor) in mm <" + _rise + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = _rise, UseDefaultValue = true });
+            var r = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt("Rise (floor to floor)", _rise)) { AllowNegative = false, AllowZero = false, DefaultValue = Util.MmToUnitsRounded(_rise), UseDefaultValue = true });
             if (r.Status != PromptStatus.OK) return;
-            _rise = o.RiseMm = r.Value;
+            _rise = o.RiseMm = Util.TypedToMm(r.Value, _rise);
             var a = ed.GetDouble(new PromptDoubleOptions("\nAngle in degrees (30 or 35) <" + o.AngleDeg + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = o.AngleDeg, UseDefaultValue = true });
             if (a.Status != PromptStatus.OK) return;
             o.AngleDeg = a.Value;
             var w = ed.GetDouble(new PromptDoubleOptions("\nNominal step width in mm (600, 800 or 1000) <" + o.StepWidth + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = o.StepWidth, UseDefaultValue = true });
             if (w.Status != PromptStatus.OK) return;
             o.StepWidth = w.Value;
-            var l = ed.GetDouble(new PromptDoubleOptions("\nFlat landing length at each end in mm <" + o.LandingMm + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = o.LandingMm, UseDefaultValue = true });
+            var l = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt("Flat landing length at each end", o.LandingMm)) { AllowNegative = false, AllowZero = false, DefaultValue = Util.MmToUnitsRounded(o.LandingMm), UseDefaultValue = true });
             if (l.Status != PromptStatus.OK) return;
-            o.LandingMm = l.Value;
+            o.LandingMm = Util.TypedToMm(l.Value, o.LandingMm);
 
             string problem = Escalator.Check(o);
             if (problem != null) { ed.WriteMessage("\nHCWESCALATOR: " + problem + "."); return; }

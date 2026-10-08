@@ -213,6 +213,12 @@ namespace HCW.AutoCAD.Plugin
         /// <summary>A length typed in the drawing's units -> millimetres, to 0.01 mm.</summary>
         public static double UnitsToMm(double value) => Math.Round(value / MmToDrawingUnits(1.0), 2);
 
+        /// <summary>The text of a prompt for a length: "\nHeight in ft &lt;3.4449&gt;: ", the default shown in the drawing's units.</summary>
+        public static string LengthPrompt(string text, double defaultMm) => "\n" + text + " in " + DrawingUnitName + " <" + MmToUnitsRounded(defaultMm) + ">: ";
+
+        /// <summary>A length typed at a <see cref="LengthPrompt"/> (drawing units) -> millimetres; the untouched default comes back exactly.</summary>
+        public static double TypedToMm(double typed, double defaultMm) => HCW.AutoCAD.Plugin.Logic.LengthInput.ToMm(typed, defaultMm, MmToDrawingUnits(1.0));
+
         /// <summary>A length in millimetres as the drawing's units for a message, such as "9 in" or "230 mm".</summary>
         public static string Dim(double mm) => MmToUnitsRounded(mm).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) + " " + DrawingUnitName;
 

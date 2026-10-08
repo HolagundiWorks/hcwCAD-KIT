@@ -28,6 +28,7 @@ Nothing that is in the test log. The owner loaded builds in AutoCAD and reported
 
 Newest first. "Logic" means unit tested; the command or dialog part is not.
 
+- **Prompts in the drawing's units** (Q-004, HASH): door, window, replace, opening sync, escalator rise and landing, grid-line distance, room text height and the room-wall gap now ask in the drawing's units. Logic: `LengthInput` (12 tests). Column size, axis bays, lift, stair and rail still ask in mm.
 - **`HCWBRIDGEIMPORT`** (Q-007, `dbcbd3a`; reader and comparison Q-006, `2d51fe9`): reads a bridge file back, lists changes, applies floors, project details and beam depths only on Yes. Logic: `JsonLite`, `BridgeImport` (22 tests). Never changes geometry. Steps in TESTING.md. **`docs/bridge/AQC-IMPORTER-SPEC.md`** (Q-008) specifies the importer for the AQC repo; nothing in it has met a running AQC.
 - **`HCWBRIDGE`** (Q-003, `0e29e99`): reads the drawing into the bridge file next to the drawing. Logic: `BridgeMap` (marks, wall refs, schedule, project and level mapping, room de-duplication). Command: `Commands/BridgeCommands.cs`, Project tab panel "AQC Bridge", setting `BridgeFolder`. Riskiest: it reads every entity in the space, matches openings to walls by distance, and writes a file. Steps in TESTING.md.
 - **Beam depth per floor** (Q-001, `aff3a61`): a Beam depth column on the Floors page of `HCWFLOORS`, kept with the project data by floor name (default: the first depth on the Beams page, else 450). Steps in [TESTING.md](TESTING.md).

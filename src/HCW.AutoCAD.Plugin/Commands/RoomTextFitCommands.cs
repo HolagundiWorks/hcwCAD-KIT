@@ -28,12 +28,12 @@ namespace HCW.AutoCAD.Plugin.Commands
         public void SetMaxHeight()
         {
             var ed = Util.Ed;
-            ed.WriteMessage("\nCurrent maximum text height: " + Math.Round(MaxMm, 2) + " mm.");
-            var r = ed.GetDouble(new PromptDoubleOptions("\nEnter maximum text height in mm <" + Math.Round(MaxMm, 2) + ">: ")
-                { AllowNegative = false, AllowZero = false, DefaultValue = MaxMm, UseDefaultValue = true });
+            ed.WriteMessage("\nCurrent maximum text height: " + Util.Dim(MaxMm) + ".");
+            var r = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt("Enter maximum text height", MaxMm))
+                { AllowNegative = false, AllowZero = false, DefaultValue = Util.MmToUnitsRounded(MaxMm), UseDefaultValue = true });
             if (r.Status != PromptStatus.OK) return;
-            _maxMm = r.Value;
-            ed.WriteMessage("\nMaximum text height set to " + Math.Round(_maxMm, 2) + " mm.");
+            _maxMm = Util.TypedToMm(r.Value, MaxMm);
+            ed.WriteMessage("\nMaximum text height set to " + Util.Dim(_maxMm) + ".");
         }
 
         [CommandMethod("ROOMTEXTFIT")]

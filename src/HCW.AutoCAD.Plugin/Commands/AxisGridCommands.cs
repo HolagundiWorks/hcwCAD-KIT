@@ -169,7 +169,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         /// <summary>
         /// HCWAXISADD adds a grid line parallel to one already drawn, as long as it and with bubbles at the same ends, labelled with the
-        /// next number or letter (or any label you give). Pick a point for the line, or press Enter and type a distance in millimetres
+        /// next number or letter (or any label you give). Pick a point for the line, or press Enter and type a distance in the drawing's units
         /// (positive to the left of the line looking from its start to its end).
         /// </summary>
         [CommandMethod("HCWAXISADD")]
@@ -188,9 +188,9 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (pp.Status == PromptStatus.OK) through = pp.Value.TransformBy(ed.CurrentUserCoordinateSystem);
             else if (pp.Status == PromptStatus.None)
             {
-                var dr = ed.GetDouble(new PromptDoubleOptions("\nDistance in mm from that line (positive to its left, negative to its right): ") { AllowZero = false });
+                var dr = ed.GetDouble(new PromptDoubleOptions("\nDistance in " + Util.DrawingUnitName + " from that line (positive to its left, negative to its right): ") { AllowZero = false });
                 if (dr.Status != PromptStatus.OK) return;
-                distance = dr.Value;
+                distance = Util.UnitsToMm(dr.Value);
             }
             else return;
 
