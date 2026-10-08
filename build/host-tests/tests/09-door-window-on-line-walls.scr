@@ -1,0 +1,23 @@
+; Picked off the centre line (D-006 explains why). A 900 door (standard D2) and a 1200 window (W3) on walls made from four selected lines: tags D2/1 and W3/1, and the schedule counts them.
+; EXPECT: HCWDOOR: D2/1 900 mm in a 230 mm wall
+; EXPECT: HCWWINDOW: W3/1 1200 mm in a 230 mm wall
+; REJECT: no opposite wall face found
+; REJECT: no wall face near that point
+LINE 0,0 4000,0 4000,3000 0,3000 C
+HCWWALL
+
+
+ALL
+
+HCWDOOR
+D2
+
+
+2000,100
+2000,500
+
+HCWWINDOW
+W3
+
+
+3910,1500
