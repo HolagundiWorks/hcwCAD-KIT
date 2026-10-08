@@ -91,7 +91,7 @@ Priority: P2 · Status: In progress (2026-10-08: Inno Setup 6.7.3 installed per-
 Acceptance: `build\Package-Installers.ps1 -Only AutoCAD` builds a setup program; install it, confirm the ribbon, uninstall it; TEST-LOG entry.
 
 ### T-005 · Tools to build and run AQC
-Priority: P3 · Status: In progress (2026-10-08, with the owner's yes: CMake 4.4.4, Ninja, LLVM-MinGW and Visual Studio 2022 Build Tools with the C++ workload installed; AQC's C++ engine (`bbs_engine.dll`, `bbs_tests.exe`) builds with MSVC outside the clone, in `C:\hcwtest\aqc-msvc`, and its engine tests report 0 failures; the WinUI app build is being tried on a scratch copy)
+Priority: P3 · Status: Done for building (2026-10-08, with the owner's yes: CMake 4.4.4, Ninja, LLVM-MinGW and Visual Studio 2022 Build Tools with the C++ workload installed; AQC's C++ engine (`bbs_engine.dll`, `bbs_tests.exe`) builds with MSVC outside the clone, in `C:\hcwtest\aqc-msvc`, and its engine tests report 0 failures; the WinUI app builds too: `dotnet build BBSApp.csproj -c Release -p:Platform=x64` on a scratch copy in `C:\hcwtest\aqc-copy` gave `AQCCore.dll` with 0 errors and 2 warnings, using the .NET SDK alone, so the Visual Studio WinUI workload is not needed; **not yet run**: AQC was built, not started, and the C++ engine DLL was not placed next to it)
 Why: Phase 5 of the bridge plan needs a running AQC to check an import.
 Note for the AQC owner (not changed by Agent 1, rule L10): the engine does **not** compile with clang and libc++ (MinGW): `src/api/bbs_c_api.cpp` uses `std::malloc` and `std::free` without `<cstdlib>`, and `src/core/Project.cpp` opens files with a wide-character path (`std::ifstream`/`std::ofstream`), which only MSVC accepts.
 
