@@ -1,0 +1,15 @@
+; D-005: Enter at the HCWCLEAN selection prompt means every line in the space. Two touching lines on one straight line are joined and a duplicate is erased.
+; EXPECT: Select the lines to clean \(Enter = every line in this space\)
+; EXPECT: HCWCLEAN: 2 line\(s\) erased \(0 zero-length, 1 duplicate, 1 joined into longer lines\)
+LINE 0,0 1000,0
+
+LINE 1000,0 2000,0
+
+LINE 0,500 1000,500
+
+LINE 0,500 1000,500
+
+HCWCLEAN
+
+
+(princ "\nend-of-test")

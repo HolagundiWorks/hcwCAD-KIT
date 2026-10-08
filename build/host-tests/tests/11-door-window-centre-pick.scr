@@ -1,0 +1,30 @@
+; D-006: a door and a window picked exactly on the centre line of walls drawn by HCWWALL (pick points). The take-off line down the centre used to be nearer
+; than either face and no opposite face was found. Checked against the older DLL: picks 15 and 40 mm off the centre line failed before the fix and work now.
+; EXPECT: HCWDOOR: D2/1 900 mm in a 230 mm wall
+; EXPECT: HCWWINDOW: W3/1 1200 mm in a 230 mm wall
+; REJECT: no opposite wall face found
+; REJECT: no wall face near that point
+HCWWALL
+
+
+
+0,0
+6000,0
+6000,3000
+0,3000
+C
+
+HCWDOOR
+D2
+
+
+3000,0
+3000,500
+
+HCWWINDOW
+W3
+
+
+6000,1500
+
+(princ "\nend-of-test")

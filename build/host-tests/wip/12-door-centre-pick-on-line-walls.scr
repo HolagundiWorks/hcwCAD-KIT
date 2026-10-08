@@ -1,0 +1,18 @@
+; KNOWN FAILING (D-007): walls made from selected lines leave the original lines on their own layer along the wall centre, and a pick on or near the centre
+; finds those lines first, so no opposite face is found. Picks 70 mm or more off the centre work (test 09).
+; EXPECT: HCWDOOR: D2/1 900 mm in a 230 mm wall
+; REJECT: no opposite wall face found
+LINE 0,0 6000,0 6000,3000 0,3000 C
+HCWWALL
+
+
+ALL
+
+HCWDOOR
+D2
+
+
+3000,0
+3000,500
+
+(princ "\nend-of-test")
