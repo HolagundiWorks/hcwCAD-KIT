@@ -92,8 +92,7 @@ Priority: P2 · Status: Todo
 Next: a geometry check that a partition outline stops at the wall face (D-004); doors and windows (tags `D2/1`, `W3/1`, `V1/1`, `HCWOPENSTD`, `HCWOPENSCHED`); `HCWLINTEL`; `HCWFLOORS` data through `HCWLEVELS`; a test per Enter-at-selection command once D-005 is fixed; `ROOMTEXTFIT` on a throwaway drawing.
 
 ### T-004 · Installers
-Priority: P2 · Status: In progress (2026-10-08: Inno Setup 6.7.3 installed per-user with the owner's yes; `build\Package-Installers.ps1 -Only AutoCAD` built `dist\hcwCAD-KIT-AutoCAD-1.0.0-Setup.exe` and the bundle zip from the DLL of `d584099`; the install and uninstall test is **not run yet**, it needs AutoCAD closed and the owner's go-ahead because the owner had a drawing open)
-Acceptance: `build\Package-Installers.ps1 -Only AutoCAD` builds a setup program; install it, confirm the ribbon, uninstall it; TEST-LOG entry.
+Priority: P2 · Status: Done for AutoCAD (2026-10-08: setup built from `13f1850`, silent per-user install, loaded by AutoCAD from the bundle, silent uninstall clean; see TEST-LOG). Still open: the ribbon after an install (D-001), and the BricsCAD and ZWCAD installers (those hosts are not installed).
 
 ### T-005 · Tools to build and run AQC
 Priority: P3 · Status: Done for building (2026-10-08, with the owner's yes: CMake 4.4.4, Ninja, LLVM-MinGW and Visual Studio 2022 Build Tools with the C++ workload installed; AQC's C++ engine (`bbs_engine.dll`, `bbs_tests.exe`) builds with MSVC outside the clone, in `C:\hcwtest\aqc-msvc`, and its engine tests report 0 failures; the WinUI app builds too: `dotnet build BBSApp.csproj -c Release -p:Platform=x64` on a scratch copy in `C:\hcwtest\aqc-copy` gave `AQCCore.dll` with 0 errors and 2 warnings, using the .NET SDK alone, so the Visual Studio WinUI workload is not needed; **not yet run**: AQC was built, not started, and the C++ engine DLL was not placed next to it)

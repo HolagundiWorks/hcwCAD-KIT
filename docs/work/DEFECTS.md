@@ -13,7 +13,8 @@ Evidence: none recorded. `HCWDIAG` and `%APPDATA%\hcwCAD-KIT\diag.log` now exist
 Cause: *guess*: the old code gave up if the ribbon did not exist at the first idle.
 Fix: `f11f12f` (retries until a ribbon exists, shows errors, adds `HCWRIBBON`); `HCWDIAG` `829b00c`; the Project tab was added later in `389613d`.
 Verification note (Agent 1, 2026-10-07): cannot be checked headlessly, because the AutoCAD core console has no ribbon (`HCWDIAG` there reports "ribbon: none"). Needs the interactive check with the owner (TESTING.md section 1).
-Status: Fixed, awaiting verification @ `f11f12f`
+Verification note (Agent 1, 2026-10-08, real AutoCAD 2022, build `13f1850` installed from the setup program): AutoCAD loaded the plugin from the installed bundle at startup and HCWDIAG reported `ribbon: 58 tabs; ours: none (run HCWRIBBON)` at start and again 12 s later, with no error line in `diag.log`. **Not conclusive:** the run was driven by a script (AutoCAD was kept busy, and the ribbon is built on the idle event), so it cannot tell a real failure from timing. Needs a start with no script, then HCWDIAG; then `HCWRIBBON` to see whether the build itself works.
+Status: Fixed, awaiting verification @ `f11f12f` (open question, see the note)
 
 ### D-002 · `HCWWALLREGEN` drew wall lines across the whole sheet
 Opened: 2026-10-07 by Agent 1 (owner's screenshot) · Build: `5956903` · Command: `HCWWALLREGEN`

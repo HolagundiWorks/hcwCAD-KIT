@@ -45,6 +45,22 @@ Not run: **L3 interactive** (no command was run in AutoCAD with the owner: D-001
 
 Not run: **L1** (no check of `build/CompileCheck.csproj` on this commit; CI runs it on push), **L3** (no command in a CAD program was run by Agent 1, so none of D-001 to D-004 is verified; the owner loaded earlier builds in AutoCAD and reported the problems now in DEFECTS.md, but no commands or results were recorded), **L4** (no installer built: Inno Setup is not installed; the DLL was loaded with `NETLOAD`, not installed), **L5** (AQC cannot be built here), BricsCAD and ZWCAD.
 
+## 2026-10-08 (evening) · `13f1850` · PARTIAL
+
+| Level | Check | Result |
+|---|---|---|
+| L0 | unit tests | PASS: 669 passed, 0 failed |
+| L1 | CompileCheck | PASS: 0 warnings, 0 errors |
+| L2 | Release x64 build against AutoCAD 2022, normal output folder | PASS: 0 warnings, 0 errors; DLL 925,696 bytes, built 20:16:21 |
+| L3 automatic | `Run-HostTests.ps1` | PASS: 12 of 12 (tests 01 to 09 and 11 to 13); test 12 closes D-007 |
+| L4 install | `dist\hcwCAD-KIT-AutoCAD-1.0.0-Setup.exe` run silently (`/VERYSILENT`, per-user, no admin), exit 0 | PASS: `hcwCAD-KIT.bundle` with the DLL (925,696 bytes), manifest and uninstaller in `%APPDATA%\Autodesk\ApplicationPlugins`; an Add/Remove Programs entry |
+| L4 load | one real AutoCAD 2022 start (owner's yes), script ran `HCWDIAG` | PASS for loading: the plugin loaded from the installed bundle by itself (165 commands). **Ribbon not shown:** `ours: none` at start and 12 s later; inconclusive because the run was scripted (see D-001) |
+| L4 uninstall | `unins000.exe /VERYSILENT`, exit 0 | PASS: bundle folder and registry entry gone, Autodesk's other bundle untouched, settings and logs kept |
+
+The plugin is left **uninstalled** on this machine (so it cannot load twice next to a manual NETLOAD).
+
+Not run: the ribbon check without a script (D-001), the Enter paths of AUTODIM, HCWCOLUMN, HCWAREASTMT and HCWOPENMOVE (D-005), D-004 geometry, the dialogs, L5, BricsCAD, ZWCAD.
+
 ## 2026-10-08 · `cfe5b04` · PARTIAL
 
 | Level | Check | Result |
