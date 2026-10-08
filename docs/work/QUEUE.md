@@ -87,12 +87,13 @@ Priority: P2 · Status: Todo
 Next: a geometry check that a partition outline stops at the wall face (D-004); doors and windows (tags `D2/1`, `W3/1`, `V1/1`, `HCWOPENSTD`, `HCWOPENSCHED`); `HCWLINTEL`; `HCWFLOORS` data through `HCWLEVELS`; a test per Enter-at-selection command once D-005 is fixed; `ROOMTEXTFIT` on a throwaway drawing.
 
 ### T-004 · Installers
-Priority: P2 · Status: Blocked (Inno Setup 6 is not installed; needs the owner's yes, rule L5)
+Priority: P2 · Status: In progress (2026-10-08: Inno Setup 6.7.3 installed per-user with the owner's yes; `build\Package-Installers.ps1 -Only AutoCAD` built `dist\hcwCAD-KIT-AutoCAD-1.0.0-Setup.exe` and the bundle zip from the DLL of `d584099`; the install and uninstall test is **not run yet**, it needs AutoCAD closed and the owner's go-ahead because the owner had a drawing open)
 Acceptance: `build\Package-Installers.ps1 -Only AutoCAD` builds a setup program; install it, confirm the ribbon, uninstall it; TEST-LOG entry.
 
 ### T-005 · Tools to build and run AQC
-Priority: P3 · Status: Blocked (CMake, MSVC and the WinUI workload are not installed; needs the owner's yes, rule L5)
-Why: Phase 5 of the bridge plan needs a running AQC to check an import. Until then AQC facts come from reading its code only.
+Priority: P3 · Status: In progress (2026-10-08, with the owner's yes: CMake 4.4.4, Ninja, LLVM-MinGW and Visual Studio 2022 Build Tools with the C++ workload installed; AQC's C++ engine (`bbs_engine.dll`, `bbs_tests.exe`) builds with MSVC outside the clone, in `C:\hcwtest\aqc-msvc`, and its engine tests report 0 failures; the WinUI app build is being tried on a scratch copy)
+Why: Phase 5 of the bridge plan needs a running AQC to check an import.
+Note for the AQC owner (not changed by Agent 1, rule L10): the engine does **not** compile with clang and libc++ (MinGW): `src/api/bbs_c_api.cpp` uses `std::malloc` and `std::free` without `<cstdlib>`, and `src/core/Project.cpp` opens files with a wide-character path (`std::ifstream`/`std::ofstream`), which only MSVC accepts.
 
 ### T-006 · BricsCAD and ZWCAD builds
 Priority: P3 · Status: Blocked (neither is installed; the host API DLLs are needed)

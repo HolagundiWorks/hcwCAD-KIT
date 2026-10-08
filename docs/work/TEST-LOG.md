@@ -7,7 +7,8 @@ Written by **Agent 1** only. One entry per tested build, newest first. Rules: [.
 (Agent 1 keeps this current, rule L9. Same facts as AGENTS.md section 8.)
 
 - Windows 11; .NET SDK 8.0.425 (per-user); AutoCAD 2022; `accoreconsole.exe` present.
-- Not installed: Inno Setup 6, BricsCAD, ZWCAD, CMake, MSVC, WinUI workload.
+- Installed 2026-10-08 (owner's yes): Inno Setup 6.7.3 (per-user), CMake 4.4.4, Ninja, LLVM-MinGW 20260908 (per-user), Visual Studio 2022 Build Tools 17.14 with the C++ workload (MSVC 14.44).
+- Not installed: BricsCAD, ZWCAD, the Visual Studio WinUI workload (the WinUI app is being tried with the .NET SDK alone).
 
 ## 2026-10-07 · `888d27c` · PARTIAL (first automatic host run)
 
