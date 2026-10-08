@@ -44,6 +44,11 @@ Not run: **L3 interactive** (no command was run in AutoCAD with the owner: D-001
 
 Not run: **L1** (no check of `build/CompileCheck.csproj` on this commit; CI runs it on push), **L3** (no command in a CAD program was run by Agent 1, so none of D-001 to D-004 is verified; the owner loaded earlier builds in AutoCAD and reported the problems now in DEFECTS.md, but no commands or results were recorded), **L4** (no installer built: Inno Setup is not installed; the DLL was loaded with `NETLOAD`, not installed), **L5** (AQC cannot be built here), BricsCAD and ZWCAD.
 
+## 2026-10-08 · `f2844a4` plus host tests 08 and 09 · PARTIAL
+
+Host tests 01 to 09 pass on `f2844a4`'s source (643 unit tests, compile check and real build as in the entry below). New: test 08, `HCWBRIDGE` (Q-003) after `HCWBRIDGEIMPORT` creates the floors: the file `export.aqcbridge.json` is written next to the saved drawing with units mm, the right format, a drawing id GUID, floor Ground with beam depth 450, wall W0001 of 230, door D2 (900) and window W3, and the command reports floors 2, walls 1, openings 2. Test 09: a 900 door (D2/1) and a 1200 window (W3/1) on line-made walls. Finding: D-006 (a pick in the middle of the wall fails; the tests pick off the centre line).
+
+Not covered by test 08, still to do by hand (TESTING.md "AQC bridge export"): a second run keeping the same drawing id, `@floor` refs when answering 0, an unsaved drawing, an inch drawing, columns, lintels and rooms. Also still not run: L3 interactive (D-001, D-004, dialogs, beam depth column), L4, L5, BricsCAD, ZWCAD.
 ## 2026-10-07 (late) · merged tree with Agent 2's Q-001 to Q-008 · PARTIAL
 
 L0 643 passed. L1 clean. L2 clean (DLL 924,160 bytes). L3 automatic: tests 01 to 06 pass; test 07 (HCWBRIDGEIMPORT, Q-007) passes: lists the changes, No changes nothing, Yes applies 10 changes, HCWLEVELS shows Ground and First, a second run finds nothing to change.

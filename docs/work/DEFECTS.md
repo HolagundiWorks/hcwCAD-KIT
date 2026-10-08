@@ -61,3 +61,13 @@ Fix: `HCWWALL` (`CentreLines.cs`) hotfixed by Agent 1 in `67b9bd8` (accepts Erro
 - `OpeningCommands.cs` ~412: Enter = an opening drawn as a break in the wall (`HCWOPENMOVE` and friends)
 Suggested: one helper (for example `Util.NoSelection(PromptStatus s)` meaning None or Error) used in all six places, and a host test for each (Agent 1 will add them to `build/host-tests` once the fix is in).
 Status: Open (Agent 2 to fix the five); `HCWWALL` itself: Fixed, awaiting verification @ `67b9bd8`
+
+### D-006 · Door and window fail with "no opposite wall face found" when picked in the middle of a wall drawn by HCWWALL
+Opened: 2026-10-08 by Agent 1 · Build: `d584099` · Command: `HCWDOOR`, `HCWWINDOW`
+Steps: `HCWWALL` (any thickness, setting `WallMeasureLines` at its default of 1); `HCWDOOR`, then pick the door on the wall's centre line (or anywhere closer to the centre line than to a face, about the middle half of the thickness).
+Expected: the door is placed, as it is when picked nearer a face.
+Actual: `HCWDOOR: no opposite wall face found.` (same for `HCWWINDOW`).
+Evidence: `build/host-tests/wip/11-door-window-centre-pick.scr` (fails); the same picks 100 mm off the centre line pass (`tests/09-door-window-on-line-walls.scr`: tags D2/1 and W3/1).
+Cause: *guess from reading `OpeningCommands.PlaceIn`*: the nearest segment to the pick is chosen first, and the take-off line `HCWWALL` draws down the centre line (layer `MEASURE-LINEAR`) is nearer than either face; the faces are then taken from that layer only, so only one line is found.
+Fix: for Agent 2: leave the take-off layers out when looking for the wall faces (a segment on a `MEASURE-` layer is never a wall face). Then move test 11 from `wip/` to `tests/`.
+Status: Open
