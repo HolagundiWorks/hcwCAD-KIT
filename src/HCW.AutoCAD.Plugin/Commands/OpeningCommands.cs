@@ -167,20 +167,28 @@ namespace HCW.AutoCAD.Plugin.Commands
             var pick = new P2(pickW.X, pickW.Y);
             var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
 
-            // The wall layer is the layer of the line nearest the pick; its faces are every segment on that layer.
             // Take-off lines (MEASURE-*) are never wall faces: HCWWALL draws one down the centre of each wall, nearer than either face (D-006).
             var near = Segments(tr, space, pick, maxT + w).Where(r => !WallFaceLayers.IsTakeOff(r.Layer)).ToList();
-            SegRef nearest = null; double nd = double.MaxValue;
-            foreach (var r in near)
-            {
-                double d = OpeningCut.DistanceToSegment(r.Seg, pick);
-                if (d < nd) { nd = d; nearest = r; }
-            }
-            if (nearest == null || nd > maxT) { message = "no wall face near that point."; return false; }
-            var faces = near.Where(r => string.Equals(r.Layer, nearest.Layer, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (near.Count == 0) { message = "no wall face near that point."; return false; }
 
-            string error;
-            var plan = OpeningCut.Plan(faces.Select(r => r.Seg).ToList(), pick, w, minT, maxT, out error);
+            // The wall layer is the layer whose segments give a valid opening. Try the layers nearest the pick first: lines left under a
+            // wall made from selected lines can be nearer than either face (D-007), and they never have an opposite face to pair with.
+            var byLayer = near.GroupBy(r => r.Layer, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new { Faces = g.ToList(), Dist = g.Min(r => OpeningCut.DistanceToSegment(r.Seg, pick)) })
+                .Where(g => g.Dist <= maxT)
+                .OrderBy(g => g.Dist).ToList();
+            if (byLayer.Count == 0) { message = "no wall face near that point."; return false; }
+
+            string error = null;
+            CutPlan plan = null;
+            List<SegRef> faces = null;
+            foreach (var g in byLayer)
+            {
+                string e;
+                var candidate = OpeningCut.Plan(g.Faces.Select(r => r.Seg).ToList(), pick, w, minT, maxT, out e);
+                if (error == null) error = e;                 // report the nearest layer's reason if none works
+                if (candidate != null) { plan = candidate; faces = g.Faces; break; }
+            }
             if (plan == null) { message = error + "."; return false; }
 
             // Turn the two faces into single lines (a polyline outline is exploded where it is cut).

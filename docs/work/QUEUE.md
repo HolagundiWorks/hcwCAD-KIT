@@ -48,6 +48,11 @@ Priority: P3 · Status: Ready for verification @ ba96900
 Why: walls now ask in the drawing's units (`Util.DrawingUnitName`, `Util.UnitsToMm`); doors, windows and the rest still asked in mm.
 Done by Agent 2 on the owner's yes: the prompts of `HCWDOOR`, `HCWWINDOW`, `HCWOPENREPLACE`, the opening height/sill sync, `HCWESCALATOR` (rise, landing), `HCWAXISADD` (distance), `ROOMTEXTFITSET` and the gap in `HCWROOMWALLS` now ask in the drawing's units. Settings, saved values and block data stay in mm. Later also lift (shaft wall, door, pit, overhead, floor height) and rail/balustrade lengths. Not changed on purpose: the column size (`230x450` notation), the car and shaft size strings, `HCWAXIS` bay widths and the nominal escalator step width (600/800/1000); the stair already asks in the drawing's units. `Logic/LengthInput.cs`, 12 tests; L0 (661 passed) and L1 clean. **To verify in AutoCAD**: TESTING.md "Prompts in the drawing's units".
 
+### Q-009 · Door and window picked near the centre of a wall made from selected lines
+Priority: P2 · Status: Ready for verification @ HASH
+Why: Agent 1 reported (as D-007 on the roadmap tracker; no `DEFECTS.md` entry yet) that the original lines left under a wall made from selected lines are nearer than either face, so `HCWDOOR` and `HCWWINDOW` fail within about 40 mm of the centre.
+Done by Agent 2 from that report, not from a reproduction: `OpeningCommands.PlaceIn` now groups the nearby segments by layer and uses the nearest layer that gives a valid opening, instead of the layer of the single nearest segment. No unit test (the change is in the command layer). L0 (669 passed) and L1 clean. **Agent 1:** please log D-007 in `DEFECTS.md` with its evidence and re-run the centre-pick test on this commit.
+
 ### Q-005 · README and HANDOFF catch-up
 Priority: P2 · Status: Done (documentation only, `efda0bd`)
 Why: the Project tab, `ROOMTEXTFIT`, the standard opening marks, wall junctions without overlap and `HCWWALLREGEN` Faces mode were documented in the README by the local agent; `HANDOFF.md` does not list them under "built, not yet verified in a host".
