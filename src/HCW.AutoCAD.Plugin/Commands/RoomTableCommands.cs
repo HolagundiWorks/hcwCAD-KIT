@@ -44,8 +44,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             var psr = ed.GetSelection(
                 new PromptSelectionOptions { MessageForAdding = "\nSelect the rooms: outlines, names, area labels and dimensions (Enter = everything in this space): " },
                 new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "LWPOLYLINE,TEXT,MTEXT,DIMENSION") }));
-            if (psr.Status != PromptStatus.OK && psr.Status != PromptStatus.None) return;
-            bool all = psr.Status == PromptStatus.None;
+            if (psr.Status != PromptStatus.OK && !Util.NoSelection(psr.Status)) return;
+            bool all = Util.NoSelection(psr.Status);
 
             var oo = new PromptKeywordOptions("\nOrder the rooms by [Position/Name] <" + _order + ">: ", "Position Name") { AllowNone = true };
             oo.Keywords.Default = _order;

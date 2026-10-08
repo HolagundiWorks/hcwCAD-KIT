@@ -223,7 +223,7 @@ namespace HCW.AutoCAD.Plugin.Commands
 
             var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect the lines to clean (Enter = every line in this space): " },
                 new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "LINE,LWPOLYLINE,ARC") }));
-            if (psr.Status != PromptStatus.OK && psr.Status != PromptStatus.None) return;
+            if (psr.Status != PromptStatus.OK && !Util.NoSelection(psr.Status)) return;
 
             double tol = Util.MmToDrawingUnits(0.05);
             int locked = 0, notFlat = 0, polyDup = 0, polyJoined = 0;

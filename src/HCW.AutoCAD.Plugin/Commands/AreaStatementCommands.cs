@@ -312,7 +312,7 @@ namespace HCW.AutoCAD.Plugin.Commands
         {
             var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = prompt },
                 new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "LWPOLYLINE") }));
-            if (psr.Status == PromptStatus.None) return new Sum();
+            if (Util.NoSelection(psr.Status)) return new Sum();
             if (psr.Status != PromptStatus.OK) return null;
 
             var sum = new Sum();

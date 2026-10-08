@@ -79,7 +79,7 @@ namespace HCW.AutoCAD.Plugin.Commands
                     tr.Commit();
                 }
             }
-            else if (psr.Status == PromptStatus.None) layers.Add(WallCommands.WallLayer);
+            else if (Util.NoSelection(psr.Status)) layers.Add(WallCommands.WallLayer);
             else return;
 
             var gap = ed.GetDouble(new PromptDoubleOptions("\nBridge gaps in the walls up to " + Util.DrawingUnitName + ", for doors drawn without jambs (0 = none) <" + Util.MmToUnitsRounded(_gapMm) + ">: ")

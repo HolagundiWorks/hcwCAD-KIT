@@ -213,6 +213,12 @@ namespace HCW.AutoCAD.Plugin
         /// <summary>A length typed in the drawing's units -> millimetres, to 0.01 mm.</summary>
         public static double UnitsToMm(double value) => Math.Round(value / MmToDrawingUnits(1.0), 2);
 
+        /// <summary>
+        /// True when a selection prompt ended with Enter and nothing selected. <c>GetSelection</c> reports that as Error (<c>GetPoint</c> reports None),
+        /// so a test for None alone never sees the Enter.
+        /// </summary>
+        public static bool NoSelection(PromptStatus status) => status == PromptStatus.None || status == PromptStatus.Error;
+
         /// <summary>The text of a prompt for a length: "\nHeight in ft &lt;3.4449&gt;: ", the default shown in the drawing's units.</summary>
         public static string LengthPrompt(string text, double defaultMm) => "\n" + text + " in " + DrawingUnitName + " <" + MmToUnitsRounded(defaultMm) + ">: ";
 

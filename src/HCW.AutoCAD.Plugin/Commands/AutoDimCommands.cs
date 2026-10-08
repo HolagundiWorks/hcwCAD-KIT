@@ -167,8 +167,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             if (choice == null) return;
             var filter = new SelectionFilter(new[] { new TypedValue(0, "LWPOLYLINE") });
             var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = "\nSelect the room outlines (closed polylines, such as ROOM-RECT or MEASURE-FLOOR), or press Enter to find every room from the wall lines: " }, filter);
-            if (psr.Status != PromptStatus.OK && psr.Status != PromptStatus.None) return;
-            bool findRooms = psr.Status == PromptStatus.None;
+            if (psr.Status != PromptStatus.OK && !Util.NoSelection(psr.Status)) return;
+            bool findRooms = Util.NoSelection(psr.Status);
             if (!AskScale(ed)) return;
 
             var plan = new Plan();

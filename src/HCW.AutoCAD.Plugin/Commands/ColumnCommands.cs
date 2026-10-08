@@ -61,7 +61,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             var psr = ed.GetSelection(
                 new PromptSelectionOptions { MessageForAdding = "\nSelect the grid lines (Enter = every line on the grid layers): " },
                 new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "LINE") }));
-            if (psr.Status != PromptStatus.OK && psr.Status != PromptStatus.None) return;
+            if (psr.Status != PromptStatus.OK && !Util.NoSelection(psr.Status)) return;
 
             double mm = Util.MmToDrawingUnits(1.0);
             var lines = new List<Seg>();

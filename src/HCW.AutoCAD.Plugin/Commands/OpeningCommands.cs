@@ -168,7 +168,8 @@ namespace HCW.AutoCAD.Plugin.Commands
             var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
 
             // The wall layer is the layer of the line nearest the pick; its faces are every segment on that layer.
-            var near = Segments(tr, space, pick, maxT + w);
+            // Take-off lines (MEASURE-*) are never wall faces: HCWWALL draws one down the centre of each wall, nearer than either face (D-006).
+            var near = Segments(tr, space, pick, maxT + w).Where(r => !WallFaceLayers.IsTakeOff(r.Layer)).ToList();
             SegRef nearest = null; double nd = double.MaxValue;
             foreach (var r in near)
             {
@@ -410,7 +411,7 @@ namespace HCW.AutoCAD.Plugin.Commands
             skipped = 0;
             var psr = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = prompt },
                 new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "INSERT") }));
-            if (psr.Status == PromptStatus.None)
+            if (Util.NoSelection(psr.Status))
             {
                 // Enter: an opening drawn as a break in the wall, picked by a point inside it.
                 var gap = PickGap(ed);
