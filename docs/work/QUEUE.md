@@ -44,7 +44,7 @@ Why: Phase 3 happens in the AQC repo, which Agent 2 cannot reach and which needs
 Acceptance: `docs/bridge/AQC-IMPORTER-SPEC.md` says, row by row, what each file section becomes in AQC, the idempotence and re-import rules, what is never imported, and the tests the importer library needs. It is built from AQC-FINDINGS.md (read from the code, never run), so *check* items remain.
 
 ### Q-004 · Door, window and other prompts in the drawing's units
-Priority: P3 · Status: Ready for verification @ HASH
+Priority: P3 · Status: Ready for verification @ ba96900
 Why: walls now ask in the drawing's units (`Util.DrawingUnitName`, `Util.UnitsToMm`); doors, windows and the rest still asked in mm.
 Done by Agent 2 on the owner's yes: the prompts of `HCWDOOR`, `HCWWINDOW`, `HCWOPENREPLACE`, the opening height/sill sync, `HCWESCALATOR` (rise, landing), `HCWAXISADD` (distance), `ROOMTEXTFITSET` and the gap in `HCWROOMWALLS` now ask in the drawing's units. Settings, saved values and block data stay in mm. Not changed on purpose: the column size (`230x450` notation), `HCWAXIS` bay widths, the nominal escalator step width (600/800/1000), lift, stair and rail prompts. `Logic/LengthInput.cs`, 12 tests; L0 (661 passed) and L1 clean. **To verify in AutoCAD**: TESTING.md "Prompts in the drawing's units".
 
