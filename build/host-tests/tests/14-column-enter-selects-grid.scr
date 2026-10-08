@@ -1,0 +1,9 @@
+; D-005: Enter at the HCWCOLUMN selection prompt means every line on the grid layers; with no grid it says so (before the fix the command ended silently).
+; EXPECT: Select the grid lines \(Enter = every line on the grid layers\)
+; EXPECT: HCWCOLUMN: no grid lines found\. Draw a grid with HCWAXIS
+HCWCOLUMN
+
+
+
+
+(princ "\nend-of-test")

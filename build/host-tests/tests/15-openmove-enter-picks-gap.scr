@@ -1,0 +1,9 @@
+; D-005: Enter at the HCWOPENMOVE selection prompt goes on to pick an opening drawn as a break in the wall (before the fix the command ended).
+; EXPECT: Select the doors and windows to move \(Enter to pick a gap in the wall\)
+; EXPECT: Pick a point inside the gap in the wall
+HCWOPENMOVE
+
+
+9999,9999
+
+(princ "\nend-of-test")
