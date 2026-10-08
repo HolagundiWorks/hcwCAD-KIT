@@ -30,6 +30,23 @@ These are limits of what was built, or items that need something the plugin cann
 - **Winders** are for L and U stairs and use their true plan areas; dog-leg stairs keep landings.
 - **Deduction matching** already indexes walls by bounding box (`BoxIndex`), so a very large selection is not compared pair by pair. Nothing further is planned until a real drawing is slow.
 
+## AQC bridge
+
+Plan: [AQC-BRIDGE-PLAN.md](AQC-BRIDGE-PLAN.md). Contract: [bridge/README.md](bridge/README.md). "Built" below means it compiles and its CAD-free logic has unit tests (649 passing, `b6f55dc`). No bridge command has a test-log entry in AutoCAD, and AQC has not been built or run here.
+
+| Phase | What | State |
+|---|---|---|
+| 0 Verify | AQC facts from reading its code (`AQC-FINDINGS.md`) | Done (not run) |
+| 1 Contract | Schema, two sample files, contract tests | Done |
+| 2 Exporter | `BridgeExport`, `BridgeMap`, `HCWBRIDGE`, "AQC Bridge" ribbon panel, beam depth per floor (Q-001 to Q-003) | Built, not yet verified in a host |
+| 3 AQC importer | Row-by-row spec in `bridge/AQC-IMPORTER-SPEC.md` (Q-008); the importer itself lives in the AQC repo | Blocked: needs the owner's yes to change AQC (question 3, 9) |
+| 4 Reverse link | `JsonLite`, `BridgeImport`, `HCWBRIDGEIMPORT` (Q-006, Q-007); AQC's "Export for CAD" does not exist yet | Plugin side built, not yet verified in a host |
+| 5 Round trip | Export, import, change, export again; hand-check one plan | Blocked: needs AQC built (T-005) and a host run |
+| 6 Live link | Pipe or localhost call | Not planned unless the file flow is too slow |
+| 7 Finish | Schema conformance tests for the fixtures and the exporter (`BridgeSchemaTests`) are in; version tag, docs in both repos still open | In progress |
+
+Open decisions are owner questions 1 to 9 in [work/QUEUE.md](work/QUEUE.md).
+
 ## Quality
 
 - An audit of every command found overlaps; all are now merged behind one command each (see the README table), and the stair, lift, escalator and balustrade drawings share one drawer (`GDrawer`).
