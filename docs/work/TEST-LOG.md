@@ -45,6 +45,19 @@ Not run: **L3 interactive** (no command was run in AutoCAD with the owner: D-001
 
 Not run: **L1** (no check of `build/CompileCheck.csproj` on this commit; CI runs it on push), **L3** (no command in a CAD program was run by Agent 1, so none of D-001 to D-004 is verified; the owner loaded earlier builds in AutoCAD and reported the problems now in DEFECTS.md, but no commands or results were recorded), **L4** (no installer built: Inno Setup is not installed; the DLL was loaded with `NETLOAD`, not installed), **L5** (AQC cannot be built here), BricsCAD and ZWCAD.
 
+## 2026-10-08 · `cfe5b04` · PARTIAL
+
+| Level | Check | Result |
+|---|---|---|
+| L0 | `dotnet test tests/HCW.Logic.Tests` | PASS: 669 passed, 0 failed |
+| L1 | `dotnet build build/CompileCheck.csproj` | PASS: 0 warnings, 0 errors |
+| L2 | Release x64 build against AutoCAD 2022, built into `C:\hcwtest\rc` because AutoCAD was open | PASS: 0 warnings, 0 errors; DLL 924,672 bytes, built 07:28:52 |
+| L3 automatic | `build\host-tests\Run-HostTests.ps1` | PASS: 11 of 11 (tests 01 to 09, 11 and 13) |
+
+New this run: test 11 (D-006: door and window picked on the centre line of HCWWALL walls, placed; closed) and test 13 (D-005: Enter at the HCWCLEAN selection prompt works). New defect **D-007** (centre pick fails on walls made from selected lines because the source lines stay under the wall), parked as `wip/12`. A probe on the older DLL showed the D-006 symptom there and not on `cfe5b04`.
+
+Not run: L3 interactive (D-001, D-004, the dialogs), the Enter paths of AUTODIM, HCWCOLUMN, HCWAREASTMT and HCWOPENMOVE (D-005), Q-004's prompts, L4 (the installer is built but AutoCAD is open), L5, BricsCAD, ZWCAD.
+
 ## 2026-10-08 · `f2844a4` plus host tests 08 and 09 · PARTIAL
 
 Host tests 01 to 09 pass on `f2844a4`'s source (643 unit tests, compile check and real build as in the entry below). New: test 08, `HCWBRIDGE` (Q-003) after `HCWBRIDGEIMPORT` creates the floors: the file `export.aqcbridge.json` is written next to the saved drawing with units mm, the right format, a drawing id GUID, floor Ground with beam depth 450, wall W0001 of 230, door D2 (900) and window W3, and the command reports floors 2, walls 1, openings 2. Test 09: a 900 door (D2/1) and a 1200 window (W3/1) on line-made walls. Finding: D-006 (a pick in the middle of the wall fails; the tests pick off the centre line).
