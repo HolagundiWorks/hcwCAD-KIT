@@ -52,7 +52,7 @@ Not run: **L1** (no check of `build/CompileCheck.csproj` on this commit; CI runs
 | L0 | unit tests | PASS: 669 passed, 0 failed |
 | L1 | CompileCheck | PASS: 0 warnings, 0 errors |
 | L2 | Release x64 build against AutoCAD 2022, normal output folder | PASS: 0 warnings, 0 errors; DLL 925,696 bytes, built 20:16:21 |
-| L3 automatic | `Run-HostTests.ps1` | PASS: 12 of 12 (tests 01 to 09 and 11 to 13); test 12 closes D-007 |
+| L3 automatic | `Run-HostTests.ps1` | PASS: 12 of 12 (tests 01 to 09 and 11 to 13); test 12 closes D-007. Later the same day, tests 14 (HCWCOLUMN Enter) and 15 (HCWOPENMOVE Enter) were added and all 14 pass on the same DLL |
 | L4 install | `dist\hcwCAD-KIT-AutoCAD-1.0.0-Setup.exe` run silently (`/VERYSILENT`, per-user, no admin), exit 0 | PASS: `hcwCAD-KIT.bundle` with the DLL (925,696 bytes), manifest and uninstaller in `%APPDATA%\Autodesk\ApplicationPlugins`; an Add/Remove Programs entry |
 | L4 load | one real AutoCAD 2022 start (owner's yes), script ran `HCWDIAG` | PASS for loading: the plugin loaded from the installed bundle by itself (165 commands). **Ribbon not shown:** `ours: none` at start and 12 s later; inconclusive because the run was scripted (see D-001) |
 | L4 uninstall | `unins000.exe /VERYSILENT`, exit 0 | PASS: bundle folder and registry entry gone, Autodesk's other bundle untouched, settings and logs kept |
