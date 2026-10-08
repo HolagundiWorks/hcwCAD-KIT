@@ -40,9 +40,9 @@ namespace HCW.AutoCAD.Plugin.Commands
 
             double cw, cd, carW, carD;
             if (!AskSize(ed, "\nClear size of the shaft in mm, width x depth <" + _clear + ">: ", ref _clear, out cw, out cd)) return;
-            if (!AskNumber(ed, "\nShaft wall thickness in mm <" + _wallMm + ">: ", ref _wallMm)) return;
+            if (!AskNumber(ed, "Shaft wall thickness", ref _wallMm)) return;
             if (!AskSize(ed, "\nCar size in mm, width x depth <" + _car + ">: ", ref _car, out carW, out carD)) return;
-            if (!AskNumber(ed, "\nDoor width in mm <" + _doorMm + ">: ", ref _doorMm)) return;
+            if (!AskNumber(ed, "Door width", ref _doorMm)) return;
 
             string error;
             var layout = LiftLayout.Build(cw, cd, _wallMm, carW, carD, _doorMm, FrontGapMm, out error);
@@ -183,9 +183,9 @@ namespace HCW.AutoCAD.Plugin.Commands
             var f = ed.GetInteger(new PromptIntegerOptions("\nNumber of floors served <" + _floors + ">: ") { AllowNegative = false, AllowZero = false, DefaultValue = _floors, UseDefaultValue = true });
             if (f.Status != PromptStatus.OK) return;
             _floors = f.Value;
-            if (!AskNumber(ed, "\nFloor-to-floor height in mm <" + _floorHeightMm + ">: ", ref _floorHeightMm)) return;
-            if (!AskNumber(ed, "\nPit depth in mm <" + _pitMm + ">: ", ref _pitMm)) return;
-            if (!AskNumber(ed, "\nOverhead (top landing to underside of the slab) in mm <" + _overheadMm + ">: ", ref _overheadMm)) return;
+            if (!AskNumber(ed, "Floor-to-floor height", ref _floorHeightMm)) return;
+            if (!AskNumber(ed, "Pit depth", ref _pitMm)) return;
+            if (!AskNumber(ed, "Overhead (top landing to underside of the slab)", ref _overheadMm)) return;
             var mro = new PromptKeywordOptions("\nDraw the machine room [Yes/No] <" + (_machineSection ? "Yes" : "No") + ">: ", "Yes No") { AllowNone = true };
             mro.Keywords.Default = _machineSection ? "Yes" : "No";
             var mr = ed.GetKeywords(mro);
@@ -226,10 +226,10 @@ namespace HCW.AutoCAD.Plugin.Commands
 
         private static bool AskNumber(Editor ed, string prompt, ref double value)
         {
-            var r = ed.GetDouble(new PromptDoubleOptions(prompt)
-                { AllowNegative = false, AllowZero = false, DefaultValue = value, UseDefaultValue = true });
+            var r = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt(prompt, value))
+                { AllowNegative = false, AllowZero = false, DefaultValue = Util.MmToUnitsRounded(value), UseDefaultValue = true });
             if (r.Status != PromptStatus.OK) return false;
-            value = r.Value;
+            value = Util.TypedToMm(r.Value, value);
             return true;
         }
 

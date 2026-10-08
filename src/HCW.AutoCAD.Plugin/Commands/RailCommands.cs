@@ -29,20 +29,30 @@ namespace HCW.AutoCAD.Plugin.Commands
             string view = Util.AskMode("Handrail view", "Plan", "Elevation");
             if (view == null) return;
             if (view == "Elevation") { DrawBalustrade(); return; }
-            if (!Ask(ed, "\nHandrail width in mm <" + _railMm + ">: ", ref _railMm, false)) return;
-            if (!Ask(ed, "\nLargest distance between posts in mm <" + _spacingMm + ">: ", ref _spacingMm, false)) return;
-            if (!Ask(ed, "\nPost size in mm, 0 for no posts <" + _postMm + ">: ", ref _postMm, true)) return;
+            if (!Ask(ed, "Handrail width", ref _railMm, false)) return;
+            if (!Ask(ed, "Largest distance between posts", ref _spacingMm, false)) return;
+            if (!Ask(ed, "Post size (0 for no posts)", ref _postMm, true)) return;
 
             CentreLines.Run(ed, "\nSelect the lines or polylines the handrail follows (Enter to pick points): ",
                 "\nStart of handrail (Enter to finish): ", chains => Create(ed, chains));
         }
 
-        private static bool Ask(Editor ed, string prompt, ref double value, bool allowZero)
+        private static bool AskDegrees(Editor ed, string prompt, ref double value)
         {
             var r = ed.GetDouble(new PromptDoubleOptions(prompt)
-                { AllowNegative = false, AllowZero = allowZero, DefaultValue = value, UseDefaultValue = true });
+                { AllowNegative = false, AllowZero = true, DefaultValue = value, UseDefaultValue = true });
             if (r.Status != PromptStatus.OK) return false;
             value = r.Value;
+            return true;
+        }
+
+        /// <summary>A length asked in the drawing's units and kept in millimetres.</summary>
+        private static bool Ask(Editor ed, string prompt, ref double value, bool allowZero)
+        {
+            var r = ed.GetDouble(new PromptDoubleOptions(Util.LengthPrompt(prompt, value))
+                { AllowNegative = false, AllowZero = allowZero, DefaultValue = Util.MmToUnitsRounded(value), UseDefaultValue = true });
+            if (r.Status != PromptStatus.OK) return false;
+            value = Util.TypedToMm(r.Value, value);
             return true;
         }
 
@@ -107,12 +117,12 @@ namespace HCW.AutoCAD.Plugin.Commands
         public void DrawBalustrade()
         {
             var ed = Util.Ed;
-            if (!Ask(ed, "\nHandrail height in mm <" + _heightMm + ">: ", ref _heightMm, false)) return;
-            if (!Ask(ed, "\nLargest distance between posts in mm <" + _spacingMm + ">: ", ref _spacingMm, false)) return;
-            if (!Ask(ed, "\nPost size in mm <" + _postMm + ">: ", ref _postMm, false)) return;
-            if (!Ask(ed, "\nBaluster size in mm <" + _balusterMm + ">: ", ref _balusterMm, false)) return;
-            if (!Ask(ed, "\nLargest clear gap between balusters in mm <" + _gapMm + ">: ", ref _gapMm, false)) return;
-            if (!Ask(ed, "\nSlope of the flight in degrees, 0 for a level run <" + _slopeDeg + ">: ", ref _slopeDeg, true)) return;
+            if (!Ask(ed, "Handrail height", ref _heightMm, false)) return;
+            if (!Ask(ed, "Largest distance between posts", ref _spacingMm, false)) return;
+            if (!Ask(ed, "Post size", ref _postMm, false)) return;
+            if (!Ask(ed, "Baluster size", ref _balusterMm, false)) return;
+            if (!Ask(ed, "Largest clear gap between balusters", ref _gapMm, false)) return;
+            if (!AskDegrees(ed, "\nSlope of the flight in degrees, 0 for a level run <" + _slopeDeg + ">: ", ref _slopeDeg)) return;
 
             CentreLines.Run(ed, "\nSelect the lines or polylines the balustrade follows (Enter to pick points): ",
                 "\nStart of balustrade (Enter to finish): ", chains => Elevation(ed, chains));

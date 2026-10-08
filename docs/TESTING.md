@@ -50,7 +50,7 @@ Run `HCWFLOORS`. The Floors page has a **Beam depth** column in millimetres. Wit
 
 ### Prompts in the drawing's units (Q-004)
 
-In an inch drawing (units set with `UNITS`): run `HCWDOOR`; the prompt says `in`, offers `<41.3386>` and the standards as `D1 31.4961`. Press Enter for the default and place a door: the block should be `HCW_D_900x230`-style in millimetres (the name stays in mm). Type 36 for the width: the opening is 914.4 mm. Do the same for the height and `HCWWINDOW` sill, then `HCWOPENREPLACE`. Repeat once in a foot drawing and once in a millimetre drawing (prompts say `mm`, numbers as before). Also look at `HCWESCALATOR` (rise, landing), `HCWAXISADD` (distance), `ROOMTEXTFITSET` and the gap prompt of `HCWROOMWALLS`.
+In an inch drawing (units set with `UNITS`): run `HCWDOOR`; the prompt says `in`, offers `<41.3386>` and the standards as `D1 31.4961`. Press Enter for the default and place a door: the block should be `HCW_D_900x230`-style in millimetres (the name stays in mm). Type 36 for the width: the opening is 914.4 mm. Do the same for the height and `HCWWINDOW` sill, then `HCWOPENREPLACE`. Repeat once in a foot drawing and once in a millimetre drawing (prompts say `mm`, numbers as before). Also look at `HCWLIFT` and `HCWLIFTSECTION` (shaft wall, door, pit, overhead, floor height), `HCWRAIL` and `HCWBALUSTRADE` (widths, spacings, sizes; the slope stays in degrees), `HCWESCALATOR` (rise, landing), `HCWAXISADD` (distance), `ROOMTEXTFITSET` and the gap prompt of `HCWROOMWALLS`.
 
 ### AQC bridge export (`HCWBRIDGE`)
 
